@@ -2,6 +2,7 @@ import {defineConfig} from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import basicSsl from "@vitejs/plugin-basic-ssl";
+import {cloudflare} from "@cloudflare/vite-plugin";
 
 export default defineConfig(({mode}) => {
   // We need https to test the mic on mobile during development
@@ -12,6 +13,7 @@ export default defineConfig(({mode}) => {
     plugins: [
       react(),
       tailwindcss(),
+      cloudflare(),
       ...(useHttps ? [basicSsl()] : []),
     ],
     server: {

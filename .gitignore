@@ -3,3 +3,4 @@
 .private/
 dist/
 node_modules/
+.wrangler/
