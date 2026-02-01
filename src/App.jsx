@@ -9,11 +9,11 @@ import {analyzeAudioFrame, createAudioState, setupAudioState} from "./audioSerie
 const FFT_SIZE = 2048;
 const SAMPLE_RATE = 48000; // Assumed; actual rate set on audio context creation
 const DEFAULT_ANALYSIS_FPS = 240;
-const PITCH_SECONDS = 5;
-const WAVE_Y_RANGE = 300;
+const PITCH_SECONDS = 5; // x axis range
+const WAVE_Y_RANGE = 300; // in cents
 const MIN_HZ = 65; // ~C2
 const MAX_HZ = 1100; // ~C6
-const CENTER_SECONDS = 0.6;
+const CENTER_SECONDS = 0.6; // Window to use for vertically centering
 const DETECTORS = [
   {id: "autocorr", label: "Autocorr"},
   {id: "pitchy", label: "Pitchy"},
