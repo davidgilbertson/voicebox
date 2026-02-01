@@ -28,6 +28,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.22.1",
+    "vite-plugin-pwa": "^1.2.0",
     "wrangler": "^4.61.1"
   }
 }
