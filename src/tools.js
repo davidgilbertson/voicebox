@@ -3,18 +3,27 @@ export function lerp(current, next, factor) {
   return current + (next - current) * factor;
 }
 
-// Draw a simple grid background on the canvas.
-export function drawGrid(ctx, width, height, dpr) {
-  const gridCount = 4;
+// Draw grid lines at each semitone and vertical divisions.
+export function drawGrid(ctx, width, height, dpr, waveRange) {
+  const midY = height / 2;
+  const scaleY = (height / 2) / waveRange;
+  const steps = [-3, -2, -1, 0, 1, 2, 3];
+
+  // Horizontal lines at each semitone
+  ctx.strokeStyle = 'rgba(51, 65, 85, 0.8)';
+  ctx.lineWidth = 1 * dpr;
   ctx.beginPath();
-  for (let i = 1; i < gridCount; i += 1) {
-    const y = (height / gridCount) * i;
+  for (const step of steps) {
+    const cents = step * 100;
+    const y = midY - cents * scaleY;
     ctx.moveTo(0, y);
     ctx.lineTo(width, y);
   }
   ctx.stroke();
 
-  ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+  // Vertical lines
+  const gridCount = 4;
+  ctx.strokeStyle = 'rgba(51, 65, 85, 0.5)';
   ctx.beginPath();
   for (let i = 1; i < gridCount; i += 1) {
     const x = (width / gridCount) * i;
@@ -32,7 +41,7 @@ export function drawSemitoneLabels(ctx, width, height, dpr, waveRange) {
   ctx.textBaseline = 'middle';
   const midY = height / 2;
   const scaleY = (height / 2) / waveRange;
-  const steps = [-2, -1, 0, 1, 2];
+  const steps = [-3, -2, -1, 0, 1, 2, 3];
   for (const step of steps) {
     const cents = step * 100;
     const y = midY - cents * scaleY;

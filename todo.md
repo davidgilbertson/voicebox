@@ -1,0 +1,2 @@
+- [ ] Start/stop button - shouldn't reset the chart. If I stop then start again, carry on, keeping the existing data.
+- [ ] Make the y range of the chart from -3 to 3

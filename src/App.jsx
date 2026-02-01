@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import {PitchDetector} from "pitchy";
 import {YIN} from "pitchfinder";
 import {
@@ -6,17 +6,17 @@ import {
   drawGrid,
   drawSemitoneLabels,
   lerp,
-  median,
 } from "./tools.js";
 
-const RENDER_FPS = 30;
-const ANALYSIS_FPS = 120;
+const FFT_SIZE = 2048;
+const SAMPLE_RATE = 48000; // Assumed; actual rate set on audio context creation
+const DEFAULT_ANALYSIS_FPS = 480;
+const ANALYSIS_RATE_OPTIONS = [30, 60, 120, 240, 480];
 const PITCH_SECONDS = 5;
-const WAVE_Y_RANGE = 200;
+const WAVE_Y_RANGE = 300;
 const MIN_HZ = 65; // ~C2
 const MAX_HZ = 1100; // ~C6
-const CENTER_SECONDS = 0.9;
-const MIN_RMS = 0.0001;
+const CENTER_SECONDS = 0.6;
 const DETECTORS = [
   {id: "autocorr", label: "Autocorr"},
   {id: "pitchy", label: "Pitchy"},
@@ -36,7 +36,9 @@ export default function App() {
     hzIndex: 0,
     pitchy: null,
     yin: null,
+    timeData: null,
     sampleRate: 48000,
+    analysisFps: DEFAULT_ANALYSIS_FPS,
     centerHz: 220,
     centerCents: 1200 * Math.log2(220),
     lastHz: 0,
@@ -44,10 +46,11 @@ export default function App() {
     voiceActive: false,
     levelEma: 0,
     latestCents: Number.NaN,
+    latestFiltered: false,
+    pendingSamples: [],
   });
   const animationRef = useRef({
     rafId: 0,
-    lastFrame: 0,
     drawAvg: 0,
     dataAvg: 0,
     analysisTimer: 0,
@@ -63,19 +66,21 @@ export default function App() {
     lastValue: null,
     lastTime: 0,
     meanCents: 0,
+    pendingPoint: null,
+  });
+  const metricsRef = useRef({
+    level: {max: 0, rms: 0},
+    rawHz: 0,
   });
   const [ui, setUi] = useState({
     isRunning: false,
     error: "",
     timings: {data: 0, draw: 0},
     level: {max: 0},
-    lastHz: 0,
+    rawHz: 0,
     detector: "autocorr",
+    analysisFps: DEFAULT_ANALYSIS_FPS,
   });
-
-  const detectorLabel = useMemo(() => {
-    return DETECTORS.find((entry) => entry.id === ui.detector)?.label ?? "Autocorr";
-  }, [ui.detector]);
 
   useEffect(() => {
     return () => {
@@ -87,55 +92,80 @@ export default function App() {
     setUi((prev) => ({...prev, error: ""}));
     if (ui.isRunning) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          autoGainControl: false,
+          noiseSuppression: false,
+          echoCancellation: false, // The killer on mobile!
+        },
+      });
       const context = new AudioContext();
       await context.resume();
       const source = context.createMediaStreamSource(stream);
       const analyser = context.createAnalyser();
-      analyser.fftSize = 4096;
+      analyser.fftSize = FFT_SIZE;
       analyser.smoothingTimeConstant = 0.1;
       source.connect(analyser);
 
       const sampleRate = context.sampleRate;
-      const pitchLength = Math.floor(PITCH_SECONDS * ANALYSIS_FPS);
-      const pitchBuffer = new Float32Array(pitchLength);
-      pitchBuffer.fill(Number.NaN);
-      const hzLength = Math.floor(CENTER_SECONDS * ANALYSIS_FPS);
-      const hzBuffer = new Float32Array(hzLength);
-      hzBuffer.fill(Number.NaN);
-      const pitchy = PitchDetector.forFloat32Array(analyser.fftSize);
+      const analysisFps = ui.analysisFps;
+      const pitchLength = Math.floor(PITCH_SECONDS * analysisFps);
+      const hzLength = Math.floor(CENTER_SECONDS * analysisFps);
+      const pitchy = PitchDetector.forFloat32Array(FFT_SIZE);
       const yin = YIN({sampleRate, threshold: 0.1});
+      const timeData = audioRef.current.timeData?.length === FFT_SIZE
+          ? audioRef.current.timeData
+          : new Float32Array(FFT_SIZE);
 
+      // Preserve existing buffers and state if available, otherwise create new
+      const existingPitchBuffer = audioRef.current.pitchBuffer;
+      const existingHzBuffer = audioRef.current.hzBuffer;
+      const pitchBuffer = existingPitchBuffer && existingPitchBuffer.length === pitchLength
+          ? existingPitchBuffer
+          : (() => {
+            const buf = new Float32Array(pitchLength);
+            buf.fill(Number.NaN);
+            return buf;
+          })();
+      const hzBuffer = existingHzBuffer && existingHzBuffer.length === hzLength
+          ? existingHzBuffer
+          : (() => {
+            const buf = new Float32Array(hzLength);
+            buf.fill(Number.NaN);
+            return buf;
+          })();
+
+      // Preserve existing pitch state for chart continuity
       audioRef.current = {
         context,
         analyser,
         source,
         stream,
         pitchBuffer,
-        pitchIndex: 0,
+        pitchIndex: audioRef.current.pitchIndex || 0,
         hzBuffer,
-        hzIndex: 0,
+        hzIndex: audioRef.current.hzIndex || 0,
         pitchy,
         yin,
+        timeData,
         sampleRate,
-        centerHz: 220,
-        centerCents: 1200 * Math.log2(220),
-        lastHz: 0,
-        lastCents: 0,
+        analysisFps,
+        centerHz: audioRef.current.centerHz || 220,
+        centerCents: audioRef.current.centerCents || 1200 * Math.log2(220),
+        lastHz: audioRef.current.lastHz || 0,
+        lastCents: audioRef.current.lastCents || 0,
         voiceActive: false,
-        levelEma: 0,
+        levelEma: audioRef.current.levelEma || 0,
         latestCents: Number.NaN,
+        latestFiltered: false,
+        pendingSamples: [],
       };
 
       setUi((prev) => ({...prev, isRunning: true}));
-      animationRef.current.lastFrame = 0;
       animationRef.current.drawAvg = 0;
       animationRef.current.dataAvg = 0;
       animationRef.current.rafId = requestAnimationFrame(renderLoop);
-      animationRef.current.analysisTimer = window.setInterval(
-          analyzeFrame,
-          1000 / ANALYSIS_FPS
-      );
+      startAnalysisTimer(analysisFps);
     } catch (err) {
       setUi((prev) => ({
         ...prev,
@@ -160,112 +190,116 @@ export default function App() {
     if (context && context.state !== "closed") {
       context.close();
     }
-    audioRef.current = {
-      context: null,
-      analyser: null,
-      source: null,
-      stream: null,
-      pitchBuffer: null,
-      pitchIndex: 0,
-      hzBuffer: null,
-      hzIndex: 0,
-      pitchy: null,
-      yin: null,
-      sampleRate: 48000,
-      centerHz: 220,
-      centerCents: 1200 * Math.log2(220),
-      lastHz: 0,
-      lastCents: 0,
-      voiceActive: false,
-      levelEma: 0,
-      latestCents: Number.NaN,
-    };
+    // Only clear audio resources, preserve pitch state for chart continuity
+    audioRef.current.context = null;
+    audioRef.current.analyser = null;
+    audioRef.current.source = null;
+    audioRef.current.stream = null;
+    audioRef.current.pitchy = null;
+    audioRef.current.yin = null;
+    audioRef.current.timeData = null;
+    audioRef.current.pendingSamples = [];
     setUi((prev) => ({...prev, isRunning: false}));
   };
 
   const renderLoop = (now) => {
-    const frameInterval = 1000 / RENDER_FPS;
-    const {lastFrame} = animationRef.current;
-    if (now - lastFrame >= frameInterval) {
-      animationRef.current.lastFrame = now;
-      const drawStart = performance.now();
-      drawWaveform();
-      const drawElapsed = performance.now() - drawStart;
+    const drawStart = performance.now();
+    drawWaveform();
+    const drawElapsed = performance.now() - drawStart;
 
-      animationRef.current.drawAvg = lerp(
-          animationRef.current.drawAvg,
-          drawElapsed,
-          0.2
-      );
-      setUi((prev) => ({
-        ...prev,
-        timings: {
-          data: animationRef.current.dataAvg,
-          draw: animationRef.current.drawAvg,
-        },
-      }));
-    }
+    animationRef.current.drawAvg = lerp(
+        animationRef.current.drawAvg,
+        drawElapsed,
+        0.2
+    );
+    const latestMetrics = metricsRef.current;
+    setUi((prev) => ({
+      ...prev,
+      timings: {
+        data: animationRef.current.dataAvg,
+        draw: animationRef.current.drawAvg,
+      },
+      level: latestMetrics.level,
+      rawHz: latestMetrics.rawHz,
+    }));
     animationRef.current.rafId = requestAnimationFrame(renderLoop);
   };
 
   const analyzeFrame = () => {
     const dataStart = performance.now();
-    pullAudioData();
+    const result = pullAudioData();
     const dataElapsed = performance.now() - dataStart;
-    animationRef.current.dataAvg = lerp(
-        animationRef.current.dataAvg,
-        dataElapsed,
-        0.2
-    );
+    if (!result) return;
+    animationRef.current.dataAvg = lerp(animationRef.current.dataAvg, dataElapsed, 0.2);
+    metricsRef.current = {
+      level: {max: result.peak, rms: result.rms},
+      rawHz: result.hz,
+    };
   };
 
   const pullAudioData = () => {
-    const {analyser, pitchBuffer, hzBuffer, pitchy, yin} = audioRef.current;
-    if (!analyser || !pitchBuffer || !hzBuffer) return;
-    const data = new Float32Array(analyser.fftSize);
-    analyser.getFloatTimeDomainData(data);
+    const {analyser, pitchBuffer, hzBuffer, pitchy, yin, timeData} = audioRef.current;
+    if (!analyser || !pitchBuffer || !hzBuffer || !timeData) return null;
+    analyser.getFloatTimeDomainData(timeData);
     let peak = 0;
     let sumSquares = 0;
-    for (let i = 0; i < data.length; i += 1) {
-      const value = data[i];
+    for (let i = 0; i < timeData.length; i += 1) {
+      const value = timeData[i];
       const absValue = Math.abs(value);
       if (absValue > peak) peak = absValue;
       sumSquares += value * value;
     }
-    const rms = Math.sqrt(sumSquares / data.length);
+    const rms = Math.sqrt(sumSquares / timeData.length);
     audioRef.current.levelEma = lerp(audioRef.current.levelEma, rms, 0.2);
     let hz = 0;
     if (ui.detector === "pitchy" && pitchy) {
-      const [detectedHz, clarity] = pitchy.findPitch(data, audioRef.current.sampleRate);
+      const [detectedHz, clarity] = pitchy.findPitch(timeData, audioRef.current.sampleRate);
       hz = clarity > 0.7 ? detectedHz : 0;
     } else if (ui.detector === "yin" && yin) {
-      hz = yin(data) || 0;
+      hz = yin(timeData) || 0;
     } else {
       hz = detectPitchAutocorr(
-          data,
+          timeData,
           audioRef.current.sampleRate,
           MIN_HZ,
           MAX_HZ
       );
     }
-    const hasVoice = audioRef.current.levelEma >= MIN_RMS && hz >= MIN_HZ && hz <= MAX_HZ;
+    const inHzRange = hz >= MIN_HZ && hz <= MAX_HZ;
+    const hasVoice = inHzRange;
     audioRef.current.voiceActive = Boolean(hasVoice);
+
+    // Always calculate cents if we have a valid Hz reading
+    const absCents = inHzRange ? 1200 * Math.log2(hz) : Number.NaN;
+    // Track whether this point was filtered (valid pitch but below RMS threshold)
+    audioRef.current.latestFiltered = false;
+    audioRef.current.latestCents = absCents;
+    audioRef.current.pendingSamples.push({
+      time: performance.now(),
+      cents: absCents,
+      filtered: audioRef.current.latestFiltered,
+      centerCents: audioRef.current.centerCents,
+    });
+
     if (hasVoice) {
       audioRef.current.lastHz = hz;
-      if (hz > MAX_HZ || hz < MIN_HZ) {
-        // eslint-disable-next-line no-console
-        console.log("Outlier Hz:", hz);
-      }
       hzBuffer[audioRef.current.hzIndex] = hz;
       audioRef.current.hzIndex = (audioRef.current.hzIndex + 1) % hzBuffer.length;
-      const centerHz = median(hzBuffer);
+      let sum = 0;
+      let count = 0;
+      for (let i = 0; i < hzBuffer.length; i += 1) {
+        const value = hzBuffer[i];
+        if (Number.isFinite(value) && value > 0) {
+          sum += value;
+          count += 1;
+        }
+      }
+      const centerHz = count ? sum / count : 0;
       if (centerHz > 0) {
         audioRef.current.centerHz = lerp(audioRef.current.centerHz, centerHz, 0.2);
         audioRef.current.centerCents = 1200 * Math.log2(audioRef.current.centerHz);
       }
     }
-    const absCents = hasVoice ? 1200 * Math.log2(hz) : Number.NaN;
-    audioRef.current.latestCents = absCents;
 
     let {pitchIndex} = audioRef.current;
     pitchBuffer[pitchIndex] = absCents;
@@ -275,19 +309,20 @@ export default function App() {
       audioRef.current.lastCents = absCents;
     }
 
-    setUi((prev) => ({
-      ...prev,
-      level: {max: peak, rms: audioRef.current.levelEma},
-      lastHz: audioRef.current.lastHz,
-    }));
+    return {
+      peak,
+      rms: audioRef.current.levelEma,
+      hz,
+    };
   };
 
   const drawWaveform = () => {
     const canvas = canvasRef.current;
-    const {centerCents, latestCents} = audioRef.current;
+    const {centerCents} = audioRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    ctx.imageSmoothingEnabled = true;
 
     const {clientWidth, clientHeight} = canvas;
     const dpr = window.devicePixelRatio || 1;
@@ -299,14 +334,18 @@ export default function App() {
     }
 
     ensureOffscreen(width, height);
-    scrollOffscreen(width, height, dpr, latestCents, centerCents);
+    const now = performance.now();
+    const samples = audioRef.current.pendingSamples || [];
+    audioRef.current.pendingSamples = [];
+    scrollOffscreen(width, height, dpr, centerCents, samples, now);
 
     ctx.clearRect(0, 0, width, height);
     ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
     ctx.lineWidth = 1 * dpr;
-    drawGrid(ctx, width, height, dpr);
+    drawGrid(ctx, width, height, dpr, WAVE_Y_RANGE);
     drawSemitoneLabels(ctx, width, height, dpr, WAVE_Y_RANGE);
     ctx.drawImage(renderRef.current.offscreen, 0, 0);
+
   };
 
   const ensureOffscreen = (width, height) => {
@@ -329,85 +368,162 @@ export default function App() {
       renderRef.current.lastDrawnY = null;
       renderRef.current.lastTime = 0;
       renderRef.current.meanCents = 0;
+      renderRef.current.pendingPoint = null;
       if (renderRef.current.ctx) {
+        renderRef.current.ctx.imageSmoothingEnabled = false;
         renderRef.current.ctx.clearRect(0, 0, width, height);
+      }
+      if (renderRef.current.bufferCtx) {
+        renderRef.current.bufferCtx.imageSmoothingEnabled = false;
       }
     }
   };
 
-  const scrollOffscreen = (width, height, dpr, latestCents, centerCents) => {
+  const scrollOffscreen = (width, height, dpr, centerCents, samples = [], now) => {
     const offCtx = renderRef.current.ctx;
     const bufferCtx = renderRef.current.bufferCtx;
     if (!offCtx || !bufferCtx) return;
 
-    const now = performance.now();
-    const lastTime = renderRef.current.lastTime || now;
-    const delta = now - lastTime;
-    renderRef.current.lastTime = now;
-
     const pixelsPerSecond = width / PITCH_SECONDS;
-    renderRef.current.scrollRemainder += (delta / 1000) * pixelsPerSecond;
-    const shiftPixels = Math.floor(renderRef.current.scrollRemainder);
-    if (shiftPixels > 0) {
-      renderRef.current.scrollRemainder -= shiftPixels;
-    }
-
     const midY = height / 2;
     const scaleY = (height / 2) / WAVE_Y_RANGE;
-    const mean = Number.isFinite(centerCents) ? centerCents : renderRef.current.meanCents;
-    const deltaMean = mean - renderRef.current.meanCents;
-    const shiftY = Math.round(-deltaMean * scaleY);
-    if (shiftPixels > 0 || shiftY !== 0) {
+
+    const applyScroll = (deltaMs, targetMean) => {
+      if (!deltaMs) return;
+      const mean = Number.isFinite(targetMean) ? targetMean : renderRef.current.meanCents;
+      const deltaMean = mean - renderRef.current.meanCents;
+      const shiftY = Math.round(deltaMean * scaleY);
+      const pixelsToShift = (deltaMs / 1000) * pixelsPerSecond + renderRef.current.scrollRemainder;
+      const shiftPixels = Math.floor(pixelsToShift);
+      renderRef.current.scrollRemainder = pixelsToShift - shiftPixels;
+      if (shiftPixels === 0 && shiftY === 0) return;
       bufferCtx.clearRect(0, 0, width, height);
       bufferCtx.drawImage(renderRef.current.offscreen, 0, 0);
       offCtx.clearRect(0, 0, width, height);
       offCtx.drawImage(renderRef.current.buffer, -shiftPixels, shiftY);
-      // Update stored Y position to account for shift
       if (renderRef.current.lastDrawnY !== null) {
         renderRef.current.lastDrawnY += shiftY;
       }
+      renderRef.current.meanCents = mean;
+      return shiftPixels;
+    };
+
+    const lastTime = renderRef.current.lastTime || now;
+    if (samples.length === 0) {
+      applyScroll(now - lastTime, centerCents);
+      renderRef.current.lastTime = now;
+      return;
     }
-    renderRef.current.meanCents = mean;
-    const value = latestCents;
-    if (!Number.isNaN(value)) {
-      const centered = value - mean;
+
+    let pendingPoint = renderRef.current.pendingPoint;
+    for (const sample of samples) {
+      const sampleTime = sample.time || now;
+      const deltaMs = sampleTime - (renderRef.current.lastTime || sampleTime);
+      renderRef.current.lastTime = sampleTime;
+      const shiftPixels = applyScroll(deltaMs, sample.centerCents ?? centerCents);
+      if (!shiftPixels) {
+        pendingPoint = sample;
+        continue;
+      }
+      const point = pendingPoint || sample;
+      pendingPoint = null;
+      const value = point.cents;
+      if (Number.isNaN(value)) {
+        renderRef.current.lastValue = null;
+        renderRef.current.lastDrawnY = null;
+        continue;
+      }
+      const centered = value - renderRef.current.meanCents;
       const y = midY - centered * scaleY;
       const lastValue = renderRef.current.lastValue;
       const lastDrawnY = renderRef.current.lastDrawnY;
       const rightX = width - 1;
 
-      offCtx.strokeStyle = "#38bdf8";
+      const lineColor = point.filtered ? "#f97316" : "#38bdf8";
+      offCtx.strokeStyle = lineColor;
       offCtx.lineWidth = 1.6 * dpr;
       offCtx.lineJoin = "round";
       offCtx.lineCap = "round";
-      if (shiftPixels > 0) {
-        offCtx.beginPath();
-        if (lastValue === null || Math.abs(value - lastValue) > 300 || lastDrawnY === null) {
-          offCtx.moveTo(rightX, y);
-        } else {
-          offCtx.moveTo(rightX - shiftPixels, lastDrawnY);
-          offCtx.lineTo(rightX, y);
-        }
-        offCtx.stroke();
-        renderRef.current.lastDrawnY = y;
+      offCtx.beginPath();
+      if (lastValue === null || Math.abs(value - lastValue) > 300 || lastDrawnY === null) {
+        offCtx.moveTo(rightX, y);
+      } else {
+        const back = Math.max(1, shiftPixels || 1);
+        offCtx.moveTo(rightX - back, lastDrawnY);
+        offCtx.lineTo(rightX, y);
       }
+      offCtx.stroke();
+
+      renderRef.current.lastDrawnY = y;
       renderRef.current.lastValue = value;
-    } else {
-      renderRef.current.lastValue = null;
-      renderRef.current.lastDrawnY = null;
     }
+
+    renderRef.current.pendingPoint = pendingPoint;
+
+    const finalDelta = now - renderRef.current.lastTime;
+    if (finalDelta > 0) {
+      applyScroll(finalDelta, centerCents);
+      renderRef.current.lastTime = now;
+    }
+  };
+
+  const startAnalysisTimer = (analysisFps) => {
+    if (animationRef.current.analysisTimer) {
+      clearInterval(animationRef.current.analysisTimer);
+    }
+    audioRef.current.analysisFps = analysisFps;
+    animationRef.current.analysisTimer = window.setInterval(
+        analyzeFrame,
+        1000 / analysisFps
+    );
+  };
+
+  const applyAnalysisRate = (analysisFps) => {
+    const {sampleRate, pitchBuffer, hzBuffer} = audioRef.current;
+    const pitchLength = Math.floor(PITCH_SECONDS * analysisFps);
+    const hzLength = Math.floor(CENTER_SECONDS * analysisFps);
+    audioRef.current.pitchBuffer = pitchBuffer?.length === pitchLength
+        ? pitchBuffer
+        : (() => {
+          const buf = new Float32Array(pitchLength);
+          buf.fill(Number.NaN);
+          return buf;
+        })();
+    audioRef.current.hzBuffer = hzBuffer?.length === hzLength
+        ? hzBuffer
+        : (() => {
+          const buf = new Float32Array(hzLength);
+          buf.fill(Number.NaN);
+          return buf;
+        })();
+    audioRef.current.pitchIndex = 0;
+    audioRef.current.hzIndex = 0;
+    audioRef.current.sampleRate = sampleRate || audioRef.current.sampleRate;
+    audioRef.current.pendingSamples = [];
+    renderRef.current.lastTime = 0;
+    renderRef.current.scrollRemainder = 0;
+    renderRef.current.pendingPoint = null;
+    if (ui.isRunning) {
+      startAnalysisTimer(analysisFps);
+    }
+  };
+
+  const handleAnalysisRateChange = (analysisFps) => {
+    const safeFps = Math.max(5, Math.min(480, Number(analysisFps) || DEFAULT_ANALYSIS_FPS));
+    setUi((prev) => ({...prev, analysisFps: safeFps}));
+    applyAnalysisRate(safeFps);
   };
 
   return (
       <div className="h-[100dvh] w-full overflow-hidden bg-slate-950 text-slate-100">
         <div className="mx-auto flex h-full w-full max-w-[450px] items-stretch px-2 py-2">
           <main className="relative flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-800 bg-slate-900">
-            <div className="relative min-h-0 flex-1 p-2">
+            <div className="relative min-h-0 flex-[2] p-2">
               <canvas ref={canvasRef} className="h-full w-full"/>
               <button
                   type="button"
                   onClick={ui.isRunning ? stopAudio : startAudio}
-                  className="absolute left-3 top-3 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 shadow"
+                  className="absolute right-3 top-3 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 shadow"
               >
                 {ui.isRunning ? "Stop" : "Start"}
               </button>
@@ -416,14 +532,40 @@ export default function App() {
                     {ui.error}
                   </div>
               ) : null}
+              <div className="absolute left-3 top-3 flex flex-wrap items-center gap-1 rounded-full bg-slate-900/70 px-2 py-1 text-[10px] text-slate-200">
+                <span className="uppercase tracking-wide text-slate-400">Analysis</span>
+                {ANALYSIS_RATE_OPTIONS.map((fps) => (
+                    <button
+                        key={fps}
+                        type="button"
+                        onClick={() => handleAnalysisRateChange(fps)}
+                        className={`rounded-full border px-2 py-0.5 ${
+                            ui.analysisFps === fps
+                                ? "border-slate-200 bg-slate-100 text-slate-900"
+                                : "border-slate-700 text-slate-200"
+                        }`}
+                    >
+                      {fps}
+                    </button>
+                ))}
+                <input
+                    type="number"
+                    min="5"
+                    max="480"
+                    step="1"
+                    value={ui.analysisFps}
+                    onChange={(event) => handleAnalysisRateChange(event.target.value)}
+                    className="w-14 rounded-md border border-slate-700 bg-slate-950/80 px-1 py-0.5 text-[10px] text-slate-100"
+                    aria-label="Analysis FPS"
+                />
+              </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-4 py-2 text-xs text-slate-300">
               <div>Data: {ui.timings.data.toFixed(2)} ms</div>
               <div>Draw: {ui.timings.draw.toFixed(2)} ms</div>
-              <div>Peak: {ui.level.max.toFixed(3)}</div>
+              {/*<div>Peak: {ui.level.max.toFixed(3)}</div>*/}
               <div>RMS: {ui.level.rms?.toFixed(3) ?? "--"}</div>
-              <div>Hz: {ui.lastHz ? ui.lastHz.toFixed(1) : "--"}</div>
-              <div>Detector: {detectorLabel}</div>
+              <div>Hz: {ui.rawHz ? ui.rawHz.toFixed(1) : "0"}</div>
             </div>
             <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 px-4 py-2 text-xs text-slate-300">
               {DETECTORS.map((entry) => (
