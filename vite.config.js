@@ -17,21 +17,8 @@ export default defineConfig(({mode}) => {
       cloudflare(),
       VitePWA({
         registerType: "autoUpdate",
-        injectRegister: "auto",
-        includeAssets: ["index.html"],
         workbox: {
-          cleanupOutdatedCaches: true,
           navigateFallback: "/index.html",
-          runtimeCaching: [
-            {
-              urlPattern: ({request}) => request.mode === "navigate",
-              handler: "NetworkFirst",
-              options: {
-                cacheName: "html",
-                networkTimeoutSeconds: 3,
-              },
-            },
-          ],
         },
       }),
       ...(useHttps ? [basicSsl()] : []),
