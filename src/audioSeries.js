@@ -88,7 +88,7 @@ export function setupAudioState(prevState, {
     levelEma: prevState.levelEma || 0,
     latestCents: Number.NaN,
     latestFiltered: false,
-    samples: [],
+    samples: prevState.samples || [],
   };
 }
 

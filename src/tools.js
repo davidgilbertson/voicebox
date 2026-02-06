@@ -4,14 +4,14 @@ export function lerp(current, next, factor) {
 }
 
 // Draw grid lines at each semitone and vertical divisions.
-export function drawGrid(ctx, width, height, dpr, waveRange) {
+export function drawGrid(ctx, width, height, waveRange) {
   const midY = height / 2;
   const scaleY = (height / 2) / waveRange;
   const steps = [-3, -2, -1, 0, 1, 2, 3];
 
   // Horizontal lines at each semitone
   ctx.strokeStyle = 'rgba(51, 65, 85, 0.8)';
-  ctx.lineWidth = 1 * dpr;
+  ctx.lineWidth = 1;
   ctx.beginPath();
   for (const step of steps) {
     const cents = step * 100;
@@ -34,9 +34,9 @@ export function drawGrid(ctx, width, height, dpr, waveRange) {
 }
 
 // Draw semitone labels (-2..2) along the left edge.
-export function drawSemitoneLabels(ctx, width, height, dpr, waveRange) {
+export function drawSemitoneLabels(ctx, width, height, waveRange) {
   ctx.fillStyle = 'rgba(148, 163, 184, 0.85)';
-  ctx.font = `${12 * dpr}px system-ui`;
+  ctx.font = "12px system-ui";
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   const midY = height / 2;
@@ -45,7 +45,7 @@ export function drawSemitoneLabels(ctx, width, height, dpr, waveRange) {
   for (const step of steps) {
     const cents = step * 100;
     const y = midY - cents * scaleY;
-    ctx.fillText(`${step}`, 8 * dpr, y);
+    ctx.fillText(`${step}`, 8, y);
   }
 }
 

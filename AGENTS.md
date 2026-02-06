@@ -6,3 +6,4 @@
 - Charts: canvas-based; 5s x-axis; main waveform centered on ~0.5s window; y-axis fixed to -200..200 cents; no pitch labels.
 - Metrics: show Hz and BPM; no stability metric.
 - Audio scope: voice only; limit detection to ~C2–C6 (+margin if helpful).
+- Assume the dev server is running, no need to run builds steps.
