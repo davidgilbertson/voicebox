@@ -1,9 +1,12 @@
 import {defineConfig} from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import colors from "tailwindcss/colors";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import {cloudflare} from "@cloudflare/vite-plugin";
 import {VitePWA} from "vite-plugin-pwa";
+
+const appChromeColor = colors.slate[900];
 
 export default defineConfig(({mode}) => {
   // We need https to test the mic on mobile during development
@@ -17,6 +20,25 @@ export default defineConfig(({mode}) => {
       cloudflare(),
       VitePWA({
         registerType: "autoUpdate",
+        includeAssets: ["icon-voice.svg"],
+        manifest: {
+          name: "Voicebox",
+          short_name: "Voicebox",
+          description: "Voice pitch visualizer for tuning and vibrato practice.",
+          start_url: "/",
+          display: "standalone",
+          orientation: "portrait",
+          theme_color: appChromeColor,
+          background_color: appChromeColor,
+          icons: [
+            {
+              src: "/icon-voice.svg",
+              sizes: "any",
+              type: "image/svg+xml",
+              purpose: "any maskable",
+            },
+          ],
+        },
         workbox: {
           navigateFallback: "/index.html",
         },
