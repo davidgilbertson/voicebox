@@ -12,13 +12,18 @@ const Chart = forwardRef(function Chart({className = ""}, ref) {
                   count,
                   yOffset = 0,
                   yRange = 1,
+                  mapValueToY = null,
+                  xInsetLeft = 0,
+                  xInsetRight = 0,
+                  yInsetTop = 0,
+                  yInsetBottom = 0,
                   lineColor = colors.sky[400],
                   lineWidth = 1,
                   gapThreshold = Number.POSITIVE_INFINITY,
                   drawBackground,
                 }) => {
     const canvas = canvasRef.current;
-    if (!canvas || !values || count <= 0 || yRange <= 0) return;
+    if (!canvas || yRange <= 0) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -41,6 +46,10 @@ const Chart = forwardRef(function Chart({className = ""}, ref) {
       drawBackground(ctx, cssWidth, cssHeight);
     }
 
+    if (!values || count <= 0) {
+      return;
+    }
+
     if (!smoothedValuesRef.current || smoothedValuesRef.current.length !== values.length) {
       smoothedValuesRef.current = new Float32Array(values.length);
     }
@@ -49,8 +58,14 @@ const Chart = forwardRef(function Chart({className = ""}, ref) {
         {output: smoothedValuesRef.current}
     );
 
-    const midY = cssHeight / 2;
-    const scaleY = (cssHeight / 2) / yRange;
+    const plotLeft = Math.max(0, xInsetLeft);
+    const plotRight = Math.max(plotLeft + 1, cssWidth - Math.max(0, xInsetRight));
+    const plotTop = Math.max(0, yInsetTop);
+    const plotBottom = Math.max(plotTop + 1, cssHeight - Math.max(0, yInsetBottom));
+    const plotWidth = Math.max(1, plotRight - plotLeft);
+    const plotHeight = Math.max(1, plotBottom - plotTop);
+    const midY = plotTop + (plotHeight / 2);
+    const scaleY = (plotHeight / 2) / yRange;
     ctx.lineWidth = lineWidth;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
@@ -71,9 +86,12 @@ const Chart = forwardRef(function Chart({className = ""}, ref) {
         continue;
       }
       const slot = startSlot + i;
-      const x = totalSlots > 1 ? (slot / (totalSlots - 1)) * cssWidth : cssWidth;
-      const centered = value - yOffset;
-      const y = midY - centered * scaleY;
+      const x = totalSlots > 1
+          ? plotLeft + (slot / (totalSlots - 1)) * plotWidth
+          : plotRight;
+      const y = mapValueToY
+          ? mapValueToY(value, cssHeight, plotTop, plotHeight)
+          : midY - (value - yOffset) * scaleY;
       if (lastValue === null || Math.abs(value - lastValue) > gapThreshold || lastY === null) {
         if (hasActivePath) {
           ctx.stroke();

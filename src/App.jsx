@@ -1,23 +1,20 @@
 import {useEffect, useRef, useState} from "react";
-import colors from "tailwindcss/colors";
-import {
-  drawGrid,
-  drawSemitoneLabels,
-  lerp,
-} from "./tools.js";
+import {lerp} from "./tools.js";
 import {analyzeAudioWindow, createAudioState, setupAudioState} from "./audioSeries.js";
 import {createPitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
 import {estimateTimelineVibratoRateHz} from "./vibratoRate.js";
-import Chart from "./Chart.jsx";
 import SettingsPanel from "./SettingsPanel.jsx";
+import VibratoChart from "./VibratoChart.jsx";
+import PitchChart from "./PitchChart.jsx";
+import {noteNameToCents, noteNameToHz, PITCH_NOTE_OPTIONS} from "./pitchScale.js";
 
 const FFT_SIZE = 2048;
 const SAMPLES_PER_SECOND = 200;
 const SILENCE_PAUSE_THRESHOLD_MS = 300;
 const PITCH_SECONDS = 5; // x axis range
 const WAVE_Y_RANGE = 300; // in cents
-const MIN_HZ = 65; // ~C2
-const MAX_HZ = 1100; // ~C6
+const VIBRATO_MIN_HZ = 65; // ~C2
+const VIBRATO_MAX_HZ = 1100; // ~C6
 const CENTER_SECONDS = 1; // Window to use for vertical centering
 const RAW_BUFFER_SECONDS = 8;
 const VIBRATO_RATE_MIN_HZ = 3;
@@ -28,7 +25,10 @@ const VIBRATO_ANALYSIS_WINDOW_SECONDS = 0.5;
 const VIBRATO_MIN_CONTIGUOUS_SECONDS = 0.4;
 const VIBRATO_MAX_MARKER_PX_PER_FRAME = 3;
 const VIBRATO_RATE_HOLD_MS = 300;
-const WAVEFORM_LINE_COLOR = colors.sky[400];
+const PITCH_MIN_NOTE_DEFAULT = "C1";
+const PITCH_MAX_NOTE_DEFAULT = "F6";
+const ACTIVE_VIEW_STORAGE_KEY = "voicebox.activeView";
+const ACTIVE_VIEW_DEFAULT = "vibrato";
 
 function createRawAudioBuffer(sampleRate) {
   const capacity = Math.max(FFT_SIZE * 2, Math.floor(sampleRate * RAW_BUFFER_SECONDS));
@@ -62,10 +62,33 @@ function computeIsForeground() {
   return true;
 }
 
+function safeParseBoolean(storageValue, fallback = false) {
+  if (storageValue === null) return fallback;
+  try {
+    return JSON.parse(storageValue) === true;
+  } catch {
+    return fallback;
+  }
+}
+
+function safeReadPitchNote(storageKey, fallback) {
+  if (typeof window === "undefined") return fallback;
+  const stored = window.localStorage.getItem(storageKey);
+  if (!stored) return fallback;
+  return PITCH_NOTE_OPTIONS.includes(stored) ? stored : fallback;
+}
+
+function safeReadActiveView() {
+  if (typeof window === "undefined") return ACTIVE_VIEW_DEFAULT;
+  const stored = window.localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);
+  return stored === "pitch" || stored === "vibrato" ? stored : ACTIVE_VIEW_DEFAULT;
+}
+
 export default function App() {
-  const chartRef = useRef(null);
-  const vibratoBarRef = useRef(null);
+  const vibratoChartRef = useRef(null);
+  const pitchChartRef = useRef(null);
   const audioRef = useRef(createAudioState(SAMPLES_PER_SECOND));
+  // Single shared timeline feeds both pitch and vibrato views so switching preserves continuity.
   const timelineRef = useRef(createPitchTimeline({
     samplesPerSecond: SAMPLES_PER_SECOND,
     seconds: PITCH_SECONDS,
@@ -86,6 +109,14 @@ export default function App() {
     rawHz: 0,
     hasVoice: false,
   });
+  const forceRedrawRef = useRef(false);
+  const activeViewRef = useRef(ACTIVE_VIEW_DEFAULT);
+  const pitchRangeRef = useRef({
+    minHz: noteNameToHz(PITCH_MIN_NOTE_DEFAULT),
+    maxHz: noteNameToHz(PITCH_MAX_NOTE_DEFAULT),
+    minCents: noteNameToCents(PITCH_MIN_NOTE_DEFAULT),
+    maxCents: noteNameToCents(PITCH_MAX_NOTE_DEFAULT),
+  });
   const [ui, setUi] = useState({
     isRunning: false,
     error: "",
@@ -95,18 +126,40 @@ export default function App() {
     hasVoice: false,
     vibratoRateHz: null,
   });
+  const [activeView, setActiveView] = useState(() => safeReadActiveView());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [wantsToRun, setWantsToRun] = useState(true);
   const [isForeground, setIsForeground] = useState(() => computeIsForeground());
   const [keepRunningInBackground, setKeepRunningInBackground] = useState(() => {
     if (typeof window === "undefined") return false;
-    try {
-      const stored = window.localStorage.getItem("voicebox.keepRunningInBackground");
-      return stored ? JSON.parse(stored) === true : false;
-    } catch {
-      return false;
-    }
+    return safeParseBoolean(window.localStorage.getItem("voicebox.keepRunningInBackground"), false);
   });
+  const [pitchMinNote, setPitchMinNote] = useState(() => safeReadPitchNote(
+      "voicebox.pitchMinNote",
+      PITCH_MIN_NOTE_DEFAULT
+  ));
+  const [pitchMaxNote, setPitchMaxNote] = useState(() => safeReadPitchNote(
+      "voicebox.pitchMaxNote",
+      PITCH_MAX_NOTE_DEFAULT
+  ));
+
+  const pitchMinHz = noteNameToHz(pitchMinNote);
+  const pitchMaxHz = noteNameToHz(pitchMaxNote);
+  const pitchMinCents = noteNameToCents(pitchMinNote);
+  const pitchMaxCents = noteNameToCents(pitchMaxNote);
+
+  useEffect(() => {
+    activeViewRef.current = activeView;
+  }, [activeView]);
+
+  useEffect(() => {
+    pitchRangeRef.current = {
+      minHz: pitchMinHz,
+      maxHz: pitchMaxHz,
+      minCents: pitchMinCents,
+      maxCents: pitchMaxCents,
+    };
+  }, [pitchMaxCents, pitchMaxHz, pitchMinCents, pitchMinHz]);
 
   useEffect(() => {
     return () => {
@@ -124,6 +177,23 @@ export default function App() {
       // Ignore storage errors (private mode / quota).
     }
   }, [keepRunningInBackground]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("voicebox.pitchMinNote", pitchMinNote);
+      window.localStorage.setItem("voicebox.pitchMaxNote", pitchMaxNote);
+    } catch {
+      // Ignore storage errors (private mode / quota).
+    }
+  }, [pitchMinNote, pitchMaxNote]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, activeView);
+    } catch {
+      // Ignore storage errors (private mode / quota).
+    }
+  }, [activeView]);
 
   useEffect(() => {
     const updateForeground = () => {
@@ -153,7 +223,6 @@ export default function App() {
       if (raw.size < raw.values.length) {
         raw.size += 1;
       } else {
-        // Overwrite oldest samples if producer outruns consumer.
         raw.readIndex = (raw.readIndex + 1) % raw.values.length;
       }
     }
@@ -172,6 +241,9 @@ export default function App() {
   const processBufferedAudio = () => {
     const raw = rawBufferRef.current;
     const analysis = analysisRef.current;
+    const currentView = activeViewRef.current;
+    const minHz = currentView === "pitch" ? pitchRangeRef.current.minHz : VIBRATO_MIN_HZ;
+    const maxHz = currentView === "pitch" ? pitchRangeRef.current.maxHz : VIBRATO_MAX_HZ;
     let processedWindows = 0;
     let analysisElapsedMs = 0;
     let didTimelineChange = false;
@@ -197,7 +269,7 @@ export default function App() {
       if (!windowSamples) continue;
 
       const start = performance.now();
-      const result = analyzeAudioWindow(audioRef.current, windowSamples, MIN_HZ, MAX_HZ);
+      const result = analyzeAudioWindow(audioRef.current, windowSamples, minHz, maxHz);
       analysisElapsedMs += performance.now() - start;
       processedWindows += 1;
       if (!result) continue;
@@ -233,7 +305,7 @@ export default function App() {
         audio: {
           autoGainControl: false,
           noiseSuppression: false,
-          echoCancellation: false, // The killer on mobile!
+          echoCancellation: false,
         },
       });
       const context = new AudioContext();
@@ -253,7 +325,6 @@ export default function App() {
       };
       source.connect(captureNode);
 
-      // Keep the worklet active without audible playback.
       const sinkGain = context.createGain();
       sinkGain.gain.value = 0;
       captureNode.connect(sinkGain);
@@ -308,7 +379,6 @@ export default function App() {
     if (context && context.state !== "closed") {
       context.close();
     }
-    // Only clear audio resources, preserve pitch state for chart continuity
     audioRef.current.context = null;
     audioRef.current.source = null;
     audioRef.current.stream = null;
@@ -319,25 +389,22 @@ export default function App() {
     setUi((prev) => ({...prev, isRunning: false}));
   };
 
-  const drawWaveform = () => {
-    const {centerCents} = audioRef.current;
-    const {values, writeIndex, count} = timelineRef.current;
-    chartRef.current?.draw({
-      values,
-      writeIndex,
-      count,
-      yOffset: centerCents,
-      yRange: WAVE_Y_RANGE,
-      lineColor: WAVEFORM_LINE_COLOR,
-      lineWidth: 1.5,
-      gapThreshold: 300,
-      drawBackground: (ctx, width, height) => {
-        ctx.imageSmoothingEnabled = true;
-        ctx.lineWidth = 1;
-        drawGrid(ctx, width, height, WAVE_Y_RANGE);
-        drawSemitoneLabels(ctx, width, height, WAVE_Y_RANGE);
-        ctx.imageSmoothingEnabled = true;
-      },
+  const drawActiveChart = () => {
+    const timeline = timelineRef.current;
+    const currentView = activeViewRef.current;
+    if (currentView === "vibrato") {
+      vibratoChartRef.current?.draw({
+        values: timeline.values,
+        writeIndex: timeline.writeIndex,
+        count: timeline.count,
+        yOffset: audioRef.current.centerCents,
+      });
+      return;
+    }
+    pitchChartRef.current?.draw({
+      values: timeline.values,
+      writeIndex: timeline.writeIndex,
+      count: timeline.count,
     });
   };
 
@@ -345,64 +412,66 @@ export default function App() {
     const didTimelineChange = processBufferedAudio();
     const nowMs = performance.now();
     const previousDisplayedRateHz = animationRef.current.displayedVibratoRateHz;
-    let estimatedRateHz = null;
-    if (didTimelineChange) {
-      estimatedRateHz = estimateTimelineVibratoRateHz({
-        values: timelineRef.current.values,
-        writeIndex: timelineRef.current.writeIndex,
-        count: timelineRef.current.count,
-        samplesPerSecond: timelineRef.current.samplesPerSecond,
-        minRateHz: VIBRATO_RATE_MIN_HZ,
-        maxRateHz: VIBRATO_RATE_MAX_HZ,
-        analysisWindowSeconds: VIBRATO_ANALYSIS_WINDOW_SECONDS,
-        minContinuousSeconds: VIBRATO_MIN_CONTIGUOUS_SECONDS,
-      });
-    }
-
-    const latestMetrics = metricsRef.current;
     let displayedRateHz = null;
+    const currentView = activeViewRef.current;
 
-    if (estimatedRateHz !== null) {
-      animationRef.current.lastValidVibratoRateMs = nowMs;
-      const previousRateHz = animationRef.current.displayedVibratoRateHz;
-      if (previousRateHz === null) {
-        displayedRateHz = estimatedRateHz;
-      } else {
-        const barWidth = Math.max(1, vibratoBarRef.current?.clientWidth ?? 1);
-        const hzSpan = VIBRATO_RATE_MAX_HZ - VIBRATO_RATE_MIN_HZ;
-        const pixelsPerHz = barWidth / hzSpan;
-        const maxHzStep = VIBRATO_MAX_MARKER_PX_PER_FRAME / pixelsPerHz;
-        const delta = estimatedRateHz - previousRateHz;
-        if (Math.abs(delta) > maxHzStep) {
-          displayedRateHz = previousRateHz + Math.sign(delta) * maxHzStep;
-        } else {
-          displayedRateHz = estimatedRateHz;
-        }
+    if (currentView === "vibrato") {
+      let estimatedRateHz = null;
+      if (didTimelineChange) {
+        estimatedRateHz = estimateTimelineVibratoRateHz({
+          values: timelineRef.current.values,
+          writeIndex: timelineRef.current.writeIndex,
+          count: timelineRef.current.count,
+          samplesPerSecond: timelineRef.current.samplesPerSecond,
+          minRateHz: VIBRATO_RATE_MIN_HZ,
+          maxRateHz: VIBRATO_RATE_MAX_HZ,
+          analysisWindowSeconds: VIBRATO_ANALYSIS_WINDOW_SECONDS,
+          minContinuousSeconds: VIBRATO_MIN_CONTIGUOUS_SECONDS,
+        });
       }
-    } else if (
-        previousDisplayedRateHz !== null &&
-        animationRef.current.lastValidVibratoRateMs !== null &&
-        nowMs - animationRef.current.lastValidVibratoRateMs <= VIBRATO_RATE_HOLD_MS
-    ) {
-      displayedRateHz = previousDisplayedRateHz;
+
+      if (estimatedRateHz !== null) {
+        animationRef.current.lastValidVibratoRateMs = nowMs;
+        const previousRateHz = animationRef.current.displayedVibratoRateHz;
+        if (previousRateHz === null) {
+          displayedRateHz = estimatedRateHz;
+        } else {
+          const barWidth = Math.max(1, vibratoChartRef.current?.getRateBarWidth() ?? 1);
+          const hzSpan = VIBRATO_RATE_MAX_HZ - VIBRATO_RATE_MIN_HZ;
+          const pixelsPerHz = barWidth / hzSpan;
+          const maxHzStep = VIBRATO_MAX_MARKER_PX_PER_FRAME / pixelsPerHz;
+          const delta = estimatedRateHz - previousRateHz;
+          if (Math.abs(delta) > maxHzStep) {
+            displayedRateHz = previousRateHz + Math.sign(delta) * maxHzStep;
+          } else {
+            displayedRateHz = estimatedRateHz;
+          }
+        }
+      } else if (
+          previousDisplayedRateHz !== null &&
+          animationRef.current.lastValidVibratoRateMs !== null &&
+          nowMs - animationRef.current.lastValidVibratoRateMs <= VIBRATO_RATE_HOLD_MS
+      ) {
+        displayedRateHz = previousDisplayedRateHz;
+      }
+    } else {
+      animationRef.current.lastValidVibratoRateMs = null;
     }
 
     const didDisplayRateChange = displayedRateHz !== previousDisplayedRateHz;
     animationRef.current.displayedVibratoRateHz = displayedRateHz;
 
-    if (didTimelineChange) {
+    const shouldDrawNow = didTimelineChange || forceRedrawRef.current;
+    if (shouldDrawNow) {
+      forceRedrawRef.current = false;
       const drawStart = performance.now();
-      drawWaveform();
+      drawActiveChart();
       const drawElapsed = performance.now() - drawStart;
-
-      animationRef.current.drawAvg = lerp(
-          animationRef.current.drawAvg,
-          drawElapsed,
-          0.2
-      );
+      animationRef.current.drawAvg = lerp(animationRef.current.drawAvg, drawElapsed, 0.2);
     }
 
     if (didTimelineChange || didDisplayRateChange) {
+      const latestMetrics = metricsRef.current;
       setUi((prev) => ({
         ...prev,
         timings: {
@@ -426,7 +495,7 @@ export default function App() {
         cancelAnimationFrame(rafId);
       }
       rafId = requestAnimationFrame(() => {
-        drawWaveform();
+        drawActiveChart();
       });
     };
 
@@ -438,7 +507,18 @@ export default function App() {
       }
       window.removeEventListener("resize", redrawIdleCanvas);
     };
-  }, [ui.isRunning]);
+  }, [activeView, ui.isRunning]);
+
+  useEffect(() => {
+    if (settingsOpen) return;
+    forceRedrawRef.current = true;
+    const rafId = requestAnimationFrame(() => {
+      drawActiveChart();
+    });
+    return () => {
+      cancelAnimationFrame(rafId);
+    };
+  }, [activeView, pitchMaxCents, pitchMinCents, settingsOpen]);
 
   const shouldRun =
       wantsToRun &&
@@ -455,90 +535,112 @@ export default function App() {
     }
   }, [shouldRun, ui.isRunning]);
 
-  const vibratoRatePositionPct = ui.vibratoRateHz === null
-      ? null
-      : ((ui.vibratoRateHz - VIBRATO_RATE_MIN_HZ) / (VIBRATO_RATE_MAX_HZ - VIBRATO_RATE_MIN_HZ)) * 100;
-  const vibratoRatePillPct = vibratoRatePositionPct === null
-      ? null
-      : Math.max(8, Math.min(92, vibratoRatePositionPct));
-  const sweetStartPct = ((VIBRATO_SWEET_MIN_HZ - VIBRATO_RATE_MIN_HZ) / (VIBRATO_RATE_MAX_HZ - VIBRATO_RATE_MIN_HZ)) * 100;
-  const sweetEndPct = ((VIBRATO_SWEET_MAX_HZ - VIBRATO_RATE_MIN_HZ) / (VIBRATO_RATE_MAX_HZ - VIBRATO_RATE_MIN_HZ)) * 100;
+  const onPitchMinNoteChange = (nextNote) => {
+    const lastIndex = PITCH_NOTE_OPTIONS.length - 1;
+    let nextMinIndex = PITCH_NOTE_OPTIONS.indexOf(nextNote);
+    let nextMaxIndex = PITCH_NOTE_OPTIONS.indexOf(pitchMaxNote);
+    if (nextMinIndex < 0 || nextMaxIndex < 0) return;
+    if (nextMinIndex >= nextMaxIndex) {
+      nextMaxIndex = Math.min(lastIndex, nextMinIndex + 1);
+      if (nextMinIndex >= nextMaxIndex) {
+        nextMinIndex = Math.max(0, nextMaxIndex - 1);
+      }
+    }
+    setPitchMinNote(PITCH_NOTE_OPTIONS[nextMinIndex]);
+    setPitchMaxNote(PITCH_NOTE_OPTIONS[nextMaxIndex]);
+  };
+
+  const onPitchMaxNoteChange = (nextNote) => {
+    const lastIndex = PITCH_NOTE_OPTIONS.length - 1;
+    let nextMaxIndex = PITCH_NOTE_OPTIONS.indexOf(nextNote);
+    let nextMinIndex = PITCH_NOTE_OPTIONS.indexOf(pitchMinNote);
+    if (nextMinIndex < 0 || nextMaxIndex < 0) return;
+    if (nextMaxIndex <= nextMinIndex) {
+      nextMinIndex = Math.max(0, nextMaxIndex - 1);
+      if (nextMaxIndex <= nextMinIndex) {
+        nextMaxIndex = Math.min(lastIndex, nextMinIndex + 1);
+      }
+    }
+    setPitchMinNote(PITCH_NOTE_OPTIONS[nextMinIndex]);
+    setPitchMaxNote(PITCH_NOTE_OPTIONS[nextMaxIndex]);
+  };
 
   return (
       <div className="h-[var(--app-height)] w-full overflow-hidden bg-slate-900 text-slate-100 md:bg-slate-950">
         <div className="mx-auto flex h-full w-full max-w-none items-stretch px-0 py-0 md:max-w-[450px] md:items-center md:justify-center md:px-2 md:py-2">
           <main className="relative flex min-h-0 flex-1 flex-col bg-slate-900 md:h-full md:w-full md:max-h-[1000px] md:flex-none md:rounded-xl md:border md:border-slate-800 md:shadow-2xl">
-            <div className="relative min-h-0 flex-[2] p-2">
-              <Chart ref={chartRef} className="h-full w-full"/>
-              {ui.error ? (
-                  <div className="absolute inset-x-3 top-14 rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-200">
-                    {ui.error}
-                  </div>
-              ) : null}
-            </div>
-            <div className="pointer-events-none border-t border-slate-800/70 px-2 pb-2 pt-1">
-              <div className="relative">
-                <div ref={vibratoBarRef} className="relative h-3 w-full overflow-hidden rounded-none bg-slate-600/80">
-                  <div
-                      className="absolute top-0 bottom-0 bg-emerald-400/85"
-                      style={{
-                        left: `${sweetStartPct}%`,
-                        width: `${sweetEndPct - sweetStartPct}%`,
-                      }}
-                  />
+            {activeView === "vibrato" ? (
+                <VibratoChart
+                    ref={vibratoChartRef}
+                    yRange={WAVE_Y_RANGE}
+                    vibratoRateHz={ui.vibratoRateHz}
+                    vibratoRateMinHz={VIBRATO_RATE_MIN_HZ}
+                    vibratoRateMaxHz={VIBRATO_RATE_MAX_HZ}
+                    vibratoSweetMinHz={VIBRATO_SWEET_MIN_HZ}
+                    vibratoSweetMaxHz={VIBRATO_SWEET_MAX_HZ}
+                />
+            ) : (
+                <PitchChart ref={pitchChartRef} minCents={pitchMinCents} maxCents={pitchMaxCents}/>
+            )}
+            {ui.error ? (
+                <div className="absolute inset-x-3 top-14 rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-200">
+                  {ui.error}
                 </div>
-                {vibratoRatePositionPct !== null ? (
-                    <>
-                      <div
-                          className="absolute -top-8 -translate-x-1/2 whitespace-nowrap rounded-full border border-slate-300/20 bg-slate-900/85 px-2 py-0.5 text-xs font-medium text-slate-100"
-                          style={{left: `${vibratoRatePillPct}%`}}
-                      >
-                        {ui.vibratoRateHz.toFixed(1)} Hz
-                      </div>
-                      <div
-                          className="absolute -top-3 bottom-0 w-0.5 bg-white/90"
-                          style={{left: `${vibratoRatePositionPct}%`, transform: "translateX(-1px)"}}
-                      />
-                    </>
-                ) : null}
-              </div>
-              <div className="relative mt-1 h-3 text-[10px] leading-none text-slate-400/65">
-                <span className="absolute left-0 top-0">{VIBRATO_RATE_MIN_HZ} Hz</span>
-                <span className="absolute top-0 -translate-x-1/2 text-slate-300/85" style={{left: `${sweetStartPct}%`}}>
-                  {VIBRATO_SWEET_MIN_HZ} Hz
-                </span>
-                <span className="absolute top-0 -translate-x-1/2 text-slate-300/85" style={{left: `${sweetEndPct}%`}}>
-                  {VIBRATO_SWEET_MAX_HZ} Hz
-                </span>
-                <span className="absolute right-0 top-0">{VIBRATO_RATE_MAX_HZ} Hz</span>
-              </div>
-            </div>
+            ) : null}
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-4 py-2 text-xs text-slate-300">
               <div>Data: {ui.timings.data === null ? "--" : `${ui.timings.data.toFixed(2)} ms`}</div>
               <div>Draw: {ui.timings.draw.toFixed(2)} ms</div>
               <div>RMS: {ui.level.rms?.toFixed(3) ?? "--"}</div>
               <div>Hz: {ui.rawHz ? ui.rawHz.toFixed(1) : "0"}</div>
             </div>
-            <footer className="relative flex items-center justify-center gap-3 border-t border-slate-800 px-4 py-2 text-xs text-slate-300">
-              <button
-                  type="button"
-                  onClick={() => setWantsToRun((prev) => !prev)}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold shadow ${
-                      ui.isRunning
-                          ? "bg-emerald-400 text-emerald-950"
-                          : "bg-red-400 text-red-950"
-                  }`}
-              >
-                {ui.isRunning ? "Stop" : "Start"}
-              </button>
-              <button
-                  type="button"
-                  onClick={() => setSettingsOpen(true)}
-                  className="absolute right-4 text-2xl text-slate-200 transition hover:text-white"
-                  aria-label="Open settings"
-              >
-                ⚙
-              </button>
+            <footer className="relative flex h-12 items-stretch gap-1 border-t border-slate-800 px-2 py-1 text-xs text-slate-300">
+              <div className="flex w-40 items-stretch gap-1">
+                <button
+                    type="button"
+                    onClick={() => setActiveView("pitch")}
+                    className={`min-h-10 flex-1 rounded-lg px-2 text-sm font-semibold shadow ${
+                        activeView === "pitch"
+                            ? "bg-sky-400 text-slate-950"
+                            : "bg-slate-600 text-slate-100"
+                    }`}
+                >
+                  Pitch
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveView("vibrato")}
+                    className={`min-h-10 flex-1 rounded-lg px-2 text-sm font-semibold shadow ${
+                        activeView === "vibrato"
+                            ? "bg-sky-400 text-slate-950"
+                            : "bg-slate-600 text-slate-100"
+                    }`}
+                >
+                  Vibrato
+                </button>
+              </div>
+              <div className="flex flex-1 items-stretch justify-center">
+                <button
+                    type="button"
+                    onClick={() => setWantsToRun((prev) => !prev)}
+                    className={`min-h-10 rounded-lg px-5 text-sm font-semibold shadow ${
+                        ui.isRunning
+                            ? "bg-emerald-400 text-emerald-950"
+                            : "bg-red-400 text-red-950"
+                    }`}
+                >
+                  {ui.isRunning ? "Stop" : "Start"}
+                </button>
+              </div>
+              <div className="flex w-12 items-stretch justify-end">
+                <button
+                    type="button"
+                    onClick={() => setSettingsOpen(true)}
+                    className="min-h-10 w-full rounded-lg bg-slate-700 px-0 text-lg text-slate-200 shadow transition hover:bg-slate-600 hover:text-white"
+                    aria-label="Open settings"
+                >
+                  ⚙
+                </button>
+              </div>
             </footer>
           </main>
           <SettingsPanel
@@ -546,6 +648,11 @@ export default function App() {
               onClose={() => setSettingsOpen(false)}
               keepRunningInBackground={keepRunningInBackground}
               onKeepRunningInBackgroundChange={setKeepRunningInBackground}
+              pitchMinNote={pitchMinNote}
+              pitchMaxNote={pitchMaxNote}
+              pitchNoteOptions={PITCH_NOTE_OPTIONS}
+              onPitchMinNoteChange={onPitchMinNoteChange}
+              onPitchMaxNoteChange={onPitchMaxNoteChange}
           />
         </div>
       </div>

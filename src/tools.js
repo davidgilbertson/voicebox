@@ -6,9 +6,15 @@ export function lerp(current, next, factor) {
 }
 
 // Draw grid lines at each semitone and vertical divisions.
-export function drawGrid(ctx, width, height, waveRange) {
-  const midY = height / 2;
-  const scaleY = (height / 2) / waveRange;
+export function drawGrid(ctx, width, height, waveRange, options = {}) {
+  const {
+    gridLeft = 0,
+    gridTop = 0,
+    gridBottom = height,
+  } = options;
+  const plotHeight = Math.max(1, gridBottom - gridTop);
+  const midY = gridTop + (plotHeight / 2);
+  const scaleY = (plotHeight / 2) / waveRange;
   const steps = [-3, -2, -1, 0, 1, 2, 3];
 
   // Horizontal lines at each semitone
@@ -18,7 +24,7 @@ export function drawGrid(ctx, width, height, waveRange) {
   for (const step of steps) {
     const cents = step * 100;
     const y = midY - cents * scaleY;
-    ctx.moveTo(0, y);
+    ctx.moveTo(gridLeft, y);
     ctx.lineTo(width, y);
   }
   ctx.stroke();
@@ -28,26 +34,32 @@ export function drawGrid(ctx, width, height, waveRange) {
   ctx.strokeStyle = colors.slate[700];
   ctx.beginPath();
   for (let i = 1; i < gridCount; i += 1) {
-    const x = (width / gridCount) * i;
+    const x = gridLeft + ((width - gridLeft) / gridCount) * i;
     ctx.moveTo(x, 0);
     ctx.lineTo(x, height);
   }
   ctx.stroke();
 }
 
-// Draw semitone labels (-2..2) along the left edge.
-export function drawSemitoneLabels(ctx, width, height, waveRange) {
+// Draw semitone labels along the left edge.
+export function drawSemitoneLabels(ctx, width, height, waveRange, options = {}) {
+  const {
+    labelX = 8,
+    labelTop = 0,
+    labelBottom = height,
+  } = options;
   ctx.fillStyle = colors.slate[500];
   ctx.font = "12px system-ui";
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  const midY = height / 2;
-  const scaleY = (height / 2) / waveRange;
+  const plotHeight = Math.max(1, labelBottom - labelTop);
+  const midY = labelTop + (plotHeight / 2);
+  const scaleY = (plotHeight / 2) / waveRange;
   const steps = [-3, -2, -1, 0, 1, 2, 3];
   for (const step of steps) {
     const cents = step * 100;
     const y = midY - cents * scaleY;
-    ctx.fillText(`${step}`, 8, y);
+    ctx.fillText(`${step}`, labelX, y);
   }
 }
 
