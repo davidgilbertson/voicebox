@@ -1,5 +1,7 @@
 import colors from "tailwindcss/colors";
 
+let autocorrScratch = new Float64Array(0);
+
 // Linear interpolate between two values.
 export function lerp(current, next, factor) {
   return current + (next - current) * factor;
@@ -77,9 +79,13 @@ export function detectPitchAutocorr(data, sampleRate, minHz, maxHz) {
 
   const minLag = Math.floor(sampleRate / maxHz);
   const maxLag = Math.floor(sampleRate / minHz);
+  const requiredSize = maxLag + 1;
+  if (autocorrScratch.length < requiredSize) {
+    autocorrScratch = new Float64Array(requiredSize);
+  }
   let bestLag = 0;
   let bestCorr = 0;
-  const correlations = new Float64Array(maxLag + 1);
+  const correlations = autocorrScratch;
 
   for (let lag = minLag; lag <= maxLag; lag += 1) {
     let corr = 0;

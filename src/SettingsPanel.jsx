@@ -5,6 +5,10 @@ export default function SettingsPanel({
                                         onClose,
                                         keepRunningInBackground,
                                         onKeepRunningInBackgroundChange,
+                                        autoPauseOnSilence,
+                                        onAutoPauseOnSilenceChange,
+                                        showStats,
+                                        onShowStatsChange,
                                         pitchMinNote,
                                         pitchMaxNote,
                                         pitchNoteOptions,
@@ -63,6 +67,34 @@ export default function SettingsPanel({
                 type="checkbox"
                 checked={keepRunningInBackground}
                 onChange={(event) => onKeepRunningInBackgroundChange(event.target.checked)}
+                className="h-5 w-5 accent-slate-100"
+            />
+          </label>
+          <label className="flex items-start justify-between gap-4 text-sm">
+            <div className="flex flex-col gap-1">
+              <span>Auto pause on silence</span>
+              <span className="text-xs text-slate-400">
+                Pause timeline writes after brief silence.
+              </span>
+            </div>
+            <input
+                type="checkbox"
+                checked={autoPauseOnSilence}
+                onChange={(event) => onAutoPauseOnSilenceChange(event.target.checked)}
+                className="h-5 w-5 accent-slate-100"
+            />
+          </label>
+          <label className="flex items-start justify-between gap-4 text-sm">
+            <div className="flex flex-col gap-1">
+              <span>Show stats</span>
+              <span className="text-xs text-slate-400">
+                Show perf + signal stats under the chart.
+              </span>
+            </div>
+            <input
+                type="checkbox"
+                checked={showStats}
+                onChange={(event) => onShowStatsChange(event.target.checked)}
                 className="h-5 w-5 accent-slate-100"
             />
           </label>

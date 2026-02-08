@@ -66,3 +66,53 @@ test("very high SPS with slow analysis cadence produces heavy backfill", () => {
   assert.ok(state.diagnostics.backfillTickCount > 0);
   assert.ok(state.diagnostics.maxFillSteps >= 10);
 });
+
+test("silence auto-pause can be disabled so timeline keeps advancing with NaN values", () => {
+  const samplesPerSecond = 100;
+  const state = createPitchTimeline({
+    samplesPerSecond,
+    seconds: 2,
+    silencePauseThresholdMs: 300,
+    autoPauseOnSilence: false,
+    nowMs: 0,
+  });
+  const stepMs = 1000 / samplesPerSecond;
+
+  for (let i = 1; i <= samplesPerSecond; i += 1) {
+    writePitchTimeline(state, {
+      nowMs: i * stepMs,
+      hasVoice: false,
+      cents: Number.NaN,
+    });
+  }
+
+  assert.equal(state.silencePaused, false);
+  assert.equal(state.count, samplesPerSecond);
+  const values = orderedValues(state);
+  assert.ok(values.every(Number.isNaN));
+});
+
+test("silence auto-pause enabled stops writes after threshold", () => {
+  const samplesPerSecond = 100;
+  const state = createPitchTimeline({
+    samplesPerSecond,
+    seconds: 2,
+    silencePauseThresholdMs: 300,
+    autoPauseOnSilence: true,
+    nowMs: 0,
+  });
+  const stepMs = 1000 / samplesPerSecond;
+  let pausedWrites = 0;
+
+  for (let i = 1; i <= samplesPerSecond; i += 1) {
+    const result = writePitchTimeline(state, {
+      nowMs: i * stepMs,
+      hasVoice: false,
+      cents: Number.NaN,
+    });
+    if (result.paused) pausedWrites += 1;
+  }
+
+  assert.ok(pausedWrites > 0);
+  assert.equal(state.silencePaused, true);
+});

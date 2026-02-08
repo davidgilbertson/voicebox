@@ -5,6 +5,7 @@ export function createPitchTimeline({
   samplesPerSecond,
   seconds,
   silencePauseThresholdMs,
+  autoPauseOnSilence = true,
   nowMs,
 }) {
   const length = Math.max(1, Math.floor(samplesPerSecond * seconds));
@@ -17,6 +18,7 @@ export function createPitchTimeline({
     samplesPerSecond,
     seconds,
     silencePauseThresholdMs,
+    autoPauseOnSilence,
     lastWrittenValue: Number.NaN,
     silenceSinceMs: null,
     silencePaused: false,
@@ -40,13 +42,19 @@ function pushValue(state, value) {
 }
 
 export function writePitchTimeline(state, {nowMs, hasVoice, cents}) {
-  if (hasVoice) {
+  const autoPauseOnSilence = state.autoPauseOnSilence !== false;
+  if (autoPauseOnSilence) {
+    if (hasVoice) {
+      state.silencePaused = false;
+      state.silenceSinceMs = null;
+    } else if (state.silenceSinceMs === null) {
+      state.silenceSinceMs = nowMs;
+    } else if (nowMs - state.silenceSinceMs >= state.silencePauseThresholdMs) {
+      state.silencePaused = true;
+    }
+  } else {
     state.silencePaused = false;
     state.silenceSinceMs = null;
-  } else if (state.silenceSinceMs === null) {
-    state.silenceSinceMs = nowMs;
-  } else if (nowMs - state.silenceSinceMs >= state.silencePauseThresholdMs) {
-    state.silencePaused = true;
   }
 
   state.diagnostics.totalTickCount += 1;

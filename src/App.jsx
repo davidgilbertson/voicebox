@@ -29,6 +29,11 @@ const PITCH_MIN_NOTE_DEFAULT = "C1";
 const PITCH_MAX_NOTE_DEFAULT = "F6";
 const ACTIVE_VIEW_STORAGE_KEY = "voicebox.activeView";
 const ACTIVE_VIEW_DEFAULT = "vibrato";
+const AUTO_PAUSE_ON_SILENCE_STORAGE_KEY = "voicebox.autoPauseOnSilence";
+const SHOW_STATS_STORAGE_KEY = "voicebox.showStats";
+const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
+const SHOW_STATS_DEFAULT = false;
+const MAX_DRAW_JUMP_CENTS = 80;
 
 function createRawAudioBuffer(sampleRate) {
   const capacity = Math.max(FFT_SIZE * 2, Math.floor(sampleRate * RAW_BUFFER_SECONDS));
@@ -93,6 +98,7 @@ export default function App() {
     samplesPerSecond: SAMPLES_PER_SECOND,
     seconds: PITCH_SECONDS,
     silencePauseThresholdMs: SILENCE_PAUSE_THRESHOLD_MS,
+    autoPauseOnSilence: AUTO_PAUSE_ON_SILENCE_DEFAULT,
     nowMs: performance.now(),
   }));
   const rawBufferRef = useRef(createRawAudioBuffer(48_000));
@@ -120,11 +126,12 @@ export default function App() {
   const [ui, setUi] = useState({
     isRunning: false,
     error: "",
+    vibratoRateHz: null,
+  });
+  const [stats, setStats] = useState({
     timings: {data: null, draw: 0},
     level: {rms: 0},
     rawHz: 0,
-    hasVoice: false,
-    vibratoRateHz: null,
   });
   const [activeView, setActiveView] = useState(() => safeReadActiveView());
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -133,6 +140,20 @@ export default function App() {
   const [keepRunningInBackground, setKeepRunningInBackground] = useState(() => {
     if (typeof window === "undefined") return false;
     return safeParseBoolean(window.localStorage.getItem("voicebox.keepRunningInBackground"), false);
+  });
+  const [autoPauseOnSilence, setAutoPauseOnSilence] = useState(() => {
+    if (typeof window === "undefined") return AUTO_PAUSE_ON_SILENCE_DEFAULT;
+    return safeParseBoolean(
+        window.localStorage.getItem(AUTO_PAUSE_ON_SILENCE_STORAGE_KEY),
+        AUTO_PAUSE_ON_SILENCE_DEFAULT
+    );
+  });
+  const [showStats, setShowStats] = useState(() => {
+    if (typeof window === "undefined") return SHOW_STATS_DEFAULT;
+    return safeParseBoolean(
+        window.localStorage.getItem(SHOW_STATS_STORAGE_KEY),
+        SHOW_STATS_DEFAULT
+    );
   });
   const [pitchMinNote, setPitchMinNote] = useState(() => safeReadPitchNote(
       "voicebox.pitchMinNote",
@@ -177,6 +198,29 @@ export default function App() {
       // Ignore storage errors (private mode / quota).
     }
   }, [keepRunningInBackground]);
+
+  useEffect(() => {
+    timelineRef.current.autoPauseOnSilence = autoPauseOnSilence;
+    try {
+      window.localStorage.setItem(
+          AUTO_PAUSE_ON_SILENCE_STORAGE_KEY,
+          JSON.stringify(autoPauseOnSilence)
+      );
+    } catch {
+      // Ignore storage errors (private mode / quota).
+    }
+  }, [autoPauseOnSilence]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+          SHOW_STATS_STORAGE_KEY,
+          JSON.stringify(showStats)
+      );
+    } catch {
+      // Ignore storage errors (private mode / quota).
+    }
+  }, [showStats]);
 
   useEffect(() => {
     try {
@@ -472,17 +516,17 @@ export default function App() {
 
     if (didTimelineChange || didDisplayRateChange) {
       const latestMetrics = metricsRef.current;
-      setUi((prev) => ({
-        ...prev,
+      setStats({
         timings: {
           data: latestMetrics.hasVoice ? animationRef.current.dataAvg : null,
           draw: animationRef.current.drawAvg,
         },
         level: latestMetrics.level,
         rawHz: latestMetrics.rawHz,
-        hasVoice: latestMetrics.hasVoice,
-        vibratoRateHz: displayedRateHz,
-      }));
+      });
+    }
+    if (didDisplayRateChange) {
+      setUi((prev) => ({...prev, vibratoRateHz: displayedRateHz}));
     }
     animationRef.current.rafId = requestAnimationFrame(renderLoop);
   };
@@ -573,6 +617,7 @@ export default function App() {
                 <VibratoChart
                     ref={vibratoChartRef}
                     yRange={WAVE_Y_RANGE}
+                    maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
                     vibratoRateHz={ui.vibratoRateHz}
                     vibratoRateMinHz={VIBRATO_RATE_MIN_HZ}
                     vibratoRateMaxHz={VIBRATO_RATE_MAX_HZ}
@@ -580,19 +625,26 @@ export default function App() {
                     vibratoSweetMaxHz={VIBRATO_SWEET_MAX_HZ}
                 />
             ) : (
-                <PitchChart ref={pitchChartRef} minCents={pitchMinCents} maxCents={pitchMaxCents}/>
+                <PitchChart
+                    ref={pitchChartRef}
+                    minCents={pitchMinCents}
+                    maxCents={pitchMaxCents}
+                    maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
+                />
             )}
             {ui.error ? (
                 <div className="absolute inset-x-3 top-14 rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-200">
                   {ui.error}
                 </div>
             ) : null}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-4 py-2 text-xs text-slate-300">
-              <div>Data: {ui.timings.data === null ? "--" : `${ui.timings.data.toFixed(2)} ms`}</div>
-              <div>Draw: {ui.timings.draw.toFixed(2)} ms</div>
-              <div>RMS: {ui.level.rms?.toFixed(3) ?? "--"}</div>
-              <div>Hz: {ui.rawHz ? ui.rawHz.toFixed(1) : "0"}</div>
-            </div>
+            {showStats ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-4 py-2 text-xs text-slate-300">
+                  <div>Data: {stats.timings.data === null ? "--" : `${stats.timings.data.toFixed(2)} ms`}</div>
+                  <div>Draw: {stats.timings.draw.toFixed(2)} ms</div>
+                  <div>RMS: {stats.level.rms?.toFixed(3) ?? "--"}</div>
+                  <div>Hz: {stats.rawHz ? stats.rawHz.toFixed(1) : "0"}</div>
+                </div>
+            ) : null}
             <footer className="relative flex h-12 items-stretch gap-1 border-t border-slate-800 px-2 py-1 text-xs text-slate-300">
               <div className="flex w-40 items-stretch gap-1">
                 <button
@@ -648,6 +700,10 @@ export default function App() {
               onClose={() => setSettingsOpen(false)}
               keepRunningInBackground={keepRunningInBackground}
               onKeepRunningInBackgroundChange={setKeepRunningInBackground}
+              autoPauseOnSilence={autoPauseOnSilence}
+              onAutoPauseOnSilenceChange={setAutoPauseOnSilence}
+              showStats={showStats}
+              onShowStatsChange={setShowStats}
               pitchMinNote={pitchMinNote}
               pitchMaxNote={pitchMaxNote}
               pitchNoteOptions={PITCH_NOTE_OPTIONS}

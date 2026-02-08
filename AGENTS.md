@@ -13,6 +13,7 @@
   3. Prefer tests that validate behavior/classes of behavior, not tests that are unnecessarily hyper-focused on one exact implementation detail.
   4. If the issue is not realistically testable in automation (for example, requires real phone/device interaction), call that out explicitly and rely on manual verification.
 - For colors, use Tailwind. For colors in JS, `import colors from "tailwindcss/colors";`
+- Don't do checks for `window` being undefined in the app code.
 
 # Notes to self
 

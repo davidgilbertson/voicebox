@@ -10,6 +10,7 @@ const PLOT_Y_INSET = 5;
 
 const VibratoChart = forwardRef(function VibratoChart({
   yRange,
+  maxDrawJumpCents,
   vibratoRateHz,
   vibratoRateMinHz,
   vibratoRateMaxHz,
@@ -18,6 +19,7 @@ const VibratoChart = forwardRef(function VibratoChart({
 }, ref) {
   const chartRef = useRef(null);
   const barRef = useRef(null);
+  const backgroundCacheRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
     draw({values, writeIndex, count, yOffset}) {
@@ -32,28 +34,54 @@ const VibratoChart = forwardRef(function VibratoChart({
         yInsetBottom: PLOT_Y_INSET,
         lineColor: WAVEFORM_LINE_COLOR,
         lineWidth: 1.5,
-        gapThreshold: 300,
+        gapThreshold: maxDrawJumpCents,
         drawBackground: (ctx, width, height) => {
-          ctx.imageSmoothingEnabled = true;
-          ctx.lineWidth = 1;
-          drawGrid(ctx, width, height, yRange, {
+          const cached = backgroundCacheRef.current;
+          const cacheValid = cached &&
+              cached.width === width &&
+              cached.height === height &&
+              cached.yRange === yRange;
+
+          if (cacheValid) {
+            ctx.drawImage(cached.canvas, 0, 0);
+            return;
+          }
+
+          const bgCanvas = cached?.canvas ?? document.createElement("canvas");
+          if (bgCanvas.width !== width) bgCanvas.width = width;
+          if (bgCanvas.height !== height) bgCanvas.height = height;
+          const bgCtx = bgCanvas.getContext("2d");
+          if (!bgCtx) return;
+
+          bgCtx.clearRect(0, 0, width, height);
+          bgCtx.imageSmoothingEnabled = true;
+          bgCtx.lineWidth = 1;
+          drawGrid(bgCtx, width, height, yRange, {
             gridLeft: PLOT_LEFT,
             gridTop: PLOT_Y_INSET,
             gridBottom: height - PLOT_Y_INSET,
           });
-          drawSemitoneLabels(ctx, width, height, yRange, {
+          drawSemitoneLabels(bgCtx, width, height, yRange, {
             labelX: LABEL_X,
             labelTop: PLOT_Y_INSET,
             labelBottom: height - PLOT_Y_INSET,
           });
-          ctx.imageSmoothingEnabled = true;
+          bgCtx.imageSmoothingEnabled = true;
+
+          backgroundCacheRef.current = {
+            canvas: bgCanvas,
+            width,
+            height,
+            yRange,
+          };
+          ctx.drawImage(bgCanvas, 0, 0);
         },
       });
     },
     getRateBarWidth() {
       return Math.max(1, barRef.current?.clientWidth ?? 1);
     },
-  }), [yRange]);
+  }), [maxDrawJumpCents, yRange]);
 
   const vibratoRatePositionPct = vibratoRateHz === null
       ? null
