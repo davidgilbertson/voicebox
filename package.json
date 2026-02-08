@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite build && vite preview",
-    "test": "node --test --test-isolation=none test/*.test.js"
+    "test": "vitest run --config vitest.config.cjs",
+    "test:watch": "vitest --config vitest.config.cjs"
   },
   "keywords": [],
   "author": "",
@@ -27,7 +28,12 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.22.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "jsdom": "^28.0.0",
     "vite-plugin-pwa": "^1.2.0",
+    "vitest": "^4.0.18",
     "wrangler": "^4.61.1"
   }
 }

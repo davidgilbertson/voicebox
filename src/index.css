@@ -16,3 +16,24 @@ body,
   margin: 0;
   overflow: hidden;
 }
+
+.settings-checkbox {
+  appearance: none;
+  border: 1px solid rgb(100 116 139);
+  border-radius: 0.25rem;
+  background-color: rgb(30 41 59);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 0.75rem 0.75rem;
+}
+
+.settings-checkbox:checked {
+  border-color: rgb(14 165 233);
+  background-color: rgb(14 165 233);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l2.5 2.5 6-6' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.settings-checkbox:focus-visible {
+  outline: 2px solid rgb(56 189 248);
+  outline-offset: 2px;
+}

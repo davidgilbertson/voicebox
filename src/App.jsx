@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from "react";
-import {lerp} from "./tools.js";
+import {lerp, ls} from "./tools.js";
 import {analyzeAudioWindow, createAudioState, setupAudioState} from "./audioSeries.js";
 import {createPitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
 import {estimateTimelineVibratoRateHz} from "./vibratoRate.js";
@@ -59,33 +59,21 @@ function createAnalysisState(sampleRate) {
 }
 
 function computeIsForeground() {
-  if (typeof document === "undefined") return true;
   if (document.visibilityState === "hidden") return false;
-  if (typeof document.hasFocus === "function") {
+  if (document.hasFocus) {
     return document.hasFocus();
   }
   return true;
 }
 
-function safeParseBoolean(storageValue, fallback = false) {
-  if (storageValue === null) return fallback;
-  try {
-    return JSON.parse(storageValue) === true;
-  } catch {
-    return fallback;
-  }
-}
-
 function safeReadPitchNote(storageKey, fallback) {
-  if (typeof window === "undefined") return fallback;
-  const stored = window.localStorage.getItem(storageKey);
-  if (!stored) return fallback;
+  const stored = ls.get(storageKey, fallback);
+  if (typeof stored !== "string") return fallback;
   return PITCH_NOTE_OPTIONS.includes(stored) ? stored : fallback;
 }
 
 function safeReadActiveView() {
-  if (typeof window === "undefined") return ACTIVE_VIEW_DEFAULT;
-  const stored = window.localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);
+  const stored = ls.get(ACTIVE_VIEW_STORAGE_KEY, ACTIVE_VIEW_DEFAULT);
   return stored === "pitch" || stored === "vibrato" ? stored : ACTIVE_VIEW_DEFAULT;
 }
 
@@ -138,22 +126,13 @@ export default function App() {
   const [wantsToRun, setWantsToRun] = useState(true);
   const [isForeground, setIsForeground] = useState(() => computeIsForeground());
   const [keepRunningInBackground, setKeepRunningInBackground] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return safeParseBoolean(window.localStorage.getItem("voicebox.keepRunningInBackground"), false);
+    return ls.get("voicebox.keepRunningInBackground", false) === true;
   });
   const [autoPauseOnSilence, setAutoPauseOnSilence] = useState(() => {
-    if (typeof window === "undefined") return AUTO_PAUSE_ON_SILENCE_DEFAULT;
-    return safeParseBoolean(
-        window.localStorage.getItem(AUTO_PAUSE_ON_SILENCE_STORAGE_KEY),
-        AUTO_PAUSE_ON_SILENCE_DEFAULT
-    );
+    return ls.get(AUTO_PAUSE_ON_SILENCE_STORAGE_KEY, AUTO_PAUSE_ON_SILENCE_DEFAULT) === true;
   });
   const [showStats, setShowStats] = useState(() => {
-    if (typeof window === "undefined") return SHOW_STATS_DEFAULT;
-    return safeParseBoolean(
-        window.localStorage.getItem(SHOW_STATS_STORAGE_KEY),
-        SHOW_STATS_DEFAULT
-    );
+    return ls.get(SHOW_STATS_STORAGE_KEY, SHOW_STATS_DEFAULT) === true;
   });
   const [pitchMinNote, setPitchMinNote] = useState(() => safeReadPitchNote(
       "voicebox.pitchMinNote",
@@ -189,54 +168,25 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(
-          "voicebox.keepRunningInBackground",
-          JSON.stringify(keepRunningInBackground)
-      );
-    } catch {
-      // Ignore storage errors (private mode / quota).
-    }
+    ls.set("voicebox.keepRunningInBackground", keepRunningInBackground);
   }, [keepRunningInBackground]);
 
   useEffect(() => {
     timelineRef.current.autoPauseOnSilence = autoPauseOnSilence;
-    try {
-      window.localStorage.setItem(
-          AUTO_PAUSE_ON_SILENCE_STORAGE_KEY,
-          JSON.stringify(autoPauseOnSilence)
-      );
-    } catch {
-      // Ignore storage errors (private mode / quota).
-    }
+    ls.set(AUTO_PAUSE_ON_SILENCE_STORAGE_KEY, autoPauseOnSilence);
   }, [autoPauseOnSilence]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(
-          SHOW_STATS_STORAGE_KEY,
-          JSON.stringify(showStats)
-      );
-    } catch {
-      // Ignore storage errors (private mode / quota).
-    }
+    ls.set(SHOW_STATS_STORAGE_KEY, showStats);
   }, [showStats]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem("voicebox.pitchMinNote", pitchMinNote);
-      window.localStorage.setItem("voicebox.pitchMaxNote", pitchMaxNote);
-    } catch {
-      // Ignore storage errors (private mode / quota).
-    }
+    ls.set("voicebox.pitchMinNote", pitchMinNote);
+    ls.set("voicebox.pitchMaxNote", pitchMaxNote);
   }, [pitchMinNote, pitchMaxNote]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, activeView);
-    } catch {
-      // Ignore storage errors (private mode / quota).
-    }
+    ls.set(ACTIVE_VIEW_STORAGE_KEY, activeView);
   }, [activeView]);
 
   useEffect(() => {
@@ -313,7 +263,9 @@ export default function App() {
       if (!windowSamples) continue;
 
       const start = performance.now();
-      const result = analyzeAudioWindow(audioRef.current, windowSamples, minHz, maxHz);
+      const result = analyzeAudioWindow(audioRef.current, windowSamples, minHz, maxHz, {
+        adaptiveRange: currentView === "pitch",
+      });
       analysisElapsedMs += performance.now() - start;
       processedWindows += 1;
       if (!result) continue;

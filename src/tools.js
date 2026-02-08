@@ -1,11 +1,37 @@
 import colors from "tailwindcss/colors";
 
 let autocorrScratch = new Float64Array(0);
+const AUTOCORR_CONFIDENCE_MIN = 0.25;
 
 // Linear interpolate between two values.
 export function lerp(current, next, factor) {
   return current + (next - current) * factor;
 }
+
+export const ls = {
+  get(key, fallback = null) {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw === null) return fallback;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return raw;
+      }
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      const serialized = typeof value === "string" ? value : JSON.stringify(value);
+      window.localStorage.setItem(key, serialized);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+};
 
 // Draw grid lines at each semitone and vertical divisions.
 export function drawGrid(ctx, width, height, waveRange, options = {}) {
@@ -65,8 +91,7 @@ export function drawSemitoneLabels(ctx, width, height, waveRange, options = {}) 
   }
 }
 
-// Estimate pitch via autocorrelation with basic confidence gating.
-export function detectPitchAutocorr(data, sampleRate, minHz, maxHz) {
+export function detectPitchAutocorrDetailed(data, sampleRate, minHz, maxHz) {
   const size = data.length;
   let rms = 0;
   for (let i = 0; i < size; i += 1) {
@@ -74,7 +99,7 @@ export function detectPitchAutocorr(data, sampleRate, minHz, maxHz) {
     rms += value * value;
   }
   rms = Math.sqrt(rms / size);
-  if (rms < 0.01) return 0;
+  if (rms < 0.01) return {hz: 0, corrRatio: 0};
   const energy = rms * rms * size;
 
   const minLag = Math.floor(sampleRate / maxHz);
@@ -99,9 +124,9 @@ export function detectPitchAutocorr(data, sampleRate, minHz, maxHz) {
     }
   }
 
-  if (!bestLag) return 0;
+  if (!bestLag) return {hz: 0, corrRatio: 0};
   const corrRatio = energy > 0 ? bestCorr / energy : 0;
-  if (corrRatio < 0.25) return 0;
+  if (corrRatio < AUTOCORR_CONFIDENCE_MIN) return {hz: 0, corrRatio};
   // Refine the lag peak with a 3-point parabolic fit to reduce quantization.
   let refinedLag = bestLag;
   if (bestLag > minLag && bestLag < maxLag) {
@@ -116,8 +141,13 @@ export function detectPitchAutocorr(data, sampleRate, minHz, maxHz) {
       }
     }
   }
-  if (!Number.isFinite(refinedLag) || refinedLag <= 0) return 0;
-  return sampleRate / refinedLag;
+  if (!Number.isFinite(refinedLag) || refinedLag <= 0) return {hz: 0, corrRatio};
+  return {hz: sampleRate / refinedLag, corrRatio};
+}
+
+// Estimate pitch via autocorrelation with basic confidence gating.
+export function detectPitchAutocorr(data, sampleRate, minHz, maxHz) {
+  return detectPitchAutocorrDetailed(data, sampleRate, minHz, maxHz).hz;
 }
 
 // Return the median of finite, positive values.

@@ -1,4 +1,10 @@
-import {detectPitchAutocorr, lerp} from "./tools.js";
+import {detectPitchAutocorr, detectPitchAutocorrDetailed, lerp} from "./tools.js";
+
+const ADAPTIVE_RANGE_MIN_FACTOR = 0.5;
+const ADAPTIVE_RANGE_MAX_FACTOR = 2;
+const ADAPTIVE_RANGE_REACQUIRE_MISSES = 20;
+const ADAPTIVE_RANGE_FULL_SCAN_INTERVAL = 40;
+const ADAPTIVE_RANGE_SWITCH_RATIO = 1.15;
 
 export function createAudioState(defaultSamplesPerSecond) {
   return {
@@ -15,6 +21,9 @@ export function createAudioState(defaultSamplesPerSecond) {
     centerHz: 220,
     centerCents: 1200 * Math.log2(220),
     levelEma: 0,
+    lastTrackedHz: 0,
+    missedDetections: 0,
+    adaptiveTick: 0,
   };
 }
 
@@ -53,6 +62,9 @@ export function setupAudioState(prevState, {
     centerHz: prevState.centerHz || 220,
     centerCents: prevState.centerCents || 1200 * Math.log2(220),
     levelEma: prevState.levelEma || 0,
+    lastTrackedHz: prevState.lastTrackedHz || 0,
+    missedDetections: prevState.missedDetections || 0,
+    adaptiveTick: prevState.adaptiveTick || 0,
   };
 }
 
@@ -73,7 +85,7 @@ function computeCenterHzMedian(hzBuffer, minHz, maxHz) {
   return values[mid];
 }
 
-export function analyzeAudioWindow(state, timeData, minHz, maxHz) {
+export function analyzeAudioWindow(state, timeData, minHz, maxHz, options = {}) {
   const {hzBuffer} = state;
   if (!hzBuffer || !timeData || !timeData.length) return null;
   let peak = 0;
@@ -87,19 +99,78 @@ export function analyzeAudioWindow(state, timeData, minHz, maxHz) {
   const rms = Math.sqrt(sumSquares / timeData.length);
   state.levelEma = lerp(state.levelEma, rms, 0.2);
 
-  const hz = detectPitchAutocorr(timeData, state.sampleRate, minHz, maxHz);
+  const adaptiveRange = options.adaptiveRange === true;
+  let usedWideSearch = false;
+  let detection = null;
+
+  if (adaptiveRange) {
+    state.adaptiveTick += 1;
+    const canUseTrackedRange =
+        state.lastTrackedHz > 0 &&
+        state.missedDetections < ADAPTIVE_RANGE_REACQUIRE_MISSES;
+    if (canUseTrackedRange) {
+      const narrowMinHz = Math.max(minHz, state.lastTrackedHz * ADAPTIVE_RANGE_MIN_FACTOR);
+      const narrowMaxHz = Math.min(maxHz, state.lastTrackedHz * ADAPTIVE_RANGE_MAX_FACTOR);
+      if (narrowMaxHz > narrowMinHz) {
+        const narrowDetection = detectPitchAutocorrDetailed(
+            timeData,
+            state.sampleRate,
+            narrowMinHz,
+            narrowMaxHz
+        );
+        if (narrowDetection.hz > 0) {
+          detection = narrowDetection;
+          if (state.adaptiveTick % ADAPTIVE_RANGE_FULL_SCAN_INTERVAL === 0) {
+            const fullDetection = detectPitchAutocorrDetailed(
+                timeData,
+                state.sampleRate,
+                minHz,
+                maxHz
+            );
+            usedWideSearch = true;
+            if (
+                fullDetection.hz > 0 &&
+                fullDetection.corrRatio > narrowDetection.corrRatio * ADAPTIVE_RANGE_SWITCH_RATIO
+            ) {
+              detection = fullDetection;
+            }
+          }
+        } else {
+          detection = detectPitchAutocorrDetailed(timeData, state.sampleRate, minHz, maxHz);
+          usedWideSearch = true;
+        }
+      }
+    }
+  }
+
+  if (!detection) {
+    const hz = detectPitchAutocorr(timeData, state.sampleRate, minHz, maxHz);
+    detection = {hz, corrRatio: 0};
+    if (adaptiveRange) {
+      usedWideSearch = true;
+    }
+  }
+
+  const hz = detection.hz;
 
   const inHzRange = hz >= minHz && hz <= maxHz;
   const hasVoice = inHzRange;
   const absCents = inHzRange ? 1200 * Math.log2(hz) : Number.NaN;
 
   if (hasVoice) {
+    state.lastTrackedHz = hz;
+    state.missedDetections = 0;
     hzBuffer[state.hzIndex] = hz;
     state.hzIndex = (state.hzIndex + 1) % hzBuffer.length;
     const centerHz = computeCenterHzMedian(hzBuffer, minHz, maxHz);
     if (centerHz > 0) {
       state.centerHz = lerp(state.centerHz, centerHz, 0.2);
       state.centerCents = 1200 * Math.log2(state.centerHz);
+    }
+  } else if (adaptiveRange) {
+    state.missedDetections += 1;
+    if (state.missedDetections >= ADAPTIVE_RANGE_REACQUIRE_MISSES) {
+      state.lastTrackedHz = 0;
     }
   }
 
@@ -109,5 +180,6 @@ export function analyzeAudioWindow(state, timeData, minHz, maxHz) {
     hz,
     hasVoice,
     cents: absCents,
+    usedWideSearch,
   };
 }

@@ -1,5 +1,7 @@
 import {useEffect, useRef} from "react";
 
+const SETTINGS_CHECKBOX_CLASS = "settings-checkbox h-5 w-5";
+
 export default function SettingsPanel({
                                         open,
                                         onClose,
@@ -67,7 +69,7 @@ export default function SettingsPanel({
                 type="checkbox"
                 checked={keepRunningInBackground}
                 onChange={(event) => onKeepRunningInBackgroundChange(event.target.checked)}
-                className="h-5 w-5 accent-slate-100"
+                className={SETTINGS_CHECKBOX_CLASS}
             />
           </label>
           <label className="flex items-start justify-between gap-4 text-sm">
@@ -81,7 +83,7 @@ export default function SettingsPanel({
                 type="checkbox"
                 checked={autoPauseOnSilence}
                 onChange={(event) => onAutoPauseOnSilenceChange(event.target.checked)}
-                className="h-5 w-5 accent-slate-100"
+                className={SETTINGS_CHECKBOX_CLASS}
             />
           </label>
           <label className="flex items-start justify-between gap-4 text-sm">
@@ -95,7 +97,7 @@ export default function SettingsPanel({
                 type="checkbox"
                 checked={showStats}
                 onChange={(event) => onShowStatsChange(event.target.checked)}
-                className="h-5 w-5 accent-slate-100"
+                className={SETTINGS_CHECKBOX_CLASS}
             />
           </label>
           <div className="grid grid-cols-2 gap-2">

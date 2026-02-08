@@ -1,1 +1,0 @@
-- Write a local storage wrapper with `get` and `set` methods that handles all complexity, use that everywhere. Put it in `tools.js`
