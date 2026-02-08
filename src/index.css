@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  --app-height: 100dvh;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 

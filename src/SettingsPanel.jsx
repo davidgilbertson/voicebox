@@ -29,9 +29,9 @@ export default function SettingsPanel({
               onClose();
             }
           }}
-          className="fixed inset-0 m-0 hidden h-screen w-screen max-h-none max-w-none border-0 bg-transparent p-3 sm:p-4 backdrop:bg-slate-950/60 backdrop:backdrop-blur-sm open:grid open:place-items-center"
+          className="fixed inset-0 m-0 hidden h-[var(--app-height)] w-screen max-h-none max-w-none border-0 bg-transparent p-3 sm:p-4 backdrop:bg-slate-950/60 backdrop:backdrop-blur-sm open:grid open:place-items-center"
       >
-        <section className="relative flex h-[88dvh] w-full max-w-[440px] flex-col gap-6 rounded-xl border border-slate-400/70 bg-slate-900/90 p-6 text-slate-100 shadow-2xl">
+        <section className="relative flex h-[calc(var(--app-height)*0.88)] max-h-full w-full max-w-[440px] flex-col gap-6 rounded-xl border border-slate-400/70 bg-slate-900/90 p-6 text-slate-100 shadow-2xl">
           <button
               type="button"
               onClick={onClose}

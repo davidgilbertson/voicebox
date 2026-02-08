@@ -465,7 +465,7 @@ export default function App() {
   const sweetEndPct = ((VIBRATO_SWEET_MAX_HZ - VIBRATO_RATE_MIN_HZ) / (VIBRATO_RATE_MAX_HZ - VIBRATO_RATE_MIN_HZ)) * 100;
 
   return (
-      <div className="h-[100dvh] w-full overflow-hidden bg-slate-900 text-slate-100 md:bg-slate-950">
+      <div className="h-[var(--app-height)] w-full overflow-hidden bg-slate-900 text-slate-100 md:bg-slate-950">
         <div className="mx-auto flex h-full w-full max-w-none items-stretch px-0 py-0 md:max-w-[450px] md:items-center md:justify-center md:px-2 md:py-2">
           <main className="relative flex min-h-0 flex-1 flex-col bg-slate-900 md:h-full md:w-full md:max-h-[1000px] md:flex-none md:rounded-xl md:border md:border-slate-800 md:shadow-2xl">
             <div className="relative min-h-0 flex-[2] p-2">
