@@ -102,6 +102,16 @@ export default function SettingsPanel({
                 className="w-24 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-right text-sm text-slate-100"
             />
           </label>
+          <div className="mt-auto flex justify-center">
+            <a
+                href="https://github.com/davidgilbertson/voicebox"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-slate-400 underline decoration-slate-500/80 underline-offset-4 transition hover:text-slate-200"
+            >
+              About
+            </a>
+          </div>
         </section>
       </dialog>
   );
