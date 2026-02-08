@@ -6,9 +6,10 @@ export function createAudioState(defaultSamplesPerSecond) {
     analyser: null,
     source: null,
     stream: null,
+    captureNode: null,
+    sinkGain: null,
     hzBuffer: null,
     hzIndex: 0,
-    timeData: null,
     sampleRate: 48000,
     analysisFps: defaultSamplesPerSecond,
     centerHz: 220,
@@ -18,19 +19,16 @@ export function createAudioState(defaultSamplesPerSecond) {
 }
 
 export function setupAudioState(prevState, {
-  analyser,
   context,
   source,
   stream,
+  captureNode,
+  sinkGain,
   analysisFps,
-  fftSize,
   centerSeconds,
   sampleRate,
 }) {
   const hzLength = Math.floor(centerSeconds * analysisFps);
-  const timeData = prevState.timeData?.length === fftSize
-      ? prevState.timeData
-      : new Float32Array(fftSize);
 
   const existingHzBuffer = prevState.hzBuffer;
   const hzBuffer = existingHzBuffer && existingHzBuffer.length === hzLength
@@ -44,12 +42,12 @@ export function setupAudioState(prevState, {
   return {
     ...prevState,
     context,
-    analyser,
     source,
     stream,
+    captureNode,
+    sinkGain,
     hzBuffer,
     hzIndex: prevState.hzIndex || 0,
-    timeData,
     sampleRate,
     analysisFps,
     centerHz: prevState.centerHz || 220,
@@ -75,10 +73,9 @@ function computeCenterHzMedian(hzBuffer, minHz, maxHz) {
   return values[mid];
 }
 
-export function analyzeAudioFrame(state, minHz, maxHz) {
-  const {analyser, hzBuffer, timeData} = state;
-  if (!analyser || !hzBuffer || !timeData) return null;
-  analyser.getFloatTimeDomainData(timeData);
+export function analyzeAudioWindow(state, timeData, minHz, maxHz) {
+  const {hzBuffer} = state;
+  if (!hzBuffer || !timeData || !timeData.length) return null;
   let peak = 0;
   let sumSquares = 0;
   for (let i = 0; i < timeData.length; i += 1) {

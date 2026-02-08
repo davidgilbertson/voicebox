@@ -1,3 +1,5 @@
+import colors from "tailwindcss/colors";
+
 // Linear interpolate between two values.
 export function lerp(current, next, factor) {
   return current + (next - current) * factor;
@@ -10,7 +12,7 @@ export function drawGrid(ctx, width, height, waveRange) {
   const steps = [-3, -2, -1, 0, 1, 2, 3];
 
   // Horizontal lines at each semitone
-  ctx.strokeStyle = 'rgba(51, 65, 85, 0.8)';
+  ctx.strokeStyle = colors.slate[700];
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (const step of steps) {
@@ -23,7 +25,7 @@ export function drawGrid(ctx, width, height, waveRange) {
 
   // Vertical lines
   const gridCount = 4;
-  ctx.strokeStyle = 'rgba(51, 65, 85, 0.5)';
+  ctx.strokeStyle = colors.slate[700];
   ctx.beginPath();
   for (let i = 1; i < gridCount; i += 1) {
     const x = (width / gridCount) * i;
@@ -35,7 +37,7 @@ export function drawGrid(ctx, width, height, waveRange) {
 
 // Draw semitone labels (-2..2) along the left edge.
 export function drawSemitoneLabels(ctx, width, height, waveRange) {
-  ctx.fillStyle = 'rgba(148, 163, 184, 0.85)';
+  ctx.fillStyle = colors.slate[500];
   ctx.font = "12px system-ui";
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
@@ -65,12 +67,14 @@ export function detectPitchAutocorr(data, sampleRate, minHz, maxHz) {
   const maxLag = Math.floor(sampleRate / minHz);
   let bestLag = 0;
   let bestCorr = 0;
+  const correlations = new Float64Array(maxLag + 1);
 
   for (let lag = minLag; lag <= maxLag; lag += 1) {
     let corr = 0;
     for (let i = 0; i < size - lag; i += 1) {
       corr += data[i] * data[i + lag];
     }
+    correlations[lag] = corr;
     if (corr > bestCorr) {
       bestCorr = corr;
       bestLag = lag;
@@ -80,7 +84,22 @@ export function detectPitchAutocorr(data, sampleRate, minHz, maxHz) {
   if (!bestLag) return 0;
   const corrRatio = energy > 0 ? bestCorr / energy : 0;
   if (corrRatio < 0.25) return 0;
-  return sampleRate / bestLag;
+  // Refine the lag peak with a 3-point parabolic fit to reduce quantization.
+  let refinedLag = bestLag;
+  if (bestLag > minLag && bestLag < maxLag) {
+    const left = correlations[bestLag - 1];
+    const mid = correlations[bestLag];
+    const right = correlations[bestLag + 1];
+    const denom = left - 2 * mid + right;
+    if (denom !== 0) {
+      const offset = 0.5 * (left - right) / denom;
+      if (Number.isFinite(offset)) {
+        refinedLag = bestLag + Math.max(-1, Math.min(1, offset));
+      }
+    }
+  }
+  if (!Number.isFinite(refinedLag) || refinedLag <= 0) return 0;
+  return sampleRate / refinedLag;
 }
 
 // Return the median of finite, positive values.
