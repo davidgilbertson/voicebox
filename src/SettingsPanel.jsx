@@ -57,6 +57,16 @@ export default function SettingsPanel({
                 className="h-5 w-5 accent-slate-100"
             />
           </label>
+          <div className="mt-auto">
+            <a
+                href="https://github.com/davidgilbertson/voicebox"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-slate-400 underline decoration-slate-500/80 underline-offset-4 transition hover:text-slate-200"
+            >
+              About
+            </a>
+          </div>
         </section>
       </dialog>
   );
