@@ -3,12 +3,16 @@ import {lerp, ls} from "./tools.js";
 import {analyzeAudioWindow, createAudioState, setupAudioState} from "./audioSeries.js";
 import {createPitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
 import {estimateTimelineVibratoRateHz} from "./vibratoRate.js";
+import {createSpectrogramTimeline, writeSpectrogramColumn} from "./spectrogramTimeline.js";
+import {consumeTimelineElapsed} from "./timelineSteps.js";
 import SettingsPanel from "./SettingsPanel.jsx";
 import VibratoChart from "./VibratoChart.jsx";
 import PitchChart from "./PitchChart.jsx";
+import SpectrogramChart from "./SpectrogramChart.jsx";
 import {noteNameToCents, noteNameToHz, PITCH_NOTE_OPTIONS} from "./pitchScale.js";
 
 const FFT_SIZE = 2048;
+const SPECTROGRAM_FFT_SIZE = 8192;
 const SAMPLES_PER_SECOND = 200;
 const SILENCE_PAUSE_THRESHOLD_MS = 300;
 const PITCH_SECONDS = 5; // x axis range
@@ -27,13 +31,18 @@ const VIBRATO_MAX_MARKER_PX_PER_FRAME = 3;
 const VIBRATO_RATE_HOLD_MS = 300;
 const PITCH_MIN_NOTE_DEFAULT = "C1";
 const PITCH_MAX_NOTE_DEFAULT = "F6";
+const SPECTROGRAM_MIN_HZ_DEFAULT = 10;
+const SPECTROGRAM_MAX_HZ_DEFAULT = 10_000;
 const ACTIVE_VIEW_STORAGE_KEY = "voicebox.activeView";
 const ACTIVE_VIEW_DEFAULT = "vibrato";
 const AUTO_PAUSE_ON_SILENCE_STORAGE_KEY = "voicebox.autoPauseOnSilence";
 const SHOW_STATS_STORAGE_KEY = "voicebox.showStats";
+const PITCH_ON_SPECTROGRAM_STORAGE_KEY = "voicebox.pitchDetectionOnSpectrogram";
 const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
 const SHOW_STATS_DEFAULT = false;
+const PITCH_ON_SPECTROGRAM_DEFAULT = true;
 const MAX_DRAW_JUMP_CENTS = 80;
+const SPECTROGRAM_MAX_DRAW_FPS = 24;
 
 function createRawAudioBuffer(sampleRate) {
   const capacity = Math.max(FFT_SIZE * 2, Math.floor(sampleRate * RAW_BUFFER_SECONDS));
@@ -74,12 +83,21 @@ function safeReadPitchNote(storageKey, fallback) {
 
 function safeReadActiveView() {
   const stored = ls.get(ACTIVE_VIEW_STORAGE_KEY, ACTIVE_VIEW_DEFAULT);
-  return stored === "pitch" || stored === "vibrato" ? stored : ACTIVE_VIEW_DEFAULT;
+  return stored === "pitch" || stored === "vibrato" || stored === "spectrogram"
+      ? stored
+      : ACTIVE_VIEW_DEFAULT;
+}
+
+function safeReadPositiveNumber(storageKey, fallback) {
+  const stored = ls.get(storageKey, fallback);
+  const value = Number(stored);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 export default function App() {
   const vibratoChartRef = useRef(null);
   const pitchChartRef = useRef(null);
+  const spectrogramChartRef = useRef(null);
   const audioRef = useRef(createAudioState(SAMPLES_PER_SECOND));
   // Single shared timeline feeds both pitch and vibrato views so switching preserves continuity.
   const timelineRef = useRef(createPitchTimeline({
@@ -91,12 +109,26 @@ export default function App() {
   }));
   const rawBufferRef = useRef(createRawAudioBuffer(48_000));
   const analysisRef = useRef(createAnalysisState(48_000));
+  const spectrogramClockRef = useRef({
+    writeClockMs: performance.now(),
+    accumulator: 0,
+  });
+  const spectrogramRef = useRef(createSpectrogramTimeline({
+    samplesPerSecond: SAMPLES_PER_SECOND,
+    seconds: PITCH_SECONDS,
+    binCount: SPECTROGRAM_FFT_SIZE / 2,
+  }));
+  const spectrogramCaptureRef = useRef({
+    byteBins: new Uint8Array(SPECTROGRAM_FFT_SIZE / 2),
+    normalizedBins: new Float32Array(SPECTROGRAM_FFT_SIZE / 2),
+  });
   const animationRef = useRef({
     rafId: 0,
     drawAvg: 0,
     dataAvg: 0,
     displayedVibratoRateHz: null,
     lastValidVibratoRateMs: null,
+    lastSpectrogramDrawMs: 0,
   });
   const metricsRef = useRef({
     level: {rms: 0},
@@ -134,6 +166,9 @@ export default function App() {
   const [showStats, setShowStats] = useState(() => {
     return ls.get(SHOW_STATS_STORAGE_KEY, SHOW_STATS_DEFAULT) === true;
   });
+  const [pitchDetectionOnSpectrogram, setPitchDetectionOnSpectrogram] = useState(() => {
+    return ls.get(PITCH_ON_SPECTROGRAM_STORAGE_KEY, PITCH_ON_SPECTROGRAM_DEFAULT) !== false;
+  });
   const [pitchMinNote, setPitchMinNote] = useState(() => safeReadPitchNote(
       "voicebox.pitchMinNote",
       PITCH_MIN_NOTE_DEFAULT
@@ -141,6 +176,14 @@ export default function App() {
   const [pitchMaxNote, setPitchMaxNote] = useState(() => safeReadPitchNote(
       "voicebox.pitchMaxNote",
       PITCH_MAX_NOTE_DEFAULT
+  ));
+  const [spectrogramMinHz, setSpectrogramMinHz] = useState(() => safeReadPositiveNumber(
+      "voicebox.spectrogramMinHz",
+      SPECTROGRAM_MIN_HZ_DEFAULT
+  ));
+  const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => safeReadPositiveNumber(
+      "voicebox.spectrogramMaxHz",
+      SPECTROGRAM_MAX_HZ_DEFAULT
   ));
 
   const pitchMinHz = noteNameToHz(pitchMinNote);
@@ -181,9 +224,18 @@ export default function App() {
   }, [showStats]);
 
   useEffect(() => {
+    ls.set(PITCH_ON_SPECTROGRAM_STORAGE_KEY, pitchDetectionOnSpectrogram);
+  }, [pitchDetectionOnSpectrogram]);
+
+  useEffect(() => {
     ls.set("voicebox.pitchMinNote", pitchMinNote);
     ls.set("voicebox.pitchMaxNote", pitchMaxNote);
   }, [pitchMinNote, pitchMaxNote]);
+
+  useEffect(() => {
+    ls.set("voicebox.spectrogramMinHz", spectrogramMinHz);
+    ls.set("voicebox.spectrogramMaxHz", spectrogramMaxHz);
+  }, [spectrogramMaxHz, spectrogramMinHz]);
 
   useEffect(() => {
     ls.set(ACTIVE_VIEW_STORAGE_KEY, activeView);
@@ -232,10 +284,26 @@ export default function App() {
     return analysis.scratch;
   };
 
+  const captureSpectrogramBins = () => {
+    const analyser = audioRef.current.analyser;
+    if (!analyser) return null;
+    const capture = spectrogramCaptureRef.current;
+    if (capture.byteBins.length !== analyser.frequencyBinCount) {
+      capture.byteBins = new Uint8Array(analyser.frequencyBinCount);
+      capture.normalizedBins = new Float32Array(analyser.frequencyBinCount);
+    }
+    analyser.getByteFrequencyData(capture.byteBins);
+    for (let i = 0; i < capture.byteBins.length; i += 1) {
+      capture.normalizedBins[i] = capture.byteBins[i] / 255;
+    }
+    return capture.normalizedBins;
+  };
+
   const processBufferedAudio = () => {
     const raw = rawBufferRef.current;
     const analysis = analysisRef.current;
     const currentView = activeViewRef.current;
+    const shouldDetectPitch = currentView !== "spectrogram" || pitchDetectionOnSpectrogram;
     const minHz = currentView === "pitch" ? pitchRangeRef.current.minHz : VIBRATO_MIN_HZ;
     const maxHz = currentView === "pitch" ? pitchRangeRef.current.maxHz : VIBRATO_MAX_HZ;
     let processedWindows = 0;
@@ -262,6 +330,33 @@ export default function App() {
       const windowSamples = copyAnalysisWindowToScratch();
       if (!windowSamples) continue;
 
+      const nowMs = (analysis.processedSamples / analysis.sampleRate) * 1000;
+      if (spectrogramClockRef.current.writeClockMs <= 0) {
+        spectrogramClockRef.current.writeClockMs = nowMs;
+      } else {
+        const elapsedMs = nowMs - spectrogramClockRef.current.writeClockMs;
+        spectrogramClockRef.current.writeClockMs = nowMs;
+        const spectrogramStep = consumeTimelineElapsed(
+            elapsedMs,
+            SAMPLES_PER_SECOND,
+            spectrogramClockRef.current.accumulator
+        );
+        spectrogramClockRef.current.accumulator = spectrogramStep.accumulator;
+        if (spectrogramStep.steps > 0) {
+          const spectrogramBins = captureSpectrogramBins();
+          if (spectrogramBins) {
+            writeSpectrogramColumn(spectrogramRef.current, spectrogramBins, spectrogramStep.steps);
+            didTimelineChange = true;
+          }
+        }
+      }
+
+      if (!shouldDetectPitch) {
+        timelineRef.current.writeClockMs = nowMs;
+        timelineRef.current.accumulator = 0;
+        continue;
+      }
+
       const start = performance.now();
       const result = analyzeAudioWindow(audioRef.current, windowSamples, minHz, maxHz, {
         adaptiveRange: currentView === "pitch",
@@ -270,7 +365,6 @@ export default function App() {
       processedWindows += 1;
       if (!result) continue;
 
-      const nowMs = (analysis.processedSamples / analysis.sampleRate) * 1000;
       const writeResult = writePitchTimeline(timelineRef.current, {
         nowMs,
         hasVoice: result.hasVoice,
@@ -316,10 +410,14 @@ export default function App() {
         channelCount: 1,
         outputChannelCount: [1],
       });
+      const analyser = context.createAnalyser();
+      analyser.fftSize = SPECTROGRAM_FFT_SIZE;
+      analyser.smoothingTimeConstant = 0;
       captureNode.port.onmessage = (event) => {
         enqueueAudioSamples(event.data);
       };
       source.connect(captureNode);
+      source.connect(analyser);
 
       const sinkGain = context.createGain();
       sinkGain.gain.value = 0;
@@ -329,20 +427,39 @@ export default function App() {
       const sampleRate = context.sampleRate;
       rawBufferRef.current = createRawAudioBuffer(sampleRate);
       analysisRef.current = createAnalysisState(sampleRate);
+      spectrogramClockRef.current = {
+        writeClockMs: 0,
+        accumulator: 0,
+      };
       audioRef.current = setupAudioState(audioRef.current, {
         context,
         source,
         stream,
         captureNode,
+        analyser,
         sinkGain,
         analysisFps: SAMPLES_PER_SECOND,
         centerSeconds: CENTER_SECONDS,
         sampleRate,
       });
+      spectrogramCaptureRef.current = {
+        byteBins: new Uint8Array(analyser.frequencyBinCount),
+        normalizedBins: new Float32Array(analyser.frequencyBinCount),
+      };
+      spectrogramRef.current = createSpectrogramTimeline({
+        samplesPerSecond: SAMPLES_PER_SECOND,
+        seconds: PITCH_SECONDS,
+        binCount: analyser.frequencyBinCount,
+      });
+      spectrogramClockRef.current = {
+        writeClockMs: 0,
+        accumulator: 0,
+      };
 
       setUi((prev) => ({...prev, isRunning: true}));
       animationRef.current.drawAvg = 0;
       animationRef.current.dataAvg = 0;
+      animationRef.current.lastSpectrogramDrawMs = 0;
       animationRef.current.rafId = requestAnimationFrame(renderLoop);
     } catch (err) {
       setWantsToRun(false);
@@ -358,7 +475,7 @@ export default function App() {
       cancelAnimationFrame(animationRef.current.rafId);
       animationRef.current.rafId = 0;
     }
-    const {context, stream, source, captureNode, sinkGain} = audioRef.current;
+    const {context, stream, source, captureNode, analyser, sinkGain} = audioRef.current;
     if (captureNode) {
       captureNode.port.onmessage = null;
       captureNode.disconnect();
@@ -368,6 +485,9 @@ export default function App() {
     }
     if (sinkGain) {
       sinkGain.disconnect();
+    }
+    if (analyser) {
+      analyser.disconnect();
     }
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
@@ -379,6 +499,7 @@ export default function App() {
     audioRef.current.source = null;
     audioRef.current.stream = null;
     audioRef.current.captureNode = null;
+    audioRef.current.analyser = null;
     audioRef.current.sinkGain = null;
     rawBufferRef.current = createRawAudioBuffer(analysisRef.current.sampleRate);
     analysisRef.current = createAnalysisState(analysisRef.current.sampleRate);
@@ -394,6 +515,16 @@ export default function App() {
         writeIndex: timeline.writeIndex,
         count: timeline.count,
         yOffset: audioRef.current.centerCents,
+      });
+      return;
+    }
+    if (currentView === "spectrogram") {
+      spectrogramChartRef.current?.draw({
+        values: spectrogramRef.current.values,
+        writeIndex: spectrogramRef.current.writeIndex,
+        count: spectrogramRef.current.count,
+        binCount: spectrogramRef.current.binCount,
+        sampleRate: analysisRef.current.sampleRate,
       });
       return;
     }
@@ -457,13 +588,21 @@ export default function App() {
     const didDisplayRateChange = displayedRateHz !== previousDisplayedRateHz;
     animationRef.current.displayedVibratoRateHz = displayedRateHz;
 
-    const shouldDrawNow = didTimelineChange || forceRedrawRef.current;
+    const wantsSpectrogramDraw = currentView === "spectrogram" && didTimelineChange;
+    const spectrogramDrawBudgetMs = 1000 / SPECTROGRAM_MAX_DRAW_FPS;
+    const canDrawSpectrogramNow =
+        !wantsSpectrogramDraw ||
+        (nowMs - animationRef.current.lastSpectrogramDrawMs >= spectrogramDrawBudgetMs);
+    const shouldDrawNow = forceRedrawRef.current || (didTimelineChange && canDrawSpectrogramNow);
     if (shouldDrawNow) {
       forceRedrawRef.current = false;
       const drawStart = performance.now();
       drawActiveChart();
       const drawElapsed = performance.now() - drawStart;
       animationRef.current.drawAvg = lerp(animationRef.current.drawAvg, drawElapsed, 0.2);
+      if (currentView === "spectrogram") {
+        animationRef.current.lastSpectrogramDrawMs = nowMs;
+      }
     }
 
     if (didTimelineChange || didDisplayRateChange) {
@@ -514,7 +653,7 @@ export default function App() {
     return () => {
       cancelAnimationFrame(rafId);
     };
-  }, [activeView, pitchMaxCents, pitchMinCents, settingsOpen]);
+  }, [activeView, pitchMaxCents, pitchMinCents, settingsOpen, spectrogramMaxHz, spectrogramMinHz]);
 
   const shouldRun =
       wantsToRun &&
@@ -561,6 +700,22 @@ export default function App() {
     setPitchMaxNote(PITCH_NOTE_OPTIONS[nextMaxIndex]);
   };
 
+  const onSpectrogramMinHzChange = (nextValue) => {
+    if (!Number.isFinite(nextValue) || nextValue <= 0) return;
+    setSpectrogramMinHz(nextValue);
+    if (nextValue >= spectrogramMaxHz) {
+      setSpectrogramMaxHz(nextValue + 1);
+    }
+  };
+
+  const onSpectrogramMaxHzChange = (nextValue) => {
+    if (!Number.isFinite(nextValue) || nextValue <= 0) return;
+    setSpectrogramMaxHz(nextValue);
+    if (nextValue <= spectrogramMinHz) {
+      setSpectrogramMinHz(Math.max(1e-3, nextValue - 1));
+    }
+  };
+
   return (
       <div className="h-[var(--app-height)] w-full overflow-hidden bg-slate-900 text-slate-100 md:bg-slate-950">
         <div className="mx-auto flex h-full w-full max-w-none items-stretch px-0 py-0 md:max-w-[450px] md:items-center md:justify-center md:px-2 md:py-2">
@@ -575,6 +730,13 @@ export default function App() {
                     vibratoRateMaxHz={VIBRATO_RATE_MAX_HZ}
                     vibratoSweetMinHz={VIBRATO_SWEET_MIN_HZ}
                     vibratoSweetMaxHz={VIBRATO_SWEET_MAX_HZ}
+                />
+            ) : activeView === "spectrogram" ? (
+                <SpectrogramChart
+                    ref={spectrogramChartRef}
+                    className="h-full w-full"
+                    minHz={spectrogramMinHz}
+                    maxHz={spectrogramMaxHz}
                 />
             ) : (
                 <PitchChart
@@ -598,7 +760,7 @@ export default function App() {
                 </div>
             ) : null}
             <footer className="relative flex h-12 items-stretch gap-1 border-t border-slate-800 px-2 py-1 text-xs text-slate-300">
-              <div className="flex w-40 items-stretch gap-1">
+              <div className="flex w-56 items-stretch gap-1">
                 <button
                     type="button"
                     onClick={() => setActiveView("pitch")}
@@ -620,6 +782,17 @@ export default function App() {
                     }`}
                 >
                   Vibrato
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveView("spectrogram")}
+                    className={`min-h-10 flex-1 rounded-lg px-2 text-sm font-semibold shadow ${
+                        activeView === "spectrogram"
+                            ? "bg-sky-400 text-slate-950"
+                            : "bg-slate-600 text-slate-100"
+                    }`}
+                >
+                  Spectrogram
                 </button>
               </div>
               <div className="flex flex-1 items-stretch justify-center">
@@ -656,11 +829,17 @@ export default function App() {
               onAutoPauseOnSilenceChange={setAutoPauseOnSilence}
               showStats={showStats}
               onShowStatsChange={setShowStats}
+              pitchDetectionOnSpectrogram={pitchDetectionOnSpectrogram}
+              onPitchDetectionOnSpectrogramChange={setPitchDetectionOnSpectrogram}
               pitchMinNote={pitchMinNote}
               pitchMaxNote={pitchMaxNote}
               pitchNoteOptions={PITCH_NOTE_OPTIONS}
               onPitchMinNoteChange={onPitchMinNoteChange}
               onPitchMaxNoteChange={onPitchMaxNoteChange}
+              spectrogramMinHz={spectrogramMinHz}
+              spectrogramMaxHz={spectrogramMaxHz}
+              onSpectrogramMinHzChange={onSpectrogramMinHzChange}
+              onSpectrogramMaxHzChange={onSpectrogramMaxHzChange}
           />
         </div>
       </div>

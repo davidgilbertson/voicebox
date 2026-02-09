@@ -81,6 +81,12 @@ const canvasCtx = {
   stroke: () => {},
   fillText: () => {},
   drawImage: () => {},
+  createImageData: (width, height) => ({
+    width,
+    height,
+    data: new Uint8ClampedArray(width * height * 4),
+  }),
+  putImageData: () => {},
   lineWidth: 1,
   strokeStyle: "",
   fillStyle: "",
@@ -118,6 +124,27 @@ class FakeAudioContext {
   createGain() {
     return {
       gain: {value: 0},
+      connect: () => {},
+      disconnect: () => {},
+    };
+  }
+
+  createAnalyser() {
+    let fftSize = 2048;
+    return {
+      get fftSize() {
+        return fftSize;
+      },
+      set fftSize(nextFftSize) {
+        fftSize = nextFftSize;
+      },
+      get frequencyBinCount() {
+        return Math.max(1, Math.floor(fftSize / 2));
+      },
+      smoothingTimeConstant: 0,
+      getByteFrequencyData: (array) => {
+        array.fill(0);
+      },
       connect: () => {},
       disconnect: () => {},
     };

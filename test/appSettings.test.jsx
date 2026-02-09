@@ -1,5 +1,5 @@
 import React from "react";
-import {render, screen, waitFor} from "@testing-library/react";
+import {fireEvent, render, screen, waitFor} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {test, expect} from "vitest";
 import App from "../src/App.jsx";
@@ -21,6 +21,30 @@ test("settings defaults and persistence work via localStorage", async () => {
   await waitFor(() => {
     expect(localStorage.getItem("voicebox.showStats")).toBe("true");
     expect(localStorage.getItem("voicebox.autoPauseOnSilence")).toBe("true");
+  });
+});
+
+test("spectrogram frequency settings are editable and persisted", async () => {
+  const user = userEvent.setup();
+  render(<App/>);
+
+  await user.click(screen.getByLabelText("Open settings"));
+  const minInput = screen.getByLabelText("Spectrogram minimum frequency (Hz)");
+  const maxInput = screen.getByLabelText("Spectrogram maximum frequency (Hz)");
+
+  expect(minInput).toHaveValue(10);
+  expect(maxInput).toHaveValue(10000);
+  expect(minInput).not.toHaveAttribute("min");
+  expect(minInput).not.toHaveAttribute("max");
+  expect(maxInput).not.toHaveAttribute("min");
+  expect(maxInput).not.toHaveAttribute("max");
+
+  fireEvent.change(minInput, {target: {value: "55"}});
+  fireEvent.change(maxInput, {target: {value: "7200"}});
+
+  await waitFor(() => {
+    expect(localStorage.getItem("voicebox.spectrogramMinHz")).toBe("55");
+    expect(localStorage.getItem("voicebox.spectrogramMaxHz")).toBe("7200");
   });
 });
 

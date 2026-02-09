@@ -1,5 +1,6 @@
 import colors from "tailwindcss/colors";
 
+console.log("> colors", colors);
 let autocorrScratch = new Float64Array(0);
 const AUTOCORR_CONFIDENCE_MIN = 0.25;
 
@@ -76,10 +77,10 @@ export function drawSemitoneLabels(ctx, width, height, waveRange, options = {}) 
     labelTop = 0,
     labelBottom = height,
   } = options;
-  ctx.fillStyle = colors.slate[500];
+  ctx.fillStyle = colors.slate[300];
   ctx.font = "12px system-ui";
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
   const plotHeight = Math.max(1, labelBottom - labelTop);
   const midY = labelTop + (plotHeight / 2);
   const scaleY = (plotHeight / 2) / waveRange;

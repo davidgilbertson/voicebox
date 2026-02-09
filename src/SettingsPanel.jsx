@@ -11,11 +11,17 @@ export default function SettingsPanel({
                                         onAutoPauseOnSilenceChange,
                                         showStats,
                                         onShowStatsChange,
+                                        pitchDetectionOnSpectrogram,
+                                        onPitchDetectionOnSpectrogramChange,
                                         pitchMinNote,
                                         pitchMaxNote,
                                         pitchNoteOptions,
                                         onPitchMinNoteChange,
                                         onPitchMaxNoteChange,
+                                        spectrogramMinHz,
+                                        spectrogramMaxHz,
+                                        onSpectrogramMinHzChange,
+                                        onSpectrogramMaxHzChange,
                                       }) {
   const dialogRef = useRef(null);
   const pitchMinIndex = pitchNoteOptions.indexOf(pitchMinNote);
@@ -100,6 +106,20 @@ export default function SettingsPanel({
                 className={SETTINGS_CHECKBOX_CLASS}
             />
           </label>
+          <label className="flex items-start justify-between gap-4 text-sm">
+            <div className="flex flex-col gap-1">
+              <span>Pitch detect on spectrogram</span>
+              <span className="text-xs text-slate-400">
+                Keep pitch/vibrato data live while spectrogram is active.
+              </span>
+            </div>
+            <input
+                type="checkbox"
+                checked={pitchDetectionOnSpectrogram}
+                onChange={(event) => onPitchDetectionOnSpectrogramChange(event.target.checked)}
+                className={SETTINGS_CHECKBOX_CLASS}
+            />
+          </label>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-2">
               <div className="text-xs uppercase tracking-wide text-slate-400">Min pitch</div>
@@ -147,6 +167,40 @@ export default function SettingsPanel({
                 >
                   +
                 </button>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-2">
+              <label htmlFor="spectrogram-min-hz" className="block text-xs uppercase tracking-wide text-slate-400">
+                Min spectrogram
+              </label>
+              <div className="rounded-md bg-slate-800/80 p-2">
+                <input
+                    id="spectrogram-min-hz"
+                    type="number"
+                    inputMode="decimal"
+                    value={spectrogramMinHz}
+                    onChange={(event) => onSpectrogramMinHzChange(event.target.valueAsNumber)}
+                    className="settings-number-input h-10 w-full rounded-md border border-slate-600 bg-slate-900 px-3 text-sm text-slate-100"
+                    aria-label="Spectrogram minimum frequency (Hz)"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="spectrogram-max-hz" className="block text-xs uppercase tracking-wide text-slate-400">
+                Max spectrogram
+              </label>
+              <div className="rounded-md bg-slate-800/80 p-2">
+                <input
+                    id="spectrogram-max-hz"
+                    type="number"
+                    inputMode="decimal"
+                    value={spectrogramMaxHz}
+                    onChange={(event) => onSpectrogramMaxHzChange(event.target.valueAsNumber)}
+                    className="settings-number-input h-10 w-full rounded-md border border-slate-600 bg-slate-900 px-3 text-sm text-slate-100"
+                    aria-label="Spectrogram maximum frequency (Hz)"
+                />
               </div>
             </div>
           </div>

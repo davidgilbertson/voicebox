@@ -37,3 +37,14 @@ body,
   outline: 2px solid rgb(56 189 248);
   outline-offset: 2px;
 }
+
+.settings-number-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.settings-number-input::-webkit-outer-spin-button,
+.settings-number-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
