@@ -110,6 +110,8 @@ export default function App() {
   const vibratoChartRef = useRef(null);
   const pitchChartRef = useRef(null);
   const spectrogramChartRef = useRef(null);
+  const isStartingRef = useRef(false);
+  const spectrogramResumeNeedsSignalRef = useRef(false);
   const audioRef = useRef(createAudioState(SAMPLES_PER_SECOND));
   // Single shared timeline feeds both pitch and vibrato views so switching preserves continuity.
   const timelineRef = useRef(createPitchTimeline({
@@ -166,6 +168,7 @@ export default function App() {
     error: "",
     vibratoRateHz: null,
   });
+  const [hasEverRun, setHasEverRun] = useState(false);
   const [stats, setStats] = useState({
     timings: {data: null, draw: 0},
     level: {rms: 0},
@@ -447,9 +450,26 @@ export default function App() {
         if (spectrogramStep.steps > 0) {
           const spectrogramBins = captureSpectrogramBins();
           if (spectrogramBins) {
-            const filteredBins = applyNoiseProfileToSpectrogramBins(spectrogramBins);
-            writeSpectrogramColumn(spectrogramRef.current, filteredBins, spectrogramStep.steps);
-            didTimelineChange = true;
+            let shouldWriteSpectrogram = true;
+            if (spectrogramResumeNeedsSignalRef.current) {
+              let hasSignal = false;
+              for (let i = 0; i < spectrogramBins.length; i += 1) {
+                if (spectrogramBins[i] > 0) {
+                  hasSignal = true;
+                  break;
+                }
+              }
+              if (hasSignal) {
+                spectrogramResumeNeedsSignalRef.current = false;
+              } else {
+                shouldWriteSpectrogram = false;
+              }
+            }
+            if (shouldWriteSpectrogram) {
+              const filteredBins = applyNoiseProfileToSpectrogramBins(spectrogramBins);
+              writeSpectrogramColumn(spectrogramRef.current, filteredBins, spectrogramStep.steps);
+              didTimelineChange = true;
+            }
           }
         }
       }
@@ -491,8 +511,9 @@ export default function App() {
   };
 
   const startAudio = async () => {
+    if (ui.isRunning || isStartingRef.current) return;
+    isStartingRef.current = true;
     setUi((prev) => ({...prev, error: ""}));
-    if (ui.isRunning) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -550,17 +571,26 @@ export default function App() {
         normalizedBins: new Float32Array(analyser.frequencyBinCount),
         filteredBins: new Float32Array(analyser.frequencyBinCount),
       };
-      spectrogramRef.current = createSpectrogramTimeline({
-        samplesPerSecond: SAMPLES_PER_SECOND,
-        seconds: PITCH_SECONDS,
-        binCount: analyser.frequencyBinCount,
-      });
+      const existingSpectrogram = spectrogramRef.current;
+      const reuseSpectrogram =
+          hasEverRun &&
+          existingSpectrogram &&
+          existingSpectrogram.binCount === analyser.frequencyBinCount;
+      if (!reuseSpectrogram) {
+        spectrogramRef.current = createSpectrogramTimeline({
+          samplesPerSecond: SAMPLES_PER_SECOND,
+          seconds: PITCH_SECONDS,
+          binCount: analyser.frequencyBinCount,
+        });
+      }
       spectrogramClockRef.current = {
         writeClockMs: 0,
         accumulator: 0,
       };
+      spectrogramResumeNeedsSignalRef.current = reuseSpectrogram;
 
       setUi((prev) => ({...prev, isRunning: true}));
+      setHasEverRun(true);
       animationRef.current.drawAvg = 0;
       animationRef.current.dataAvg = 0;
       if (!animationRef.current.rafId) {
@@ -572,6 +602,8 @@ export default function App() {
         ...prev,
         error: err?.message || "Microphone access failed.",
       }));
+    } finally {
+      isStartingRef.current = false;
     }
   };
 
@@ -612,6 +644,16 @@ export default function App() {
     rawBufferRef.current = createRawAudioBuffer(analysisRef.current.sampleRate);
     analysisRef.current = createAnalysisState(analysisRef.current.sampleRate);
     setUi((prev) => ({...prev, isRunning: false}));
+  };
+
+  const onStartButtonClick = () => {
+    setWantsToRun(true);
+    startAudio();
+  };
+
+  const onChartTogglePause = () => {
+    if (settingsOpen || !hasEverRun || isStartingRef.current) return;
+    setWantsToRun((prev) => !prev);
   };
 
   const drawActiveChart = () => {
@@ -815,37 +857,66 @@ export default function App() {
     }
   };
 
+  const showStartOverlay = !ui.isRunning && !wantsToRun && (ui.error || !hasEverRun);
+  const showPausedOverlay = !ui.isRunning && !wantsToRun && hasEverRun && !ui.error;
+
   return (
-      <div className="h-[var(--app-height)] w-full overflow-hidden bg-slate-900 text-slate-100 md:bg-slate-950">
+      <div className="h-[var(--app-height)] w-full overflow-hidden bg-black text-slate-100">
         <div className="mx-auto flex h-full w-full max-w-none items-stretch px-0 py-0 md:max-w-[450px] md:items-center md:justify-center md:px-2 md:py-2">
-          <main className="relative flex min-h-0 flex-1 flex-col bg-slate-900 md:h-full md:w-full md:max-h-[1000px] md:flex-none md:rounded-xl md:border md:border-slate-800 md:shadow-2xl">
-            {activeView === "vibrato" ? (
-                <VibratoChart
-                    ref={vibratoChartRef}
-                    yRange={WAVE_Y_RANGE}
-                    maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
-                    vibratoRateHz={ui.vibratoRateHz}
-                    vibratoRateMinHz={VIBRATO_RATE_MIN_HZ}
-                    vibratoRateMaxHz={VIBRATO_RATE_MAX_HZ}
-                    vibratoSweetMinHz={VIBRATO_SWEET_MIN_HZ}
-                    vibratoSweetMaxHz={VIBRATO_SWEET_MAX_HZ}
-                />
-            ) : activeView === "spectrogram" ? (
-                <SpectrogramChart
-                    ref={spectrogramChartRef}
-                    className="h-full w-full"
-                    minHz={spectrogramMinHz}
-                    maxHz={spectrogramMaxHz}
-                />
-            ) : (
-                <PitchChart
-                    ref={pitchChartRef}
-                    minCents={pitchMinCents}
-                    maxCents={pitchMaxCents}
-                    maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
-                />
-            )}
-            {ui.error ? (
+          <main className="relative flex min-h-0 flex-1 flex-col bg-black md:h-full md:w-full md:max-h-[1000px] md:flex-none md:rounded-xl md:border md:border-slate-800 md:shadow-2xl">
+            <div
+                className="relative flex min-h-0 flex-1 flex-col"
+                onClick={onChartTogglePause}
+            >
+              {activeView === "vibrato" ? (
+                  <VibratoChart
+                      ref={vibratoChartRef}
+                      yRange={WAVE_Y_RANGE}
+                      maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
+                      vibratoRateHz={ui.vibratoRateHz}
+                      vibratoRateMinHz={VIBRATO_RATE_MIN_HZ}
+                      vibratoRateMaxHz={VIBRATO_RATE_MAX_HZ}
+                      vibratoSweetMinHz={VIBRATO_SWEET_MIN_HZ}
+                      vibratoSweetMaxHz={VIBRATO_SWEET_MAX_HZ}
+                  />
+              ) : activeView === "spectrogram" ? (
+                  <SpectrogramChart
+                      ref={spectrogramChartRef}
+                      className="h-full w-full"
+                      minHz={spectrogramMinHz}
+                      maxHz={spectrogramMaxHz}
+                  />
+              ) : (
+                  <PitchChart
+                      ref={pitchChartRef}
+                      minCents={pitchMinCents}
+                      maxCents={pitchMaxCents}
+                      maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
+                  />
+              )}
+              {showStartOverlay ? (
+                  <div
+                      className="absolute inset-0 z-10 flex items-center justify-center bg-black/60"
+                      onClick={(event) => event.stopPropagation()}
+                  >
+                    <button
+                        type="button"
+                        onClick={onStartButtonClick}
+                        className="rounded-full bg-sky-400 px-6 py-3 text-base font-semibold text-slate-950 shadow-lg shadow-sky-400/30"
+                    >
+                      Start
+                    </button>
+                  </div>
+              ) : null}
+              {showPausedOverlay ? (
+                  <div className="pointer-events-none absolute inset-0 z-10">
+                    <div className="absolute bottom-[62px] left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-6 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-slate-100">
+                      Paused
+                    </div>
+                  </div>
+              ) : null}
+            </div>
+            {ui.error && !showStartOverlay ? (
                 <div className="absolute inset-x-3 top-14 rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-200">
                   {ui.error}
                 </div>
@@ -858,8 +929,8 @@ export default function App() {
                   <div>Hz: {stats.rawHz ? stats.rawHz.toFixed(1) : "0"}</div>
                 </div>
             ) : null}
-            <footer className="relative flex h-12 items-stretch gap-1 border-t border-slate-800 px-2 py-1 text-xs text-slate-300">
-              <div className="flex w-56 items-stretch gap-1">
+            <footer className="relative flex h-12 items-stretch gap-1 px-2 py-1 text-xs text-slate-300">
+              <div className="flex flex-1 items-stretch gap-1">
                 <button
                     type="button"
                     onClick={() => setActiveView("pitch")}
@@ -892,19 +963,6 @@ export default function App() {
                     }`}
                 >
                   Spectrogram
-                </button>
-              </div>
-              <div className="flex flex-1 items-stretch justify-center">
-                <button
-                    type="button"
-                    onClick={() => setWantsToRun((prev) => !prev)}
-                    className={`min-h-10 rounded-lg px-5 text-sm font-semibold shadow ${
-                        ui.isRunning
-                            ? "bg-emerald-400 text-emerald-950"
-                            : "bg-red-400 text-red-950"
-                    }`}
-                >
-                  {ui.isRunning ? "Stop" : "Start"}
                 </button>
               </div>
               <div className="flex w-12 items-stretch justify-end">

@@ -25,7 +25,7 @@ function drawLabelWithOutline(ctx, label, x, y) {
 function createPalette() {
   const palette = new Uint8ClampedArray(256 * 3);
   const infernoStops = [
-    [0.001, 0.000, 0.014],
+    [0, 0, 0],
     [0.095, 0.043, 0.265],
     [0.341, 0.062, 0.429],
     [0.63, 0.17, 0.388],

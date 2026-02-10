@@ -6,8 +6,6 @@ import basicSsl from "@vitejs/plugin-basic-ssl";
 import {cloudflare} from "@cloudflare/vite-plugin";
 import {VitePWA} from "vite-plugin-pwa";
 
-const appChromeColor = colors.slate[900];
-
 export default defineConfig(({mode}) => {
   // We need https to test the mic on mobile during development
   // But we don't want https in preview because
@@ -28,8 +26,8 @@ export default defineConfig(({mode}) => {
           start_url: "/",
           display: "standalone",
           orientation: "portrait",
-          theme_color: appChromeColor,
-          background_color: appChromeColor,
+          theme_color: "#000",
+          background_color: "#000",
           icons: [
             {
               src: "/icon-voice.svg",
