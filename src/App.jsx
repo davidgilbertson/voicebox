@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {lerp, ls} from "./tools.js";
 import {analyzeAudioWindow, createAudioState, setupAudioState} from "./audioSeries.js";
 import {createPitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
@@ -41,8 +41,8 @@ const PITCH_ON_SPECTROGRAM_STORAGE_KEY = "voicebox.pitchDetectionOnSpectrogram";
 const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
 const SHOW_STATS_DEFAULT = false;
 const PITCH_ON_SPECTROGRAM_DEFAULT = true;
+const SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY = "voicebox.spectrogramNoiseProfile";
 const MAX_DRAW_JUMP_CENTS = 80;
-const SPECTROGRAM_MAX_DRAW_FPS = 24;
 
 function createRawAudioBuffer(sampleRate) {
   const capacity = Math.max(FFT_SIZE * 2, Math.floor(sampleRate * RAW_BUFFER_SECONDS));
@@ -94,7 +94,19 @@ function safeReadPositiveNumber(storageKey, fallback) {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+function safeReadSpectrogramNoiseProfile() {
+  const stored = ls.get(SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY, null);
+  if (!Array.isArray(stored) || stored.length === 0) return null;
+  const profile = new Float32Array(stored.length);
+  for (let i = 0; i < stored.length; i += 1) {
+    const value = Number(stored[i]);
+    profile[i] = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+  }
+  return profile;
+}
+
 export default function App() {
+  const initialNoiseProfile = useMemo(() => safeReadSpectrogramNoiseProfile(), []);
   const vibratoChartRef = useRef(null);
   const pitchChartRef = useRef(null);
   const spectrogramChartRef = useRef(null);
@@ -121,6 +133,13 @@ export default function App() {
   const spectrogramCaptureRef = useRef({
     byteBins: new Uint8Array(SPECTROGRAM_FFT_SIZE / 2),
     normalizedBins: new Float32Array(SPECTROGRAM_FFT_SIZE / 2),
+    filteredBins: new Float32Array(SPECTROGRAM_FFT_SIZE / 2),
+  });
+  const spectrogramNoiseRef = useRef({
+    profile: initialNoiseProfile,
+    calibrating: false,
+    sumBins: null,
+    sampleCount: 0,
   });
   const animationRef = useRef({
     rafId: 0,
@@ -128,7 +147,6 @@ export default function App() {
     dataAvg: 0,
     displayedVibratoRateHz: null,
     lastValidVibratoRateMs: null,
-    lastSpectrogramDrawMs: 0,
   });
   const metricsRef = useRef({
     level: {rms: 0},
@@ -185,6 +203,8 @@ export default function App() {
       "voicebox.spectrogramMaxHz",
       SPECTROGRAM_MAX_HZ_DEFAULT
   ));
+  const [spectrogramNoiseCalibrating, setSpectrogramNoiseCalibrating] = useState(false);
+  const [spectrogramNoiseProfileReady, setSpectrogramNoiseProfileReady] = useState(() => initialNoiseProfile !== null);
 
   const pitchMinHz = noteNameToHz(pitchMinNote);
   const pitchMaxHz = noteNameToHz(pitchMaxNote);
@@ -299,6 +319,88 @@ export default function App() {
     return capture.normalizedBins;
   };
 
+  const beginSpectrogramNoiseCalibration = () => {
+    const noiseState = spectrogramNoiseRef.current;
+    const binCount = audioRef.current.analyser?.frequencyBinCount ?? spectrogramRef.current.binCount;
+    noiseState.calibrating = true;
+    noiseState.sumBins = new Float32Array(binCount);
+    noiseState.sampleCount = 0;
+    setSpectrogramNoiseCalibrating(true);
+  };
+
+  const finishSpectrogramNoiseCalibration = (commitProfile) => {
+    const noiseState = spectrogramNoiseRef.current;
+    const hasSamples = noiseState.sampleCount > 0 && noiseState.sumBins;
+    if (commitProfile && hasSamples) {
+      const profile = new Float32Array(noiseState.sumBins.length);
+      for (let i = 0; i < profile.length; i += 1) {
+        profile[i] = noiseState.sumBins[i] / noiseState.sampleCount;
+      }
+      noiseState.profile = profile;
+      ls.set(SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY, Array.from(profile));
+      setSpectrogramNoiseProfileReady(true);
+    }
+    noiseState.calibrating = false;
+    noiseState.sumBins = null;
+    noiseState.sampleCount = 0;
+    setSpectrogramNoiseCalibrating(false);
+  };
+
+  const clearSpectrogramNoiseProfile = () => {
+    const noiseState = spectrogramNoiseRef.current;
+    noiseState.profile = null;
+    ls.set(SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY, null);
+    setSpectrogramNoiseProfileReady(false);
+  };
+
+  const onNoiseCalibratePointerDown = (event) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    beginSpectrogramNoiseCalibration();
+  };
+
+  const onNoiseCalibratePointerUp = (event) => {
+    event.preventDefault();
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    const noiseState = spectrogramNoiseRef.current;
+    if (!noiseState.calibrating) return;
+    finishSpectrogramNoiseCalibration(true);
+  };
+
+  const onNoiseCalibrateContextMenu = (event) => {
+    event.preventDefault();
+  };
+
+  const applyNoiseProfileToSpectrogramBins = (normalizedBins) => {
+    const noiseState = spectrogramNoiseRef.current;
+    if (noiseState.calibrating && noiseState.sumBins) {
+      const captureCount = Math.min(noiseState.sumBins.length, normalizedBins.length);
+      for (let i = 0; i < captureCount; i += 1) {
+        noiseState.sumBins[i] += normalizedBins[i];
+      }
+      noiseState.sampleCount += 1;
+    }
+
+    if (!noiseState.profile) return normalizedBins;
+    const capture = spectrogramCaptureRef.current;
+    if (capture.filteredBins.length !== normalizedBins.length) {
+      capture.filteredBins = new Float32Array(normalizedBins.length);
+    }
+    const filtered = capture.filteredBins;
+    const profileCount = Math.min(noiseState.profile.length, normalizedBins.length);
+    for (let i = 0; i < profileCount; i += 1) {
+      const value = normalizedBins[i];
+      const weightedNoise = noiseState.profile[i] * (1 - value);
+      filtered[i] = Math.max(0, value - weightedNoise);
+    }
+    for (let i = profileCount; i < normalizedBins.length; i += 1) {
+      filtered[i] = normalizedBins[i];
+    }
+    return filtered;
+  };
+
   const processBufferedAudio = () => {
     const raw = rawBufferRef.current;
     const analysis = analysisRef.current;
@@ -345,7 +447,8 @@ export default function App() {
         if (spectrogramStep.steps > 0) {
           const spectrogramBins = captureSpectrogramBins();
           if (spectrogramBins) {
-            writeSpectrogramColumn(spectrogramRef.current, spectrogramBins, spectrogramStep.steps);
+            const filteredBins = applyNoiseProfileToSpectrogramBins(spectrogramBins);
+            writeSpectrogramColumn(spectrogramRef.current, filteredBins, spectrogramStep.steps);
             didTimelineChange = true;
           }
         }
@@ -445,6 +548,7 @@ export default function App() {
       spectrogramCaptureRef.current = {
         byteBins: new Uint8Array(analyser.frequencyBinCount),
         normalizedBins: new Float32Array(analyser.frequencyBinCount),
+        filteredBins: new Float32Array(analyser.frequencyBinCount),
       };
       spectrogramRef.current = createSpectrogramTimeline({
         samplesPerSecond: SAMPLES_PER_SECOND,
@@ -459,8 +563,9 @@ export default function App() {
       setUi((prev) => ({...prev, isRunning: true}));
       animationRef.current.drawAvg = 0;
       animationRef.current.dataAvg = 0;
-      animationRef.current.lastSpectrogramDrawMs = 0;
-      animationRef.current.rafId = requestAnimationFrame(renderLoop);
+      if (!animationRef.current.rafId) {
+        animationRef.current.rafId = requestAnimationFrame(renderLoop);
+      }
     } catch (err) {
       setWantsToRun(false);
       setUi((prev) => ({
@@ -471,6 +576,9 @@ export default function App() {
   };
 
   const stopAudio = () => {
+    if (spectrogramNoiseRef.current.calibrating) {
+      finishSpectrogramNoiseCalibration(false);
+    }
     if (animationRef.current.rafId) {
       cancelAnimationFrame(animationRef.current.rafId);
       animationRef.current.rafId = 0;
@@ -588,21 +696,13 @@ export default function App() {
     const didDisplayRateChange = displayedRateHz !== previousDisplayedRateHz;
     animationRef.current.displayedVibratoRateHz = displayedRateHz;
 
-    const wantsSpectrogramDraw = currentView === "spectrogram" && didTimelineChange;
-    const spectrogramDrawBudgetMs = 1000 / SPECTROGRAM_MAX_DRAW_FPS;
-    const canDrawSpectrogramNow =
-        !wantsSpectrogramDraw ||
-        (nowMs - animationRef.current.lastSpectrogramDrawMs >= spectrogramDrawBudgetMs);
-    const shouldDrawNow = forceRedrawRef.current || (didTimelineChange && canDrawSpectrogramNow);
+    const shouldDrawNow = forceRedrawRef.current || didTimelineChange;
     if (shouldDrawNow) {
       forceRedrawRef.current = false;
       const drawStart = performance.now();
       drawActiveChart();
       const drawElapsed = performance.now() - drawStart;
       animationRef.current.drawAvg = lerp(animationRef.current.drawAvg, drawElapsed, 0.2);
-      if (currentView === "spectrogram") {
-        animationRef.current.lastSpectrogramDrawMs = nowMs;
-      }
     }
 
     if (didTimelineChange || didDisplayRateChange) {
@@ -657,7 +757,6 @@ export default function App() {
 
   const shouldRun =
       wantsToRun &&
-      !settingsOpen &&
       (keepRunningInBackground || isForeground);
 
   useEffect(() => {
@@ -840,6 +939,12 @@ export default function App() {
               spectrogramMaxHz={spectrogramMaxHz}
               onSpectrogramMinHzChange={onSpectrogramMinHzChange}
               onSpectrogramMaxHzChange={onSpectrogramMaxHzChange}
+              spectrogramNoiseCalibrating={spectrogramNoiseCalibrating}
+              spectrogramNoiseProfileReady={spectrogramNoiseProfileReady}
+              onNoiseCalibratePointerDown={onNoiseCalibratePointerDown}
+              onNoiseCalibratePointerUp={onNoiseCalibratePointerUp}
+              onNoiseCalibrateContextMenu={onNoiseCalibrateContextMenu}
+              onClearSpectrogramNoiseProfile={clearSpectrogramNoiseProfile}
           />
         </div>
       </div>

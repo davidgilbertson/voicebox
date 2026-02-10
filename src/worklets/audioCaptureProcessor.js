@@ -1,4 +1,4 @@
-const BATCH_SIZE = 2048;
+const BATCH_SIZE = 256;
 
 class AudioCaptureProcessor extends AudioWorkletProcessor {
   constructor() {

@@ -1,15 +1,26 @@
 import {forwardRef, useImperativeHandle, useMemo, useRef} from "react";
 import colors from "tailwindcss/colors";
 
-const LEVEL_FLOOR = 0.02;
-const LEVEL_GAMMA = 1.6;
-const DARK_LIFT = 0.06;
-const HIGHLIGHT_KNEE = 0.72;
-const HIGHLIGHT_GAMMA = 0.55;
 const LABEL_X = 4;
-const PLOT_LEFT = 21;
+const PLOT_LEFT = 0;
 const PLOT_Y_INSET = 0;
 const C1_HZ = 32.7031956626;
+const EXTRA_HZ_LABELS = [
+  {hz: 3000, label: "3k"},
+  {hz: 5000, label: "5k"},
+  {hz: 10000, label: "10k"},
+];
+const LABEL_FONT = "12px system-ui";
+const LABEL_STROKE_WIDTH = 3;
+
+function drawLabelWithOutline(ctx, label, x, y) {
+  ctx.lineWidth = LABEL_STROKE_WIDTH;
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.9)";
+  ctx.lineJoin = "round";
+  ctx.strokeText(label, x, y);
+  ctx.fillStyle = colors.white;
+  ctx.fillText(label, x, y);
+}
 
 function createPalette() {
   const palette = new Uint8ClampedArray(256 * 3);
@@ -37,23 +48,6 @@ function createPalette() {
   return palette;
 }
 
-function createToneLut() {
-  const lut = new Uint8Array(256);
-  for (let i = 0; i < 256; i += 1) {
-    const normalized = i / 255;
-    const lifted = Math.max(0, normalized - LEVEL_FLOOR) / (1 - LEVEL_FLOOR);
-    let mapped = Math.pow(lifted, LEVEL_GAMMA);
-    if (mapped > HIGHLIGHT_KNEE) {
-      const normalizedHighlight = (mapped - HIGHLIGHT_KNEE) / (1 - HIGHLIGHT_KNEE);
-      const separatedHighlight = Math.pow(normalizedHighlight, HIGHLIGHT_GAMMA);
-      mapped = HIGHLIGHT_KNEE + separatedHighlight * (1 - HIGHLIGHT_KNEE);
-    }
-    mapped = DARK_LIFT + mapped * (1 - DARK_LIFT);
-    lut[i] = Math.max(0, Math.min(255, Math.round(mapped * 255)));
-  }
-  return lut;
-}
-
 function fillSpectrogramColumns({
   imageData,
   imageStartX,
@@ -62,7 +56,6 @@ function fillSpectrogramColumns({
   yBinLow,
   yBinMix,
   palette,
-  toneLut,
   values,
   binCount,
   getColumnIndex,
@@ -82,8 +75,7 @@ function fillSpectrogramColumns({
         value = lowValue + (highValue - lowValue) * mix;
       }
       const valueIndex = Math.max(0, Math.min(255, Math.round(value * 255)));
-      const paletteIndex = toneLut[valueIndex];
-      const colorOffset = paletteIndex * 3;
+      const colorOffset = valueIndex * 3;
       const pixelOffset = (y * imageWidth + x) * 4;
       pixels[pixelOffset] = palette[colorOffset];
       pixels[pixelOffset + 1] = palette[colorOffset + 1];
@@ -97,7 +89,6 @@ function fillSpectrogramColumns({
 const SpectrogramChart = forwardRef(function SpectrogramChart({className = "", minHz, maxHz}, ref) {
   const canvasRef = useRef(null);
   const palette = useMemo(() => createPalette(), []);
-  const toneLut = useMemo(() => createToneLut(), []);
   const renderCanvasRef = useRef(null);
   const labelCanvasRef = useRef(null);
   const yBinCacheRef = useRef(null);
@@ -218,7 +209,6 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({className = "", m
           yBinLow,
           yBinMix,
           palette,
-          toneLut,
           values,
           binCount,
           getColumnIndex: (x) => {
@@ -254,7 +244,6 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({className = "", m
             yBinLow,
             yBinMix,
             palette,
-            toneLut,
             values,
             binCount,
             getColumnIndex: (x) => (writeIndex - delta + x + columnCount) % columnCount,
@@ -294,8 +283,7 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({className = "", m
           labelCtx.setTransform(1, 0, 0, 1, 0, 0);
           labelCtx.clearRect(0, 0, width, height);
           labelCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-          labelCtx.fillStyle = colors.slate[300];
-          labelCtx.font = "12px system-ui";
+          labelCtx.font = LABEL_FONT;
           labelCtx.textAlign = "left";
           labelCtx.textBaseline = "middle";
           const freqSpanRatio = clampedMinHz / clampedMaxHz;
@@ -307,7 +295,14 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({className = "", m
               const normalizedY = Math.log(hz / clampedMaxHz) / denom;
               if (normalizedY < 0 || normalizedY > 1) continue;
               const y = plotTop + normalizedY * plotHeight;
-              labelCtx.fillText(`C${octave}`, LABEL_X, y);
+              drawLabelWithOutline(labelCtx, `C${octave}`, LABEL_X, y);
+            }
+            for (const item of EXTRA_HZ_LABELS) {
+              if (item.hz < clampedMinHz || item.hz > clampedMaxHz) continue;
+              const normalizedY = Math.log(item.hz / clampedMaxHz) / denom;
+              if (normalizedY < 0 || normalizedY > 1) continue;
+              const y = plotTop + normalizedY * plotHeight;
+              drawLabelWithOutline(labelCtx, item.label, LABEL_X, y);
             }
           }
         }
@@ -320,7 +315,7 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({className = "", m
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(labelCanvas, 0, 0, width, height);
     },
-  }), [maxHz, minHz, palette, toneLut]);
+  }), [maxHz, minHz, palette]);
 
   return (
       <div className="relative min-h-0 flex-[2] p-0">

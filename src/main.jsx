@@ -21,6 +21,12 @@ document.addEventListener('visibilitychange', () => {
 window.visualViewport.addEventListener('resize', updateViewportHeight, { passive: true });
 window.visualViewport.addEventListener('scroll', updateViewportHeight, { passive: true });
 
+// iOS Safari can still fire gesture events even with user-scalable=no.
+const preventGestureZoom = (event) => event.preventDefault();
+document.addEventListener('gesturestart', preventGestureZoom, { passive: false });
+document.addEventListener('gesturechange', preventGestureZoom, { passive: false });
+document.addEventListener('gestureend', preventGestureZoom, { passive: false });
+
 const root = createRoot(document.getElementById('root'));
 root.render(<App />);
 

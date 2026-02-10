@@ -1,6 +1,5 @@
 import colors from "tailwindcss/colors";
 
-console.log("> colors", colors);
 let autocorrScratch = new Float64Array(0);
 const AUTOCORR_CONFIDENCE_MIN = 0.25;
 
