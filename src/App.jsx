@@ -1,6 +1,17 @@
 import {useEffect, useMemo, useRef, useState} from "react";
 import {lerp, ls} from "./tools.js";
-import {analyzeAudioWindow, createAudioState, setupAudioState} from "./audioSeries.js";
+import {
+  analyzeAudioWindow,
+  analyzeAudioWindowFft,
+  createAudioState,
+  setupAudioState,
+} from "./audioSeries.js";
+import {
+  createAnalysisState,
+  createRawAudioBuffer,
+  drainRawBuffer,
+  enqueueAudioSamples,
+} from "./audioPipeline.js";
 import {createPitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
 import {estimateTimelineVibratoRateHz} from "./vibratoRate.js";
 import {createSpectrogramTimeline, writeSpectrogramColumn} from "./spectrogramTimeline.js";
@@ -11,8 +22,10 @@ import PitchChart from "./PitchChart.jsx";
 import SpectrogramChart from "./SpectrogramChart.jsx";
 import {noteNameToCents, noteNameToHz, PITCH_NOTE_OPTIONS} from "./pitchScale.js";
 
-const FFT_SIZE = 2048;
-const SPECTROGRAM_FFT_SIZE = 8192;
+const ANALYSIS_WINDOW_SIZE_DEFAULT = 2048;
+const ANALYSIS_WINDOW_SIZE_OPTIONS = [1024, 2048, 4096];
+const SPECTROGRAM_BIN_COUNT_DEFAULT = 4096;
+const SPECTROGRAM_BIN_COUNT_OPTIONS = [2048, 4096, 8192];
 const SAMPLES_PER_SECOND = 200;
 const SILENCE_PAUSE_THRESHOLD_MS = 300;
 const PITCH_SECONDS = 5; // x axis range
@@ -35,6 +48,13 @@ const SPECTROGRAM_MIN_HZ_DEFAULT = 10;
 const SPECTROGRAM_MAX_HZ_DEFAULT = 10_000;
 const ACTIVE_VIEW_STORAGE_KEY = "voicebox.activeView";
 const ACTIVE_VIEW_DEFAULT = "vibrato";
+const ANALYSIS_WINDOW_SIZE_STORAGE_KEY = "voicebox.analysisWindowSize";
+const LEGACY_ANALYSIS_FFT_SIZE_STORAGE_KEY = "voicebox.analysisFftSize";
+const SPECTROGRAM_BIN_COUNT_STORAGE_KEY = "voicebox.spectrogramBinCount";
+const LEGACY_SPECTROGRAM_FFT_SIZE_STORAGE_KEY = "voicebox.spectrogramFftSize";
+const PITCH_DETECTOR_MODE_STORAGE_KEY = "voicebox.pitchDetectorMode";
+const PITCH_DETECTOR_MODE_DEFAULT = "autocorr";
+const PITCH_DETECTOR_MODE_OPTIONS = ["autocorr", "fft_raw", "fft_refine", "fft_wide", "fft_shs", "fft_residual"];
 const AUTO_PAUSE_ON_SILENCE_STORAGE_KEY = "voicebox.autoPauseOnSilence";
 const SHOW_STATS_STORAGE_KEY = "voicebox.showStats";
 const PITCH_ON_SPECTROGRAM_STORAGE_KEY = "voicebox.pitchDetectionOnSpectrogram";
@@ -43,29 +63,6 @@ const SHOW_STATS_DEFAULT = false;
 const PITCH_ON_SPECTROGRAM_DEFAULT = true;
 const SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY = "voicebox.spectrogramNoiseProfile";
 const MAX_DRAW_JUMP_CENTS = 80;
-
-function createRawAudioBuffer(sampleRate) {
-  const capacity = Math.max(FFT_SIZE * 2, Math.floor(sampleRate * RAW_BUFFER_SECONDS));
-  return {
-    values: new Float32Array(capacity),
-    writeIndex: 0,
-    readIndex: 0,
-    size: 0,
-  };
-}
-
-function createAnalysisState(sampleRate) {
-  return {
-    sampleRate,
-    hopSize: sampleRate / SAMPLES_PER_SECOND,
-    hopAccumulator: 0,
-    processedSamples: 0,
-    windowValues: new Float32Array(FFT_SIZE),
-    windowIndex: 0,
-    windowCount: 0,
-    scratch: new Float32Array(FFT_SIZE),
-  };
-}
 
 function computeIsForeground() {
   if (document.visibilityState === "hidden") return false;
@@ -88,10 +85,64 @@ function safeReadActiveView() {
       : ACTIVE_VIEW_DEFAULT;
 }
 
+function safeReadPitchDetectorMode() {
+  const stored = ls.get(PITCH_DETECTOR_MODE_STORAGE_KEY, PITCH_DETECTOR_MODE_DEFAULT);
+  if (typeof stored === "string" && PITCH_DETECTOR_MODE_OPTIONS.includes(stored)) {
+    return stored;
+  }
+  // Backward compatibility for prior boolean flag.
+  const legacyUseFft = ls.get("voicebox.useFftPitch", false) === true;
+  return legacyUseFft ? "fft_refine" : PITCH_DETECTOR_MODE_DEFAULT;
+}
+
 function safeReadPositiveNumber(storageKey, fallback) {
   const stored = ls.get(storageKey, fallback);
   const value = Number(stored);
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function safeReadNumericChoice(storageKey, fallback, options) {
+  const stored = ls.get(storageKey, fallback);
+  const value = Number(stored);
+  return options.includes(value) ? value : fallback;
+}
+
+function safeReadAnalysisWindowSize() {
+  const storedWindowSize = Number(ls.get(
+      ANALYSIS_WINDOW_SIZE_STORAGE_KEY,
+      ANALYSIS_WINDOW_SIZE_DEFAULT
+  ));
+  if (ANALYSIS_WINDOW_SIZE_OPTIONS.includes(storedWindowSize)) {
+    return storedWindowSize;
+  }
+  const legacyFftSize = Number(ls.get(
+      LEGACY_ANALYSIS_FFT_SIZE_STORAGE_KEY,
+      ANALYSIS_WINDOW_SIZE_DEFAULT
+  ));
+  if (ANALYSIS_WINDOW_SIZE_OPTIONS.includes(legacyFftSize)) {
+    return legacyFftSize;
+  }
+  return ANALYSIS_WINDOW_SIZE_DEFAULT;
+}
+
+function safeReadSpectrogramBinCount() {
+  const storedBinCount = Number(ls.get(
+      SPECTROGRAM_BIN_COUNT_STORAGE_KEY,
+      SPECTROGRAM_BIN_COUNT_DEFAULT
+  ));
+  if (SPECTROGRAM_BIN_COUNT_OPTIONS.includes(storedBinCount)) {
+    return storedBinCount;
+  }
+  // Backward compatibility: old key stored analyser fftSize, so convert to bins.
+  const legacyFftSize = Number(ls.get(
+      LEGACY_SPECTROGRAM_FFT_SIZE_STORAGE_KEY,
+      SPECTROGRAM_BIN_COUNT_DEFAULT * 2
+  ));
+  const legacyBinCount = legacyFftSize / 2;
+  if (SPECTROGRAM_BIN_COUNT_OPTIONS.includes(legacyBinCount)) {
+    return legacyBinCount;
+  }
+  return SPECTROGRAM_BIN_COUNT_DEFAULT;
 }
 
 function safeReadSpectrogramNoiseProfile() {
@@ -121,8 +172,14 @@ export default function App() {
     autoPauseOnSilence: AUTO_PAUSE_ON_SILENCE_DEFAULT,
     nowMs: performance.now(),
   }));
-  const rawBufferRef = useRef(createRawAudioBuffer(48_000));
-  const analysisRef = useRef(createAnalysisState(48_000));
+  const rawBufferRef = useRef(createRawAudioBuffer(48_000, {
+    windowSize: ANALYSIS_WINDOW_SIZE_DEFAULT,
+    rawBufferSeconds: RAW_BUFFER_SECONDS,
+  }));
+  const analysisRef = useRef(createAnalysisState(48_000, {
+    windowSize: ANALYSIS_WINDOW_SIZE_DEFAULT,
+    samplesPerSecond: SAMPLES_PER_SECOND,
+  }));
   const spectrogramClockRef = useRef({
     writeClockMs: performance.now(),
     accumulator: 0,
@@ -130,12 +187,12 @@ export default function App() {
   const spectrogramRef = useRef(createSpectrogramTimeline({
     samplesPerSecond: SAMPLES_PER_SECOND,
     seconds: PITCH_SECONDS,
-    binCount: SPECTROGRAM_FFT_SIZE / 2,
+    binCount: SPECTROGRAM_BIN_COUNT_DEFAULT,
   }));
   const spectrogramCaptureRef = useRef({
-    byteBins: new Uint8Array(SPECTROGRAM_FFT_SIZE / 2),
-    normalizedBins: new Float32Array(SPECTROGRAM_FFT_SIZE / 2),
-    filteredBins: new Float32Array(SPECTROGRAM_FFT_SIZE / 2),
+    byteBins: new Uint8Array(SPECTROGRAM_BIN_COUNT_DEFAULT),
+    normalizedBins: new Float32Array(SPECTROGRAM_BIN_COUNT_DEFAULT),
+    filteredBins: new Float32Array(SPECTROGRAM_BIN_COUNT_DEFAULT),
   });
   const spectrogramNoiseRef = useRef({
     profile: initialNoiseProfile,
@@ -157,6 +214,7 @@ export default function App() {
   });
   const forceRedrawRef = useRef(false);
   const activeViewRef = useRef(ACTIVE_VIEW_DEFAULT);
+  const pitchDetectorModeRef = useRef(PITCH_DETECTOR_MODE_DEFAULT);
   const pitchRangeRef = useRef({
     minHz: noteNameToHz(PITCH_MIN_NOTE_DEFAULT),
     maxHz: noteNameToHz(PITCH_MAX_NOTE_DEFAULT),
@@ -190,6 +248,9 @@ export default function App() {
   const [pitchDetectionOnSpectrogram, setPitchDetectionOnSpectrogram] = useState(() => {
     return ls.get(PITCH_ON_SPECTROGRAM_STORAGE_KEY, PITCH_ON_SPECTROGRAM_DEFAULT) !== false;
   });
+  const [analysisWindowSize, setAnalysisWindowSize] = useState(() => safeReadAnalysisWindowSize());
+  const [spectrogramBinCount, setSpectrogramBinCount] = useState(() => safeReadSpectrogramBinCount());
+  const [pitchDetectorMode, setPitchDetectorMode] = useState(() => safeReadPitchDetectorMode());
   const [pitchMinNote, setPitchMinNote] = useState(() => safeReadPitchNote(
       "voicebox.pitchMinNote",
       PITCH_MIN_NOTE_DEFAULT
@@ -228,6 +289,10 @@ export default function App() {
   }, [pitchMaxCents, pitchMaxHz, pitchMinCents, pitchMinHz]);
 
   useEffect(() => {
+    pitchDetectorModeRef.current = pitchDetectorMode;
+  }, [pitchDetectorMode]);
+
+  useEffect(() => {
     return () => {
       stopAudio();
     };
@@ -249,6 +314,22 @@ export default function App() {
   useEffect(() => {
     ls.set(PITCH_ON_SPECTROGRAM_STORAGE_KEY, pitchDetectionOnSpectrogram);
   }, [pitchDetectionOnSpectrogram]);
+
+  useEffect(() => {
+    ls.set(ANALYSIS_WINDOW_SIZE_STORAGE_KEY, analysisWindowSize);
+    // Keep legacy key updated so older builds/sessions keep working.
+    ls.set(LEGACY_ANALYSIS_FFT_SIZE_STORAGE_KEY, analysisWindowSize);
+  }, [analysisWindowSize]);
+
+  useEffect(() => {
+    ls.set(SPECTROGRAM_BIN_COUNT_STORAGE_KEY, spectrogramBinCount);
+    // Keep legacy key updated so older builds/sessions keep working.
+    ls.set(LEGACY_SPECTROGRAM_FFT_SIZE_STORAGE_KEY, spectrogramBinCount * 2);
+  }, [spectrogramBinCount]);
+
+  useEffect(() => {
+    ls.set(PITCH_DETECTOR_MODE_STORAGE_KEY, pitchDetectorMode);
+  }, [pitchDetectorMode]);
 
   useEffect(() => {
     ls.set("voicebox.pitchMinNote", pitchMinNote);
@@ -283,29 +364,54 @@ export default function App() {
     };
   }, []);
 
-  const enqueueAudioSamples = (chunk) => {
-    if (!chunk?.length) return;
-    const raw = rawBufferRef.current;
-    for (let i = 0; i < chunk.length; i += 1) {
-      raw.values[raw.writeIndex] = chunk[i];
-      raw.writeIndex = (raw.writeIndex + 1) % raw.values.length;
-      if (raw.size < raw.values.length) {
-        raw.size += 1;
-      } else {
-        raw.readIndex = (raw.readIndex + 1) % raw.values.length;
-      }
-    }
-  };
+  useEffect(() => {
+    const sampleRate = analysisRef.current.sampleRate;
+    rawBufferRef.current = createRawAudioBuffer(sampleRate, {
+      windowSize: analysisWindowSize,
+      rawBufferSeconds: RAW_BUFFER_SECONDS,
+    });
+    analysisRef.current = createAnalysisState(sampleRate, {
+      windowSize: analysisWindowSize,
+      samplesPerSecond: SAMPLES_PER_SECOND,
+    });
+  }, [analysisWindowSize]);
 
-  const copyAnalysisWindowToScratch = () => {
-    const analysis = analysisRef.current;
-    if (analysis.windowCount < FFT_SIZE) return null;
-    const start = analysis.windowIndex;
-    const tailLength = FFT_SIZE - start;
-    analysis.scratch.set(analysis.windowValues.subarray(start), 0);
-    analysis.scratch.set(analysis.windowValues.subarray(0, start), tailLength);
-    return analysis.scratch;
-  };
+  useEffect(() => {
+    const analyser = audioRef.current.analyser;
+    const analyserFftSize = spectrogramBinCount * 2;
+    if (analyser && analyser.fftSize !== analyserFftSize) {
+      analyser.fftSize = analyserFftSize;
+    }
+    const binCount = analyser ? analyser.frequencyBinCount : spectrogramBinCount;
+    spectrogramCaptureRef.current = {
+      byteBins: new Uint8Array(binCount),
+      normalizedBins: new Float32Array(binCount),
+      filteredBins: new Float32Array(binCount),
+    };
+    spectrogramRef.current = createSpectrogramTimeline({
+      samplesPerSecond: SAMPLES_PER_SECOND,
+      seconds: PITCH_SECONDS,
+      binCount,
+    });
+    spectrogramClockRef.current = {
+      writeClockMs: 0,
+      accumulator: 0,
+    };
+    spectrogramResumeNeedsSignalRef.current = false;
+    const noiseState = spectrogramNoiseRef.current;
+    if (noiseState.calibrating) {
+      noiseState.calibrating = false;
+      noiseState.sumBins = null;
+      noiseState.sampleCount = 0;
+      setSpectrogramNoiseCalibrating(false);
+    }
+    if (noiseState.profile && noiseState.profile.length !== binCount) {
+      noiseState.profile = null;
+      ls.set(SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY, null);
+      setSpectrogramNoiseProfileReady(false);
+    }
+    forceRedrawRef.current = true;
+  }, [spectrogramBinCount]);
 
   const captureSpectrogramBins = () => {
     const analyser = audioRef.current.analyser;
@@ -415,27 +521,7 @@ export default function App() {
     let analysisElapsedMs = 0;
     let didTimelineChange = false;
 
-    while (raw.size > 0) {
-      const sample = raw.values[raw.readIndex];
-      raw.readIndex = (raw.readIndex + 1) % raw.values.length;
-      raw.size -= 1;
-
-      analysis.windowValues[analysis.windowIndex] = sample;
-      analysis.windowIndex = (analysis.windowIndex + 1) % analysis.windowValues.length;
-      if (analysis.windowCount < analysis.windowValues.length) {
-        analysis.windowCount += 1;
-      }
-      analysis.processedSamples += 1;
-      analysis.hopAccumulator += 1;
-
-      if (analysis.hopAccumulator < analysis.hopSize) {
-        continue;
-      }
-      analysis.hopAccumulator -= analysis.hopSize;
-      const windowSamples = copyAnalysisWindowToScratch();
-      if (!windowSamples) continue;
-
-      const nowMs = (analysis.processedSamples / analysis.sampleRate) * 1000;
+    drainRawBuffer(raw, analysis, (windowSamples, nowMs) => {
       if (spectrogramClockRef.current.writeClockMs <= 0) {
         spectrogramClockRef.current.writeClockMs = nowMs;
       } else {
@@ -477,16 +563,38 @@ export default function App() {
       if (!shouldDetectPitch) {
         timelineRef.current.writeClockMs = nowMs;
         timelineRef.current.accumulator = 0;
-        continue;
+        return;
       }
 
       const start = performance.now();
-      const result = analyzeAudioWindow(audioRef.current, windowSamples, minHz, maxHz, {
-        adaptiveRange: currentView === "pitch",
-      });
+      const mode = pitchDetectorModeRef.current;
+      let result;
+      if (mode === "autocorr") {
+        result = analyzeAudioWindow(audioRef.current, windowSamples, minHz, maxHz, {
+          adaptiveRange: currentView === "pitch",
+        });
+      } else {
+        const refinementMode = mode === "fft_raw" || mode === "fft_shs" || mode === "fft_residual"
+            ? "off"
+            : mode === "fft_wide"
+                ? "wide"
+                : "balanced";
+        const detector = mode === "fft_shs"
+            ? "shs"
+            : mode === "fft_residual"
+                ? "residual"
+                : "hps";
+        result = analyzeAudioWindowFft(audioRef.current, windowSamples, minHz, maxHz, {
+          refinementMode,
+          detector,
+          fftOptions: {
+            binCount: spectrogramBinCount,
+          },
+        });
+      }
       analysisElapsedMs += performance.now() - start;
       processedWindows += 1;
-      if (!result) continue;
+      if (!result) return;
 
       const writeResult = writePitchTimeline(timelineRef.current, {
         nowMs,
@@ -501,7 +609,7 @@ export default function App() {
         rawHz: result.hz,
         hasVoice: result.hasVoice,
       };
-    }
+    });
 
     if (processedWindows > 0) {
       const avgPerWindowMs = analysisElapsedMs / processedWindows;
@@ -535,10 +643,10 @@ export default function App() {
         outputChannelCount: [1],
       });
       const analyser = context.createAnalyser();
-      analyser.fftSize = SPECTROGRAM_FFT_SIZE;
+      analyser.fftSize = spectrogramBinCount * 2;
       analyser.smoothingTimeConstant = 0;
       captureNode.port.onmessage = (event) => {
-        enqueueAudioSamples(event.data);
+        enqueueAudioSamples(rawBufferRef.current, event.data);
       };
       source.connect(captureNode);
       source.connect(analyser);
@@ -549,8 +657,14 @@ export default function App() {
       sinkGain.connect(context.destination);
 
       const sampleRate = context.sampleRate;
-      rawBufferRef.current = createRawAudioBuffer(sampleRate);
-      analysisRef.current = createAnalysisState(sampleRate);
+      rawBufferRef.current = createRawAudioBuffer(sampleRate, {
+        windowSize: analysisWindowSize,
+        rawBufferSeconds: RAW_BUFFER_SECONDS,
+      });
+      analysisRef.current = createAnalysisState(sampleRate, {
+        windowSize: analysisWindowSize,
+        samplesPerSecond: SAMPLES_PER_SECOND,
+      });
       spectrogramClockRef.current = {
         writeClockMs: 0,
         accumulator: 0,
@@ -641,8 +755,14 @@ export default function App() {
     audioRef.current.captureNode = null;
     audioRef.current.analyser = null;
     audioRef.current.sinkGain = null;
-    rawBufferRef.current = createRawAudioBuffer(analysisRef.current.sampleRate);
-    analysisRef.current = createAnalysisState(analysisRef.current.sampleRate);
+    rawBufferRef.current = createRawAudioBuffer(analysisRef.current.sampleRate, {
+      windowSize: analysisWindowSize,
+      rawBufferSeconds: RAW_BUFFER_SECONDS,
+    });
+    analysisRef.current = createAnalysisState(analysisRef.current.sampleRate, {
+      windowSize: analysisWindowSize,
+      samplesPerSecond: SAMPLES_PER_SECOND,
+    });
     setUi((prev) => ({...prev, isRunning: false}));
   };
 
@@ -894,6 +1014,121 @@ export default function App() {
                       maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
                   />
               )}
+              {activeView === "pitch" ? (
+                  <div
+                      className="absolute left-2 top-2 z-20 flex max-w-[calc(100%-1rem)] flex-col items-start gap-1"
+                      onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="flex flex-wrap items-center gap-1">
+                      <button
+                          type="button"
+                          onClick={() => setPitchDetectorMode("autocorr")}
+                          className={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                              pitchDetectorMode === "autocorr"
+                                  ? "bg-sky-400 text-slate-950"
+                                  : "bg-slate-700/90 text-slate-100"
+                          }`}
+                      >
+                        AC
+                      </button>
+                      <button
+                          type="button"
+                          onClick={() => setPitchDetectorMode("fft_raw")}
+                          className={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                              pitchDetectorMode === "fft_raw"
+                                  ? "bg-sky-400 text-slate-950"
+                                  : "bg-slate-700/90 text-slate-100"
+                          }`}
+                      >
+                        FFT raw
+                      </button>
+                      <button
+                          type="button"
+                          onClick={() => setPitchDetectorMode("fft_refine")}
+                          className={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                              pitchDetectorMode === "fft_refine"
+                                  ? "bg-sky-400 text-slate-950"
+                                  : "bg-slate-700/90 text-slate-100"
+                          }`}
+                      >
+                        FFT refine
+                      </button>
+                      <button
+                          type="button"
+                          onClick={() => setPitchDetectorMode("fft_wide")}
+                          className={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                              pitchDetectorMode === "fft_wide"
+                                  ? "bg-sky-400 text-slate-950"
+                                  : "bg-slate-700/90 text-slate-100"
+                          }`}
+                      >
+                        FFT wide
+                      </button>
+                      <button
+                          type="button"
+                          onClick={() => setPitchDetectorMode("fft_shs")}
+                          className={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                              pitchDetectorMode === "fft_shs"
+                                  ? "bg-sky-400 text-slate-950"
+                                  : "bg-slate-700/90 text-slate-100"
+                          }`}
+                      >
+                        FFT SHS
+                      </button>
+                      <button
+                          type="button"
+                          onClick={() => setPitchDetectorMode("fft_residual")}
+                          className={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                              pitchDetectorMode === "fft_residual"
+                                  ? "bg-sky-400 text-slate-950"
+                                  : "bg-slate-700/90 text-slate-100"
+                          }`}
+                      >
+                        FFT residual
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <div className="rounded bg-black/60 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-slate-300">
+                        WINDOW_SIZE
+                      </div>
+                      {ANALYSIS_WINDOW_SIZE_OPTIONS.map((size) => (
+                          <button
+                              key={`analysis-window-${size}`}
+                              type="button"
+                              aria-label={`WINDOW_SIZE ${size}`}
+                              onClick={() => setAnalysisWindowSize(size)}
+                              className={`rounded px-2 py-1 text-[10px] font-semibold tracking-wide ${
+                                  analysisWindowSize === size
+                                      ? "bg-sky-400 text-slate-950"
+                                      : "bg-slate-700/90 text-slate-100"
+                              }`}
+                          >
+                            {size}
+                          </button>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <div className="rounded bg-black/60 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-slate-300">
+                        SPECTROGRAM_BINS
+                      </div>
+                      {SPECTROGRAM_BIN_COUNT_OPTIONS.map((size) => (
+                          <button
+                              key={`spectrogram-bins-${size}`}
+                              type="button"
+                              aria-label={`SPECTROGRAM_BINS ${size}`}
+                              onClick={() => setSpectrogramBinCount(size)}
+                              className={`rounded px-2 py-1 text-[10px] font-semibold tracking-wide ${
+                                  spectrogramBinCount === size
+                                      ? "bg-sky-400 text-slate-950"
+                                      : "bg-slate-700/90 text-slate-100"
+                              }`}
+                          >
+                            {size}
+                          </button>
+                      ))}
+                    </div>
+                  </div>
+              ) : null}
               {showStartOverlay ? (
                   <div
                       className="absolute inset-0 z-10 flex items-center justify-center bg-black/60"
@@ -977,33 +1212,35 @@ export default function App() {
               </div>
             </footer>
           </main>
-          <SettingsPanel
-              open={settingsOpen}
-              onClose={() => setSettingsOpen(false)}
-              keepRunningInBackground={keepRunningInBackground}
-              onKeepRunningInBackgroundChange={setKeepRunningInBackground}
-              autoPauseOnSilence={autoPauseOnSilence}
-              onAutoPauseOnSilenceChange={setAutoPauseOnSilence}
-              showStats={showStats}
-              onShowStatsChange={setShowStats}
-              pitchDetectionOnSpectrogram={pitchDetectionOnSpectrogram}
-              onPitchDetectionOnSpectrogramChange={setPitchDetectionOnSpectrogram}
-              pitchMinNote={pitchMinNote}
-              pitchMaxNote={pitchMaxNote}
-              pitchNoteOptions={PITCH_NOTE_OPTIONS}
-              onPitchMinNoteChange={onPitchMinNoteChange}
-              onPitchMaxNoteChange={onPitchMaxNoteChange}
-              spectrogramMinHz={spectrogramMinHz}
-              spectrogramMaxHz={spectrogramMaxHz}
-              onSpectrogramMinHzChange={onSpectrogramMinHzChange}
-              onSpectrogramMaxHzChange={onSpectrogramMaxHzChange}
-              spectrogramNoiseCalibrating={spectrogramNoiseCalibrating}
-              spectrogramNoiseProfileReady={spectrogramNoiseProfileReady}
-              onNoiseCalibratePointerDown={onNoiseCalibratePointerDown}
-              onNoiseCalibratePointerUp={onNoiseCalibratePointerUp}
-              onNoiseCalibrateContextMenu={onNoiseCalibrateContextMenu}
-              onClearSpectrogramNoiseProfile={clearSpectrogramNoiseProfile}
-          />
+          {settingsOpen ? (
+              <SettingsPanel
+                  open={settingsOpen}
+                  onClose={() => setSettingsOpen(false)}
+                  keepRunningInBackground={keepRunningInBackground}
+                  onKeepRunningInBackgroundChange={setKeepRunningInBackground}
+                  autoPauseOnSilence={autoPauseOnSilence}
+                  onAutoPauseOnSilenceChange={setAutoPauseOnSilence}
+                  showStats={showStats}
+                  onShowStatsChange={setShowStats}
+                  pitchDetectionOnSpectrogram={pitchDetectionOnSpectrogram}
+                  onPitchDetectionOnSpectrogramChange={setPitchDetectionOnSpectrogram}
+                  pitchMinNote={pitchMinNote}
+                  pitchMaxNote={pitchMaxNote}
+                  pitchNoteOptions={PITCH_NOTE_OPTIONS}
+                  onPitchMinNoteChange={onPitchMinNoteChange}
+                  onPitchMaxNoteChange={onPitchMaxNoteChange}
+                  spectrogramMinHz={spectrogramMinHz}
+                  spectrogramMaxHz={spectrogramMaxHz}
+                  onSpectrogramMinHzChange={onSpectrogramMinHzChange}
+                  onSpectrogramMaxHzChange={onSpectrogramMaxHzChange}
+                  spectrogramNoiseCalibrating={spectrogramNoiseCalibrating}
+                  spectrogramNoiseProfileReady={spectrogramNoiseProfileReady}
+                  onNoiseCalibratePointerDown={onNoiseCalibratePointerDown}
+                  onNoiseCalibratePointerUp={onNoiseCalibratePointerUp}
+                  onNoiseCalibrateContextMenu={onNoiseCalibrateContextMenu}
+                  onClearSpectrogramNoiseProfile={clearSpectrogramNoiseProfile}
+              />
+          ) : null}
         </div>
       </div>
   );

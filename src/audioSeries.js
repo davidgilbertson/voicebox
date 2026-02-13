@@ -1,10 +1,31 @@
 import {detectPitchAutocorr, detectPitchAutocorrDetailed, lerp} from "./tools.js";
+import {detectPitchFftHpsDetailed, detectPitchFftResidualDetailed} from "./fftPitch.js";
 
 const ADAPTIVE_RANGE_MIN_FACTOR = 0.5;
 const ADAPTIVE_RANGE_MAX_FACTOR = 2;
 const ADAPTIVE_RANGE_REACQUIRE_MISSES = 20;
 const ADAPTIVE_RANGE_FULL_SCAN_INTERVAL = 40;
 const ADAPTIVE_RANGE_SWITCH_RATIO = 1.15;
+
+function getFftRefinementProfile(mode) {
+  if (mode === "off") {
+    return null;
+  }
+  if (mode === "wide") {
+    return {
+      minCorr: 0.15,
+      minFactor: 0.7,
+      maxFactor: 1.35,
+      includeThirds: true,
+    };
+  }
+  return {
+    minCorr: 0.2,
+    minFactor: 0.82,
+    maxFactor: 1.22,
+    includeThirds: false,
+  };
+}
 
 export function createAudioState(defaultSamplesPerSecond) {
   return {
@@ -87,9 +108,7 @@ function computeCenterHzMedian(hzBuffer, minHz, maxHz) {
   return values[mid];
 }
 
-export function analyzeAudioWindow(state, timeData, minHz, maxHz, options = {}) {
-  const {hzBuffer} = state;
-  if (!hzBuffer || !timeData || !timeData.length) return null;
+function computeWindowLevel(state, timeData) {
   let peak = 0;
   let sumSquares = 0;
   for (let i = 0; i < timeData.length; i += 1) {
@@ -100,6 +119,53 @@ export function analyzeAudioWindow(state, timeData, minHz, maxHz, options = {}) 
   }
   const rms = Math.sqrt(sumSquares / timeData.length);
   state.levelEma = lerp(state.levelEma, rms, 0.2);
+  return {peak, rms: state.levelEma};
+}
+
+function finalizeDetection(state, {
+  peak,
+  hz,
+  minHz,
+  maxHz,
+  adaptiveRange,
+  usedWideSearch,
+}) {
+  const {hzBuffer} = state;
+  const inHzRange = hz >= minHz && hz <= maxHz;
+  const hasVoice = inHzRange;
+  const absCents = inHzRange ? 1200 * Math.log2(hz) : Number.NaN;
+
+  if (hasVoice) {
+    state.lastTrackedHz = hz;
+    state.missedDetections = 0;
+    hzBuffer[state.hzIndex] = hz;
+    state.hzIndex = (state.hzIndex + 1) % hzBuffer.length;
+    const centerHz = computeCenterHzMedian(hzBuffer, minHz, maxHz);
+    if (centerHz > 0) {
+      state.centerHz = lerp(state.centerHz, centerHz, 0.2);
+      state.centerCents = 1200 * Math.log2(state.centerHz);
+    }
+  } else if (adaptiveRange) {
+    state.missedDetections += 1;
+    if (state.missedDetections >= ADAPTIVE_RANGE_REACQUIRE_MISSES) {
+      state.lastTrackedHz = 0;
+    }
+  }
+
+  return {
+    peak,
+    rms: state.levelEma,
+    hz,
+    hasVoice,
+    cents: absCents,
+    usedWideSearch,
+  };
+}
+
+export function analyzeAudioWindow(state, timeData, minHz, maxHz, options = {}) {
+  const {hzBuffer} = state;
+  if (!hzBuffer || !timeData || !timeData.length) return null;
+  const {peak} = computeWindowLevel(state, timeData);
 
   const adaptiveRange = options.adaptiveRange === true;
   let usedWideSearch = false;
@@ -155,33 +221,95 @@ export function analyzeAudioWindow(state, timeData, minHz, maxHz, options = {}) 
 
   const hz = detection.hz;
 
-  const inHzRange = hz >= minHz && hz <= maxHz;
-  const hasVoice = inHzRange;
-  const absCents = inHzRange ? 1200 * Math.log2(hz) : Number.NaN;
+  return finalizeDetection(state, {
+    peak,
+    hz,
+    minHz,
+    maxHz,
+    adaptiveRange,
+    usedWideSearch,
+  });
+}
 
-  if (hasVoice) {
-    state.lastTrackedHz = hz;
-    state.missedDetections = 0;
-    hzBuffer[state.hzIndex] = hz;
-    state.hzIndex = (state.hzIndex + 1) % hzBuffer.length;
-    const centerHz = computeCenterHzMedian(hzBuffer, minHz, maxHz);
-    if (centerHz > 0) {
-      state.centerHz = lerp(state.centerHz, centerHz, 0.2);
-      state.centerCents = 1200 * Math.log2(state.centerHz);
+export function analyzeAudioWindowFft(state, timeData, minHz, maxHz, options = {}) {
+  const {hzBuffer} = state;
+  if (!hzBuffer || !timeData || !timeData.length) return null;
+  const {peak} = computeWindowLevel(state, timeData);
+  const refinementProfile = getFftRefinementProfile(options.refinementMode);
+
+  const detection = options.detector === "residual"
+      ? detectPitchFftResidualDetailed(
+          timeData,
+          state.sampleRate,
+          minHz,
+          maxHz,
+          options.fftOptions
+      )
+      : detectPitchFftHpsDetailed(
+          timeData,
+          state.sampleRate,
+          minHz,
+          maxHz,
+          {
+            ...options.fftOptions,
+            detector: options.detector ?? "hps",
+          }
+      );
+
+  const fftHz = detection.hz;
+  let hz = fftHz;
+  if (refinementProfile && fftHz > 0) {
+    const {minFactor, maxFactor, includeThirds} = refinementProfile;
+    const candidates = [fftHz, fftHz / 2, fftHz * 2];
+    if (includeThirds) {
+      candidates.push(fftHz / 3, fftHz * 3);
     }
-  } else if (adaptiveRange) {
-    state.missedDetections += 1;
-    if (state.missedDetections >= ADAPTIVE_RANGE_REACQUIRE_MISSES) {
-      state.lastTrackedHz = 0;
+    if (state.lastTrackedHz > 0) {
+      candidates.push(state.lastTrackedHz);
     }
+
+    let refinedHz = 0;
+    let bestCorr = 0;
+    const seen = new Set();
+    for (const candidate of candidates) {
+      if (!(candidate > 0)) continue;
+      if (candidate < minHz || candidate > maxHz) continue;
+      const rounded = Math.round(candidate * 10) / 10;
+      if (seen.has(rounded)) continue;
+      seen.add(rounded);
+
+      const narrowMinHz = Math.max(minHz, candidate * minFactor);
+      const narrowMaxHz = Math.min(maxHz, candidate * maxFactor);
+      if (!(narrowMaxHz > narrowMinHz)) continue;
+
+      const refined = detectPitchAutocorrDetailed(
+          timeData,
+          state.sampleRate,
+          narrowMinHz,
+          narrowMaxHz
+      );
+      if (refined.hz > 0 && refined.corrRatio > bestCorr) {
+        bestCorr = refined.corrRatio;
+        refinedHz = refined.hz;
+      }
+    }
+
+    hz = (bestCorr >= refinementProfile.minCorr && refinedHz > 0)
+        ? refinedHz
+        : fftHz;
   }
 
-  return {
+  const result = finalizeDetection(state, {
     peak,
-    rms: state.levelEma,
     hz,
-    hasVoice,
-    cents: absCents,
-    usedWideSearch,
+    minHz,
+    maxHz,
+    adaptiveRange: false,
+    usedWideSearch: false,
+  });
+
+  return {
+    ...result,
+    confidence: detection.confidence,
   };
 }

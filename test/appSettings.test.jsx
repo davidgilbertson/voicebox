@@ -58,3 +58,29 @@ test("enabling show stats displays stats panel", async () => {
 
   expect(await screen.findByText(/Data:/)).toBeInTheDocument();
 });
+
+test("pitch detector buttons persist selected mode", async () => {
+  const user = userEvent.setup();
+  render(<App/>);
+
+  await user.click(screen.getByRole("button", {name: "Pitch"}));
+  await user.click(screen.getByRole("button", {name: "FFT residual"}));
+
+  await waitFor(() => {
+    expect(localStorage.getItem("voicebox.pitchDetectorMode")).toBe("fft_residual");
+  });
+});
+
+test("fft size overlay buttons persist selected values", async () => {
+  const user = userEvent.setup();
+  render(<App/>);
+
+  await user.click(screen.getByRole("button", {name: "Pitch"}));
+  await user.click(screen.getByRole("button", {name: "WINDOW_SIZE 4096"}));
+  await user.click(screen.getByRole("button", {name: "SPECTROGRAM_BINS 8192"}));
+
+  await waitFor(() => {
+    expect(localStorage.getItem("voicebox.analysisWindowSize")).toBe("4096");
+    expect(localStorage.getItem("voicebox.spectrogramBinCount")).toBe("8192");
+  });
+});

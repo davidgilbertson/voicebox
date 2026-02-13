@@ -1,10 +1,11 @@
 import {defineConfig} from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import colors from "tailwindcss/colors";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import {cloudflare} from "@cloudflare/vite-plugin";
 import {VitePWA} from "vite-plugin-pwa";
+
+const APP_DISPLAY_NAME = "Voicebox";
 
 export default defineConfig(({mode}) => {
   // We need https to test the mic on mobile during development
@@ -20,8 +21,9 @@ export default defineConfig(({mode}) => {
         registerType: "autoUpdate",
         includeAssets: ["icon-voice.svg"],
         manifest: {
-          name: "Voicebox",
-          short_name: "Voicebox",
+          id: "/",
+          name: APP_DISPLAY_NAME,
+          short_name: APP_DISPLAY_NAME,
           description: "Voice pitch visualizer for tuning and vibrato practice.",
           start_url: "/",
           display: "standalone",
