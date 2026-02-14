@@ -3,9 +3,9 @@ import {
   AUDIO_PATH,
   FFT_BIN_COUNT,
   FFT_HARMONIC_COMB_METHOD,
-  loadWavSamples,
   MAX_HZ,
   MIN_HZ,
+  SCORE_PROCESSORS,
   WINDOW_SIZE,
 } from "./audioProcessing.js";
 import {renderCharts} from "./charts.js";
@@ -17,7 +17,7 @@ function setStatus(text, isError = false) {
 }
 
 // TODO (@davidgilbertson): inline this  
-function buildPayload(track, sampleRate) {
+function buildPayload(track, sampleRate, processorId) {
   return {
     sourceFile: AUDIO_PATH,
     sampleRate,
@@ -29,34 +29,85 @@ function buildPayload(track, sampleRate) {
       maxHz: MAX_HZ,
     },
     track: {
-      method: FFT_HARMONIC_COMB_METHOD,
-      windowCount: track.windowCount,
-      voicedCount: track.voicedCount,
-      voicedRatio: track.windowCount > 0 ? track.voicedCount / track.windowCount : 0,
-      elapsedMs: track.elapsedMs,
-      msPerWindow: track.msPerWindow,
+      method: `${FFT_HARMONIC_COMB_METHOD}:${processorId}`,
       windowIndex: track.windowIndex,
       hz: track.hz,
       freqCandidateStartBins: track.freqCandidateStartBins,
       freqCandidateScores: track.freqCandidateScores,
       windowSpectrumMagnitudes: track.windowSpectrumMagnitudes,
+      processorDebug: track.processorDebug,
     },
   };
 }
 
+async function loadWavSamples(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to load WAV: ${url} (${response.status})`);
+  }
+  const bytes = await response.arrayBuffer();
+  const audioContext = new AudioContext();
+  try {
+    const audioBuffer = await audioContext.decodeAudioData(bytes.slice(0));
+    const channelData = audioBuffer.getChannelData(0);
+    return {
+      sampleRate: audioBuffer.sampleRate,
+      samples: new Float32Array(channelData),
+    };
+  } finally {
+    await audioContext.close();
+  }
+}
+
 // TODO (@davidgilbertson): redundant main() wrapper?
 async function main() {
+  const processorNames = Object.keys(SCORE_PROCESSORS);
+  let selectedProcessorName = processorNames[processorNames.length - 1];
+  let latestRunToken = 0;
+  let selectedWindowIndex = null;
+
+  const controls = document.getElementById("processorControls");
+  controls.replaceChildren();
+  for (const processorName of processorNames) {
+    const label = document.createElement("label");
+    label.className = "processor-option";
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "processor";
+    input.value = processorName;
+    input.checked = processorName === selectedProcessorName;
+    input.addEventListener("change", () => {
+      if (!input.checked || processorName === selectedProcessorName) return;
+      selectedProcessorName = processorName;
+      void runAnalysis();
+    });
+    label.append(input, processorName);
+    controls.append(label);
+  }
+
+  async function runAnalysis() {
+    const runToken = ++latestRunToken;
+    setStatus(`Running browser FFT analysis (${selectedProcessorName})...`);
+    const track = await analyzePitchTrackBrowserFft(samples, sampleRate, selectedProcessorName);
+    if (runToken !== latestRunToken) return;
+    const payload = buildPayload(track, sampleRate, selectedProcessorName);
+    renderCharts(payload, {
+      selectedWindowIndex,
+      onWindowSelect: (windowIndex) => {
+        selectedWindowIndex = windowIndex;
+      },
+    });
+    setStatus(`Done. ${selectedProcessorName}, windows=${track.windowCount}, ${track.msPerWindow.toFixed(3)} ms/window`);
+  }
+
+  let sampleRate = 0;
+  let samples = null;
   try {
     setStatus("Decoding audio sample...");
-    const {sampleRate, samples} = await loadWavSamples(AUDIO_PATH);
-
-    setStatus("Running browser FFT analysis...");
-    const track = await analyzePitchTrackBrowserFft(samples, sampleRate);
-
-    const payload = buildPayload(track, sampleRate);
-    renderCharts(payload);
-
-    setStatus(`Done. windows=${track.windowCount}, voiced=${track.voicedCount}, ${track.msPerWindow.toFixed(3)} ms/window`);
+    const loaded = await loadWavSamples(AUDIO_PATH);
+    sampleRate = loaded.sampleRate;
+    samples = loaded.samples;
+    await runAnalysis();
   } catch (error) {
     console.error(error);
     setStatus(`Failed: ${error instanceof Error ? error.message : String(error)}`, true);

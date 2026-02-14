@@ -48,8 +48,19 @@ export async function createWindowSpectrumComputer({
     context.suspend(snapshotTime).then(async () => {
       analyser.getFloatFrequencyData(dbBins);
       const magnitudes = new Float32Array(dbBins.length);
+      let maxMagnitude = 0;
       for (let bin = 0; bin < dbBins.length; bin += 1) {
-        magnitudes[bin] = dbToMagnitude(dbBins[bin]);
+        const magnitude = dbToMagnitude(dbBins[bin]);
+        magnitudes[bin] = magnitude;
+        if (magnitude > maxMagnitude) {
+          maxMagnitude = magnitude;
+        }
+      }
+      if (maxMagnitude > 0) {
+        const scale = 1 / maxMagnitude;
+        for (let bin = 0; bin < magnitudes.length; bin += 1) {
+          magnitudes[bin] *= scale;
+        }
       }
       magnitudesByWindow[index] = magnitudes;
       await context.resume();

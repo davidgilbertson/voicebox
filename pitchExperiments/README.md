@@ -20,7 +20,7 @@ When writing code, focus on these goals, in descending order of importance
   - Not littered with catches and checks and edge case covering
 - Performance (not important for now)
 
-## Experiment 1: FFT + Harmonic comb
+## Experiment: FFT + Harmonic comb
 
 - Do FFT, generate spectrum
 - For each candidate f0 (an FFT bin)
@@ -28,7 +28,7 @@ When writing code, focus on these goals, in descending order of importance
   - Subtract that from the spectrum (empty the bins for all harmonics)
   - Lower results mean a better match
 
-## Experiment 2: FFT + GCD of top-n peaks
+## Experiment: FFT + GCD of top-n peaks (v4)
 
 - Do FFT, generate spectrum
 - Take the top n peaks (e.g. 3 bins with the highest values)
@@ -39,55 +39,28 @@ When writing code, focus on these goals, in descending order of importance
   - f0 might not be in the top 3 peaks, so you might get (40, 60, 80), but since the smallest gap here is 20, we know f0 without it being there
 - So one signal is "what's the smallest gap" and another is "what's the lowest value" - the smaller of these is either f0 or a harmonic and an upper bound on what f0 could be.
 
-Maybe something like this:
+## Experiment: FFT + walk the peaks (v5)
 
-```js
-function approxGcd(values, {
-  tol = 1.5,        // allowed "smidge"
-  maxDivisor = 8,   // how many d/k candidates to try per pairwise diff
-  minInliers = 2
-} = {}) {
-  const xs = [...new Set(values.filter((v) => Number.isFinite(v) && v > 0))].sort((a, b) => a - b);
-  if (xs.length < 2) return NaN;
+- Do FFT, generate spectrum
+- Go to the max peak. Look left and right (`/2` and `*2`), move to the better one.
+- 'Better' is something like higher peak and more peaky?
+- Show preference for going down.
 
-  const candidates = new Set();
+A variant of this:
 
-  // Candidates come only from pairwise diffs (no full range scan)
-  for (let i = 0; i < xs.length; i += 1) {
-    for (let j = i + 1; j < xs.length; j += 1) {
-      const d = xs[j] - xs[i];
-      if (d <= tol) continue;
-      for (let k = 1; k <= maxDivisor; k += 1) {
-        const g = d / k;
-        if (g > tol) candidates.add(g);
-      }
-    }
-  }
+- Take the highest peak
+- Iterate through hypotheses of which partial it is (f0, h1, h2, etc)
+- If it's f0, you'd expect `/2` to be quiet and `*2` to be loud. And so on.
+- You could also say that you'd expect `*1.5` to be (relatively) quiet.
+- You probably only need to check around ~20 partials max and each one makes a pretty specific prediction (re where peaks and troughs should be)
+- So then if you've got, say H3, then you can go about getting a refined value for f0.
 
-  function distToNearestMultiple(x, g) {
-    const k = Math.max(1, Math.round(x / g));
-    return Math.abs(x - k * g);
-  }
+## Experiment: One of the above + history
 
-  let best = {g: NaN, inliers: -1, error: Infinity};
+Note this is only worth doing if I'm getting off-by-one-octave errors.
 
-  for (const g of candidates) {
-    let inliers = 0;
-    let error = 0;
-    for (const x of xs) {
-      const e = distToNearestMultiple(x, g);
-      if (e <= tol) inliers += 1;
-      error += Math.min(e, tol); // robust cap
-    }
+The major problem is off-by-one-octave errors. But vocals rarely jump one octave in ~40ms. You don't exactly want to take the average with the last value, but if the previous step was an octave lower, and at this step an octave lower was a viable (2nd or 3rd place) candidate, then it's probably the right choice.
 
-    const better =
-        inliers > best.inliers ||
-        (inliers === best.inliers && g > best.g) || // prefer larger denominator (20 over 10)
-        (inliers === best.inliers && g === best.g && error < best.error);
+## Experiment: ML model
 
-    if (better) best = {g, inliers, error};
-  }
-
-  return best.inliers >= minInliers ? best.g : NaN;
-}
-```
+Linear regression. Training data target is just a really good/slow autocorr or high res FFT or some pro software. Inputs are either a raw window or FFT output. Ideally a raw window.

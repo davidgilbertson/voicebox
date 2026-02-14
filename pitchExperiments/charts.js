@@ -1,35 +1,78 @@
 const SHARED_HZ_AXIS_RANGE = [0, 2000];
+let detachWindowKeyHandler = null;
 
-export function renderCharts(payload) {
+export function renderCharts(payload, options = {}) {
+  const {selectedWindowIndex = null, onWindowSelect = null} = options;
   const plotly = globalThis.Plotly;
   if (!plotly) {
     throw new Error("Plotly is not loaded");
   }
+  const finiteHzValues = payload.track.hz.filter((value) => Number.isFinite(value) && value > 0);
+  const observedMaxHz = finiteHzValues.length > 0 ? Math.max(...finiteHzValues) : 0;
+  const dynamicPitchMaxHz = Math.max(
+      1,
+      observedMaxHz > 0 ? observedMaxHz * 1.05 : payload.pitchRange.maxHz
+  );
 
-  const pitchTrace = [{
-    x: payload.track.windowIndex,
-    y: payload.track.hz,
-    mode: "lines+markers",
-    marker: {size: 3, opacity: 0.9},
-    line: {width: 1.5},
-    name: payload.track.method,
-    connectgaps: false,
-    hovertemplate: "Window %{x}<br>Hz %{y:.2f}<extra></extra>",
-  }];
+  function buildPitchTraces(activeWindowNumber) {
+    const mainTrace = {
+      x: payload.track.windowIndex,
+      y: payload.track.hz,
+      mode: "lines+markers",
+      marker: {size: 3, opacity: 0.9},
+      line: {width: 1.5},
+      name: payload.track.method,
+      connectgaps: false,
+      hovertemplate: "Window %{x}<br>Hz %{y:.2f}<extra></extra>",
+    };
+    const selectedHz = payload.track.hz[activeWindowNumber];
+    const selectedTrace = Number.isFinite(selectedHz)
+        ? {
+          x: [activeWindowNumber],
+          y: [selectedHz],
+          mode: "markers",
+          marker: {size: 10, color: "#f59e0b"},
+          name: "selected window",
+          showlegend: false,
+          hovertemplate: "Selected window %{x}<br>Hz %{y:.2f}<extra></extra>",
+        }
+        : {
+          x: [],
+          y: [],
+          mode: "markers",
+          marker: {size: 10, color: "#f59e0b"},
+          name: "selected window",
+          showlegend: false,
+          hovertemplate: "Selected window %{x}<br>Hz %{y:.2f}<extra></extra>",
+        };
+    return [mainTrace, selectedTrace];
+  }
 
-  plotly.newPlot("pitchChart", pitchTrace, {
-    title: `Pitch by Analysis Window (${payload.track.method}, windowSize=${payload.windowSize}, bins=${payload.frequencyBinCount}, browser analyser FFT)`,
-    paper_bgcolor: "#050505",
-    plot_bgcolor: "#050505",
-    font: {color: "#e2e8f0"},
-    margin: {l: 52, r: 24, t: 52, b: 46},
-    xaxis: {title: "Window Index (n)", gridcolor: "#1f2937"},
-    yaxis: {
-      title: "Pitch (Hz)",
-      gridcolor: "#1f2937",
-      range: [payload.pitchRange.minHz, payload.pitchRange.maxHz],
-    },
-  }, {responsive: true});
+  function renderPitchChart(activeWindowNumber) {
+    plotly.newPlot("pitchChart", buildPitchTraces(activeWindowNumber), {
+      title: `Pitch by Analysis Window (${payload.track.method}, windowSize=${payload.windowSize}, bins=${payload.frequencyBinCount}, browser analyser FFT)`,
+      paper_bgcolor: "#050505",
+      plot_bgcolor: "#050505",
+      font: {color: "#e2e8f0"},
+      showlegend: false,
+      margin: {l: 52, r: 24, t: 52, b: 46},
+      xaxis: {title: "Window Index (n)", gridcolor: "#1f2937"},
+      yaxis: {
+        title: "Pitch (Hz)",
+        gridcolor: "#1f2937",
+        range: [0, dynamicPitchMaxHz],
+      },
+    }, {responsive: true});
+  }
+
+  function updateSelectedWindowMarker(activeWindowNumber) {
+    const selectedHz = payload.track.hz[activeWindowNumber];
+    const x = Number.isFinite(selectedHz) ? [[activeWindowNumber]] : [[]];
+    const y = Number.isFinite(selectedHz) ? [[selectedHz]] : [[]];
+    plotly.restyle("pitchChart", {x, y}, [1]);
+  }
+
+  renderPitchChart(0);
 
   function renderCandidateScoresForWindow(windowNumber) {
     const startBin = payload.track.freqCandidateStartBins[windowNumber];
@@ -105,16 +148,68 @@ export function renderCharts(payload) {
     }, {responsive: true});
   }
 
+  function logWindowDebug(windowNumber) {
+    const debug = payload.track.processorDebug?.[windowNumber];
+    if (!debug) return;
+    console.log("[pitchExperiments] window debug", {
+      windowNumber,
+      predictedHz: payload.track.hz[windowNumber],
+      ...debug,
+    });
+  }
+
   const firstInspectableWindow = payload.track.freqCandidateScores.findIndex((scores) => Array.isArray(scores));
-  const initialWindow = firstInspectableWindow >= 0 ? firstInspectableWindow : 0;
-  renderCandidateScoresForWindow(initialWindow);
-  renderSpectrumForWindow(initialWindow);
+  const maxWindowIndex = Math.max(0, payload.track.windowIndex.length - 1);
+  const requestedWindow = Number.isInteger(selectedWindowIndex)
+      ? Math.max(0, Math.min(maxWindowIndex, selectedWindowIndex))
+      : null;
+  const hasRequestedData = requestedWindow !== null
+      && Array.isArray(payload.track.freqCandidateScores[requestedWindow]);
+  const initialWindow = hasRequestedData ? requestedWindow : (firstInspectableWindow >= 0 ? firstInspectableWindow : 0);
+  let activeWindowNumber = initialWindow;
+
+  function selectWindow(windowNumber) {
+    const clampedWindowNumber = Math.max(0, Math.min(maxWindowIndex, windowNumber));
+    activeWindowNumber = clampedWindowNumber;
+    updateSelectedWindowMarker(clampedWindowNumber);
+    renderSpectrumForWindow(clampedWindowNumber);
+    renderCandidateScoresForWindow(clampedWindowNumber);
+    logWindowDebug(clampedWindowNumber);
+    if (typeof onWindowSelect === "function") {
+      onWindowSelect(clampedWindowNumber);
+    }
+  }
+
+  selectWindow(initialWindow);
 
   const pitchChartElement = document.getElementById("pitchChart");
   pitchChartElement.on("plotly_click", (event) => {
-    const windowNumber = event.points?.[0]?.pointIndex;
-    if (windowNumber == null) return;
-    renderCandidateScoresForWindow(windowNumber);
-    renderSpectrumForWindow(windowNumber);
+    const clickedX = event.points?.[0]?.x;
+    const windowNumber = Number.isInteger(clickedX) ? clickedX : null;
+    if (windowNumber === null) return;
+    selectWindow(windowNumber);
   });
+
+  if (detachWindowKeyHandler) {
+    detachWindowKeyHandler();
+    detachWindowKeyHandler = null;
+  }
+  const keydownHandler = (event) => {
+    if (event.defaultPrevented) return;
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    const target = event.target;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) {
+      return;
+    }
+    event.preventDefault();
+    if (event.key === "ArrowLeft") {
+      selectWindow(activeWindowNumber - 1);
+      return;
+    }
+    selectWindow(activeWindowNumber + 1);
+  };
+  window.addEventListener("keydown", keydownHandler);
+  detachWindowKeyHandler = () => {
+    window.removeEventListener("keydown", keydownHandler);
+  };
 }
