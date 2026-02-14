@@ -45,7 +45,7 @@ const [pitchDetectorMode, setPitchDetectorMode] = useState(() => safeReadPitchDe
 - Pause/resume and settings behavior still correct.
 - No console errors/warnings from removed code paths.
 
-## Phase 3: Integrate V5 Detector
+## Phase 3: Integrate V5 Detector ✅
 
 1. Port V5 coarse detector into app pitch path (no experiment-only plumbing).
 
@@ -72,6 +72,11 @@ const [pitchDetectorMode, setPitchDetectorMode] = useState(() => safeReadPitchDe
 - CPU impact and responsiveness.
 
 3. Iterate on detector weights/penalties only after baseline comparisons are captured.
+
+4. FFT input parity follow-up:
+
+- Temporary state: app now captures two FFT outputs per frame (byte bins for spectrogram rendering + float dB bins for V5 detector parity with experiments).
+- Follow-up: remove duplicate capture by unifying to one FFT data path that satisfies both display and detector needs.
 
 ## Phase 5: Flip Default + Cleanup
 

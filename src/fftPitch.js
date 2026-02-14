@@ -1,3 +1,5 @@
+import {clamp} from "./tools.js";
+
 const RMS_MIN = 0.01;
 
 const planCache = new Map();
@@ -102,10 +104,6 @@ function computeRms(data) {
     sumSquares += value * value;
   }
   return Math.sqrt(sumSquares / data.length);
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
 }
 
 function resolveFftSize(dataLength, options = {}) {

@@ -1,7 +1,8 @@
 import {useEffect, useMemo, useRef, useState} from "react";
-import {lerp, ls} from "./tools.js";
+import {clamp, lerp, ls} from "./tools.js";
 import {
   analyzeAudioWindow,
+  analyzeAudioWindowSpectrumV5,
   createAudioState,
   setupAudioState,
 } from "./audioSeries.js";
@@ -20,6 +21,7 @@ import VibratoChart from "./VibratoChart.jsx";
 import PitchChart from "./PitchChart.jsx";
 import SpectrogramChart from "./SpectrogramChart.jsx";
 import {noteNameToCents, noteNameToHz, PITCH_NOTE_OPTIONS} from "./pitchScale.js";
+import {BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor} from "./batteryUsage.js";
 
 const ANALYSIS_WINDOW_SIZE = 2048;
 const SPECTROGRAM_BIN_COUNT = 4096;
@@ -48,11 +50,25 @@ const ACTIVE_VIEW_DEFAULT = "vibrato";
 const AUTO_PAUSE_ON_SILENCE_STORAGE_KEY = "voicebox.autoPauseOnSilence";
 const SHOW_STATS_STORAGE_KEY = "voicebox.showStats";
 const PITCH_ON_SPECTROGRAM_STORAGE_KEY = "voicebox.pitchDetectionOnSpectrogram";
+const USE_LEGACY_AUTOCORR_STORAGE_KEY = "voicebox.useLegacyAutocorr";
+const V5_SETTINGS_STORAGE_KEY = "voicebox.v5Settings";
 const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
 const SHOW_STATS_DEFAULT = false;
 const PITCH_ON_SPECTROGRAM_DEFAULT = true;
+const USE_LEGACY_AUTOCORR_DEFAULT = true;
 const SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY = "voicebox.spectrogramNoiseProfile";
 const MAX_DRAW_JUMP_CENTS = 80;
+const V5_SETTINGS_DEFAULT = {
+  maxP: 6,
+  pCount: 12,
+  pRefineCount: 4,
+  searchRadiusBins: 2,
+  offWeight: 0.5,
+  expectedP0MinRatio: 0.18,
+  expectedP0PenaltyWeight: 2.0,
+  downwardBiasPerP: 0.02,
+  minRms: 0.01,
+};
 
 function computeIsForeground() {
   if (document.visibilityState === "hidden") return false;
@@ -92,6 +108,26 @@ function safeReadSpectrogramNoiseProfile() {
   return profile;
 }
 
+function normalizeV5Settings(source = {}) {
+  return {
+    maxP: clamp(Math.round(Number(source.maxP ?? V5_SETTINGS_DEFAULT.maxP)), 2, 12),
+    pCount: clamp(Math.round(Number(source.pCount ?? V5_SETTINGS_DEFAULT.pCount)), 4, 24),
+    pRefineCount: clamp(Math.round(Number(source.pRefineCount ?? V5_SETTINGS_DEFAULT.pRefineCount)), 1, 8),
+    searchRadiusBins: clamp(Math.round(Number(source.searchRadiusBins ?? V5_SETTINGS_DEFAULT.searchRadiusBins)), 0, 6),
+    offWeight: clamp(Number(source.offWeight ?? V5_SETTINGS_DEFAULT.offWeight), 0, 2),
+    expectedP0MinRatio: clamp(Number(source.expectedP0MinRatio ?? V5_SETTINGS_DEFAULT.expectedP0MinRatio), 0, 1),
+    expectedP0PenaltyWeight: clamp(Number(source.expectedP0PenaltyWeight ?? V5_SETTINGS_DEFAULT.expectedP0PenaltyWeight), 0, 5),
+    downwardBiasPerP: clamp(Number(source.downwardBiasPerP ?? V5_SETTINGS_DEFAULT.downwardBiasPerP), 0, 0.2),
+    minRms: clamp(Number(source.minRms ?? V5_SETTINGS_DEFAULT.minRms), 0, 0.1),
+  };
+}
+
+function safeReadV5Settings() {
+  const stored = ls.get(V5_SETTINGS_STORAGE_KEY, null);
+  const source = stored && typeof stored === "object" ? stored : {};
+  return normalizeV5Settings(source);
+}
+
 export default function App() {
   const initialNoiseProfile = useMemo(() => safeReadSpectrogramNoiseProfile(), []);
   const vibratoChartRef = useRef(null);
@@ -128,6 +164,8 @@ export default function App() {
   const spectrogramCaptureRef = useRef({
     byteBins: new Uint8Array(SPECTROGRAM_BIN_COUNT),
     normalizedBins: new Float32Array(SPECTROGRAM_BIN_COUNT),
+    dbBins: new Float32Array(SPECTROGRAM_BIN_COUNT),
+    detectorBins: new Float32Array(SPECTROGRAM_BIN_COUNT),
     filteredBins: new Float32Array(SPECTROGRAM_BIN_COUNT),
   });
   const spectrogramNoiseRef = useRef({
@@ -136,6 +174,7 @@ export default function App() {
     sumBins: null,
     sampleCount: 0,
   });
+  const batteryUsageMonitorRef = useRef(createBatteryUsageMonitor());
   const animationRef = useRef({
     rafId: 0,
     drawAvg: 0,
@@ -147,6 +186,7 @@ export default function App() {
     level: {rms: 0},
     rawHz: 0,
     hasVoice: false,
+    hasDataTiming: false,
   });
   const forceRedrawRef = useRef(false);
   const activeViewRef = useRef(ACTIVE_VIEW_DEFAULT);
@@ -183,6 +223,10 @@ export default function App() {
   const [pitchDetectionOnSpectrogram, setPitchDetectionOnSpectrogram] = useState(() => {
     return ls.get(PITCH_ON_SPECTROGRAM_STORAGE_KEY, PITCH_ON_SPECTROGRAM_DEFAULT) !== false;
   });
+  const [useLegacyAutocorr, setUseLegacyAutocorr] = useState(() => {
+    return ls.get(USE_LEGACY_AUTOCORR_STORAGE_KEY, USE_LEGACY_AUTOCORR_DEFAULT) !== false;
+  });
+  const [v5Settings, setV5Settings] = useState(() => safeReadV5Settings());
   const [pitchMinNote, setPitchMinNote] = useState(() => safeReadPitchNote(
       "voicebox.pitchMinNote",
       PITCH_MIN_NOTE_DEFAULT
@@ -201,6 +245,7 @@ export default function App() {
   ));
   const [spectrogramNoiseCalibrating, setSpectrogramNoiseCalibrating] = useState(false);
   const [spectrogramNoiseProfileReady, setSpectrogramNoiseProfileReady] = useState(() => initialNoiseProfile !== null);
+  const [batteryUsagePerMinute, setBatteryUsagePerMinute] = useState(null);
 
   const pitchMinHz = noteNameToHz(pitchMinNote);
   const pitchMaxHz = noteNameToHz(pitchMaxNote);
@@ -244,6 +289,14 @@ export default function App() {
   }, [pitchDetectionOnSpectrogram]);
 
   useEffect(() => {
+    ls.set(USE_LEGACY_AUTOCORR_STORAGE_KEY, useLegacyAutocorr);
+  }, [useLegacyAutocorr]);
+
+  useEffect(() => {
+    ls.set(V5_SETTINGS_STORAGE_KEY, v5Settings);
+  }, [v5Settings]);
+
+  useEffect(() => {
     ls.set("voicebox.pitchMinNote", pitchMinNote);
     ls.set("voicebox.pitchMaxNote", pitchMaxNote);
   }, [pitchMinNote, pitchMaxNote]);
@@ -277,6 +330,30 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    let intervalId = 0;
+
+    const sampleBatteryUsage = async () => {
+      const usage = await batteryUsageMonitorRef.current.readUsagePerMinute();
+      if (!cancelled) {
+        setBatteryUsagePerMinute(usage);
+      }
+    };
+
+    sampleBatteryUsage();
+    if (isForeground) {
+      intervalId = window.setInterval(sampleBatteryUsage, BATTERY_SAMPLE_INTERVAL_MS);
+    }
+
+    return () => {
+      cancelled = true;
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [isForeground]);
+
+  useEffect(() => {
     const sampleRate = analysisRef.current.sampleRate;
     rawBufferRef.current = createRawAudioBuffer(sampleRate, {
       windowSize: ANALYSIS_WINDOW_SIZE,
@@ -298,6 +375,8 @@ export default function App() {
     spectrogramCaptureRef.current = {
       byteBins: new Uint8Array(binCount),
       normalizedBins: new Float32Array(binCount),
+      dbBins: new Float32Array(binCount),
+      detectorBins: new Float32Array(binCount),
       filteredBins: new Float32Array(binCount),
     };
     spectrogramRef.current = createSpectrogramTimeline({
@@ -325,19 +404,42 @@ export default function App() {
     forceRedrawRef.current = true;
   }, []);
 
-  const captureSpectrogramBins = () => {
+  const captureSpectrogramBins = ({includeDetectorBins = true} = {}) => {
     const analyser = audioRef.current.analyser;
     if (!analyser) return null;
     const capture = spectrogramCaptureRef.current;
     if (capture.byteBins.length !== analyser.frequencyBinCount) {
       capture.byteBins = new Uint8Array(analyser.frequencyBinCount);
       capture.normalizedBins = new Float32Array(analyser.frequencyBinCount);
+      capture.dbBins = new Float32Array(analyser.frequencyBinCount);
+      capture.detectorBins = new Float32Array(analyser.frequencyBinCount);
     }
     analyser.getByteFrequencyData(capture.byteBins);
     for (let i = 0; i < capture.byteBins.length; i += 1) {
       capture.normalizedBins[i] = capture.byteBins[i] / 255;
     }
-    return capture.normalizedBins;
+    if (includeDetectorBins) {
+      analyser.getFloatFrequencyData(capture.dbBins);
+      let maxMagnitude = 0;
+      for (let i = 0; i < capture.dbBins.length; i += 1) {
+        const dbValue = capture.dbBins[i];
+        const magnitude = Number.isFinite(dbValue) ? 10 ** (dbValue / 20) : 0;
+        capture.detectorBins[i] = magnitude;
+        if (magnitude > maxMagnitude) {
+          maxMagnitude = magnitude;
+        }
+      }
+      if (maxMagnitude > 0) {
+        const scale = 1 / maxMagnitude;
+        for (let i = 0; i < capture.detectorBins.length; i += 1) {
+          capture.detectorBins[i] *= scale;
+        }
+      }
+    }
+    return {
+      spectrogramBins: capture.normalizedBins,
+      detectorBins: includeDetectorBins ? capture.detectorBins : null,
+    };
   };
 
   const beginSpectrogramNoiseCalibration = () => {
@@ -432,8 +534,14 @@ export default function App() {
     let processedWindows = 0;
     let analysisElapsedMs = 0;
     let didTimelineChange = false;
+    let didRunPitchAnalysis = false;
 
     drainRawBuffer(raw, analysis, (windowSamples, nowMs) => {
+      const shouldUseV5 = shouldDetectPitch && !useLegacyAutocorr;
+      const analysisStart = shouldDetectPitch ? performance.now() : 0;
+      const capturedBins = captureSpectrogramBins({includeDetectorBins: shouldUseV5});
+      const sharedSpectrumBins = capturedBins?.spectrogramBins ?? null;
+      const detectorSpectrumBins = capturedBins?.detectorBins ?? null;
       if (spectrogramClockRef.current.writeClockMs <= 0) {
         spectrogramClockRef.current.writeClockMs = nowMs;
       } else {
@@ -445,14 +553,12 @@ export default function App() {
             spectrogramClockRef.current.accumulator
         );
         spectrogramClockRef.current.accumulator = spectrogramStep.accumulator;
-        if (spectrogramStep.steps > 0) {
-          const spectrogramBins = captureSpectrogramBins();
-          if (spectrogramBins) {
+        if (spectrogramStep.steps > 0 && sharedSpectrumBins) {
             let shouldWriteSpectrogram = true;
             if (spectrogramResumeNeedsSignalRef.current) {
               let hasSignal = false;
-              for (let i = 0; i < spectrogramBins.length; i += 1) {
-                if (spectrogramBins[i] > 0) {
+              for (let i = 0; i < sharedSpectrumBins.length; i += 1) {
+                if (sharedSpectrumBins[i] > 0) {
                   hasSignal = true;
                   break;
                 }
@@ -464,11 +570,10 @@ export default function App() {
               }
             }
             if (shouldWriteSpectrogram) {
-              const filteredBins = applyNoiseProfileToSpectrogramBins(spectrogramBins);
+              const filteredBins = applyNoiseProfileToSpectrogramBins(sharedSpectrumBins);
               writeSpectrogramColumn(spectrogramRef.current, filteredBins, spectrogramStep.steps);
               didTimelineChange = true;
             }
-          }
         }
       }
 
@@ -478,12 +583,24 @@ export default function App() {
         return;
       }
 
-      const start = performance.now();
-      const result = analyzeAudioWindow(audioRef.current, windowSamples, minHz, maxHz, {
-        adaptiveRange: currentView === "pitch",
-      });
-      analysisElapsedMs += performance.now() - start;
+      const result = useLegacyAutocorr || !detectorSpectrumBins
+          ? analyzeAudioWindow(audioRef.current, windowSamples, minHz, maxHz, {
+            adaptiveRange: currentView === "pitch",
+          })
+          : analyzeAudioWindowSpectrumV5(
+              audioRef.current,
+              windowSamples,
+              detectorSpectrumBins,
+              minHz,
+              maxHz,
+              {
+                ...v5Settings,
+                adaptiveRange: currentView === "pitch",
+              }
+          );
+      analysisElapsedMs += performance.now() - analysisStart;
       processedWindows += 1;
+      didRunPitchAnalysis = true;
       if (!result) return;
 
       const writeResult = writePitchTimeline(timelineRef.current, {
@@ -498,6 +615,7 @@ export default function App() {
         level: {rms: result.rms},
         rawHz: result.hz,
         hasVoice: result.hasVoice,
+        hasDataTiming: true,
       };
     });
 
@@ -505,6 +623,7 @@ export default function App() {
       const avgPerWindowMs = analysisElapsedMs / processedWindows;
       animationRef.current.dataAvg = lerp(animationRef.current.dataAvg, avgPerWindowMs, 0.2);
     }
+    metricsRef.current.hasDataTiming = didRunPitchAnalysis;
     return didTimelineChange;
   };
 
@@ -573,6 +692,8 @@ export default function App() {
       spectrogramCaptureRef.current = {
         byteBins: new Uint8Array(analyser.frequencyBinCount),
         normalizedBins: new Float32Array(analyser.frequencyBinCount),
+        dbBins: new Float32Array(analyser.frequencyBinCount),
+        detectorBins: new Float32Array(analyser.frequencyBinCount),
         filteredBins: new Float32Array(analyser.frequencyBinCount),
       };
       const existingSpectrogram = spectrogramRef.current;
@@ -761,7 +882,7 @@ export default function App() {
       const latestMetrics = metricsRef.current;
       setStats({
         timings: {
-          data: latestMetrics.hasVoice ? animationRef.current.dataAvg : null,
+          data: latestMetrics.hasDataTiming ? animationRef.current.dataAvg : null,
           draw: animationRef.current.drawAvg,
         },
         level: latestMetrics.level,
@@ -867,8 +988,27 @@ export default function App() {
     }
   };
 
+  const onUseLegacyAutocorrChange = (nextValue) => {
+    ls.set(USE_LEGACY_AUTOCORR_STORAGE_KEY, nextValue);
+    setUseLegacyAutocorr(nextValue);
+    window.location.reload();
+  };
+
+  const onV5SettingChange = (key, nextValue) => {
+    setV5Settings((prev) => normalizeV5Settings({
+      ...prev,
+      [key]: nextValue,
+    }));
+  };
+
   const showStartOverlay = !ui.isRunning && !wantsToRun && (ui.error || !hasEverRun);
   const showPausedOverlay = !ui.isRunning && !wantsToRun && hasEverRun && !ui.error;
+  const batteryUsageDisplay =
+      batteryUsagePerMinute === null
+          ? null
+          : batteryUsagePerMinute === "--"
+              ? "-- %/min"
+              : `${batteryUsagePerMinute.toFixed(2)} %/min`;
 
   return (
       <div className="h-[var(--app-height)] w-full overflow-hidden bg-black text-slate-100">
@@ -999,6 +1139,10 @@ export default function App() {
                   onShowStatsChange={setShowStats}
                   pitchDetectionOnSpectrogram={pitchDetectionOnSpectrogram}
                   onPitchDetectionOnSpectrogramChange={setPitchDetectionOnSpectrogram}
+                  useLegacyAutocorr={useLegacyAutocorr}
+                  onUseLegacyAutocorrChange={onUseLegacyAutocorrChange}
+                  v5Settings={v5Settings}
+                  onV5SettingChange={onV5SettingChange}
                   pitchMinNote={pitchMinNote}
                   pitchMaxNote={pitchMaxNote}
                   pitchNoteOptions={PITCH_NOTE_OPTIONS}
@@ -1014,6 +1158,7 @@ export default function App() {
                   onNoiseCalibratePointerUp={onNoiseCalibratePointerUp}
                   onNoiseCalibrateContextMenu={onNoiseCalibrateContextMenu}
                   onClearSpectrogramNoiseProfile={clearSpectrogramNoiseProfile}
+                  batteryUsageDisplay={batteryUsageDisplay}
               />
           ) : null}
         </div>

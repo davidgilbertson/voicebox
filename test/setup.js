@@ -176,15 +176,23 @@ navigator.mediaDevices.getUserMedia = vi.fn(async () => ({
   getTracks: () => [{stop: () => {}}],
 }));
 
+Object.defineProperty(navigator, "getBattery", {
+  configurable: true,
+  writable: true,
+  value: undefined,
+});
+
 beforeEach(() => {
   visibilityState = "hidden";
   hasFocus = false;
+  navigator.getBattery = undefined;
   localStorage.clear();
 });
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.useRealTimers();
   for (const timeoutId of rafHandles.values()) {
     window.clearTimeout(timeoutId);
   }

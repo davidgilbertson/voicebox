@@ -1,11 +1,12 @@
 {
-  "name": "Voicebox",
+  "name": "voicebox",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "deploy": "npm run build && wrangler deploy",
     "preview": "vite build && vite preview",
     "test": "vitest run --config vitest.config.cjs",
     "test:watch": "vitest --config vitest.config.cjs"

@@ -2,8 +2,9 @@ import {createWindowSpectrumComputer} from "./browserSpectrum.js";
 
 export const FFT_HARMONIC_COMB_METHOD = "fftHarmonicComb";
 // export const AUDIO_PATH = "./assets/david_vocals.wav";
+export const AUDIO_PATH = "./assets/david_vocals2.wav";
 // export const AUDIO_PATH = "./assets/david_vocals_vibrato.wav";
-export const AUDIO_PATH = "./assets/opera-vocals_129bpm_F_minor.wav";
+// export const AUDIO_PATH = "./assets/opera-vocals_129bpm_F_minor.wav";
 // export const AUDIO_PATH = "./assets/opera-female-vocals_140bpm_A_major.wav";
 export const FFT_BIN_COUNT = 4096;
 export const WINDOW_SIZE = 2048;
