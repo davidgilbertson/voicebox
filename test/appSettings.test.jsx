@@ -59,28 +59,20 @@ test("enabling show stats displays stats panel", async () => {
   expect(await screen.findByText(/Data:/)).toBeInTheDocument();
 });
 
-test("pitch detector buttons persist selected mode", async () => {
+test("temporary pitch detector overlay buttons are removed", async () => {
   const user = userEvent.setup();
   render(<App/>);
 
   await user.click(screen.getByRole("button", {name: "Pitch"}));
-  await user.click(screen.getByRole("button", {name: "FFT residual"}));
-
-  await waitFor(() => {
-    expect(localStorage.getItem("voicebox.pitchDetectorMode")).toBe("fft_residual");
-  });
+  expect(screen.queryByRole("button", {name: "FFT residual"})).toBeNull();
+  expect(screen.queryByRole("button", {name: "FFT raw"})).toBeNull();
 });
 
-test("fft size overlay buttons persist selected values", async () => {
+test("temporary window/bin overlay buttons are removed", async () => {
   const user = userEvent.setup();
   render(<App/>);
 
   await user.click(screen.getByRole("button", {name: "Pitch"}));
-  await user.click(screen.getByRole("button", {name: "WINDOW_SIZE 4096"}));
-  await user.click(screen.getByRole("button", {name: "SPECTROGRAM_BINS 8192"}));
-
-  await waitFor(() => {
-    expect(localStorage.getItem("voicebox.analysisWindowSize")).toBe("4096");
-    expect(localStorage.getItem("voicebox.spectrogramBinCount")).toBe("8192");
-  });
+  expect(screen.queryByRole("button", {name: "WINDOW_SIZE 4096"})).toBeNull();
+  expect(screen.queryByRole("button", {name: "SPECTROGRAM_BINS 8192"})).toBeNull();
 });

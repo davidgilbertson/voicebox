@@ -757,6 +757,7 @@ function computeFreqCandidateScoresV4(magnitudes, minBin, maxBin, binSizeHz) {
 }
 
 function computeFreqCandidateScoresV5(magnitudes, minBin, maxBin, binSizeHz) {
+  // Uses a test of partials from FFT to predict the fundamental
   const candidateScores = new Float64Array(maxBin + 1); // Dummy, not used
   const maxP = 8; // Try hypotheses that the strongest peak is P0..P(maxP-1).
   const pCount = 12; // Number of expected partial positions used to score each hypothesis.

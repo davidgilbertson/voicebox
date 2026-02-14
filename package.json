@@ -8,10 +8,7 @@
     "build": "vite build",
     "preview": "vite build && vite preview",
     "test": "vitest run --config vitest.config.cjs",
-    "test:watch": "vitest --config vitest.config.cjs",
-    "perf:harness": "node scripts/perf-harness.js",
-    "perf:accuracy": "node scripts/pitch-accuracy-harness.js",
-    "fft:playground": "node scripts/fft-playground.js"
+    "test:watch": "vitest --config vitest.config.cjs"
   },
   "keywords": [],
   "author": "",

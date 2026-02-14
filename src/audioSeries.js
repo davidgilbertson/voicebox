@@ -1,31 +1,10 @@
 import {detectPitchAutocorr, detectPitchAutocorrDetailed, lerp} from "./tools.js";
-import {detectPitchFftHpsDetailed, detectPitchFftResidualDetailed} from "./fftPitch.js";
 
 const ADAPTIVE_RANGE_MIN_FACTOR = 0.5;
 const ADAPTIVE_RANGE_MAX_FACTOR = 2;
 const ADAPTIVE_RANGE_REACQUIRE_MISSES = 20;
 const ADAPTIVE_RANGE_FULL_SCAN_INTERVAL = 40;
 const ADAPTIVE_RANGE_SWITCH_RATIO = 1.15;
-
-function getFftRefinementProfile(mode) {
-  if (mode === "off") {
-    return null;
-  }
-  if (mode === "wide") {
-    return {
-      minCorr: 0.15,
-      minFactor: 0.7,
-      maxFactor: 1.35,
-      includeThirds: true,
-    };
-  }
-  return {
-    minCorr: 0.2,
-    minFactor: 0.82,
-    maxFactor: 1.22,
-    includeThirds: false,
-  };
-}
 
 export function createAudioState(defaultSamplesPerSecond) {
   return {
@@ -229,87 +208,4 @@ export function analyzeAudioWindow(state, timeData, minHz, maxHz, options = {}) 
     adaptiveRange,
     usedWideSearch,
   });
-}
-
-export function analyzeAudioWindowFft(state, timeData, minHz, maxHz, options = {}) {
-  const {hzBuffer} = state;
-  if (!hzBuffer || !timeData || !timeData.length) return null;
-  const {peak} = computeWindowLevel(state, timeData);
-  const refinementProfile = getFftRefinementProfile(options.refinementMode);
-
-  const detection = options.detector === "residual"
-      ? detectPitchFftResidualDetailed(
-          timeData,
-          state.sampleRate,
-          minHz,
-          maxHz,
-          options.fftOptions
-      )
-      : detectPitchFftHpsDetailed(
-          timeData,
-          state.sampleRate,
-          minHz,
-          maxHz,
-          {
-            ...options.fftOptions,
-            detector: options.detector ?? "hps",
-          }
-      );
-
-  const fftHz = detection.hz;
-  let hz = fftHz;
-  if (refinementProfile && fftHz > 0) {
-    const {minFactor, maxFactor, includeThirds} = refinementProfile;
-    const candidates = [fftHz, fftHz / 2, fftHz * 2];
-    if (includeThirds) {
-      candidates.push(fftHz / 3, fftHz * 3);
-    }
-    if (state.lastTrackedHz > 0) {
-      candidates.push(state.lastTrackedHz);
-    }
-
-    let refinedHz = 0;
-    let bestCorr = 0;
-    const seen = new Set();
-    for (const candidate of candidates) {
-      if (!(candidate > 0)) continue;
-      if (candidate < minHz || candidate > maxHz) continue;
-      const rounded = Math.round(candidate * 10) / 10;
-      if (seen.has(rounded)) continue;
-      seen.add(rounded);
-
-      const narrowMinHz = Math.max(minHz, candidate * minFactor);
-      const narrowMaxHz = Math.min(maxHz, candidate * maxFactor);
-      if (!(narrowMaxHz > narrowMinHz)) continue;
-
-      const refined = detectPitchAutocorrDetailed(
-          timeData,
-          state.sampleRate,
-          narrowMinHz,
-          narrowMaxHz
-      );
-      if (refined.hz > 0 && refined.corrRatio > bestCorr) {
-        bestCorr = refined.corrRatio;
-        refinedHz = refined.hz;
-      }
-    }
-
-    hz = (bestCorr >= refinementProfile.minCorr && refinedHz > 0)
-        ? refinedHz
-        : fftHz;
-  }
-
-  const result = finalizeDetection(state, {
-    peak,
-    hz,
-    minHz,
-    maxHz,
-    adaptiveRange: false,
-    usedWideSearch: false,
-  });
-
-  return {
-    ...result,
-    confidence: detection.confidence,
-  };
 }
