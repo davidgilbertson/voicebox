@@ -1,10 +1,19 @@
-import {clamp, detectPitchAutocorr, detectPitchAutocorrDetailed, lerp} from "./tools.js";
+// Mirror of V5 detector logic from src/audioSeries.js for no-build pitch experiments.
+// Keep in sync manually with app code when V5 changes.
 
 const ADAPTIVE_RANGE_MIN_FACTOR = 0.5;
 const ADAPTIVE_RANGE_MAX_FACTOR = 2;
 const ADAPTIVE_RANGE_REACQUIRE_MISSES = 20;
 const ADAPTIVE_RANGE_FULL_SCAN_INTERVAL = 40;
 const ADAPTIVE_RANGE_SWITCH_RATIO = 1.15;
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function lerp(current, next, factor) {
+  return current + (next - current) * factor;
+}
 
 export function createAudioState(defaultSamplesPerSecond) {
   return {
@@ -96,13 +105,9 @@ function computeWindowLevel(state, timeData) {
     if (absValue > peak) peak = absValue;
     sumSquares += value * value;
   }
-  const rawRms = Math.sqrt(sumSquares / timeData.length);
-  state.levelEma = lerp(state.levelEma, rawRms, 0.2);
-  return {
-    peak,
-    rawRms,
-    rms: state.levelEma,
-  };
+  const rms = Math.sqrt(sumSquares / timeData.length);
+  state.levelEma = lerp(state.levelEma, rms, 0.2);
+  return {peak, rms: state.levelEma};
 }
 
 function finalizeDetection(state, {
@@ -157,15 +162,8 @@ function detectPitchSpectrumV5Detailed(spectrumBins, sampleRate, minHz, maxHz, o
     return {hz: 0, confidence: 0};
   }
 
-  // Set max P to the highest likely partial that the biggest peak could be.
-  // With subharmonics this can easily be 7 or 8.
-  // Linear-ish effect on performance
   const maxP = options.maxP ?? 6;
-  // P count defines how many peaks to simulate for each hypothesis spectrum
-  // That hypothesis spectrum is then compared to the real spectrum
   const pCount = options.pCount ?? 12;
-  // Once a fundamental pitch has been selected, it is refined by looking
-  //  at `pRefineCount` different partials
   const pRefineCount = options.pRefineCount ?? 4;
   const offWeight = options.offWeight ?? 0.5;
   const expectedP0MinRatio = options.expectedP0MinRatio ?? 0.18;
@@ -191,10 +189,11 @@ function detectPitchSpectrumV5Detailed(spectrumBins, sampleRate, minHz, maxHz, o
 
   function scoreHypothesis(f0Bin) {
     if (!Number.isFinite(f0Bin) || f0Bin < minBin || f0Bin > maxBin) {
-      return {score: Number.NEGATIVE_INFINITY, p0Magnitude: 0};
+      return {score: Number.NEGATIVE_INFINITY, p0Magnitude: 0, pContributions: []};
     }
     let score = 0;
     let p0Magnitude = 0;
+    const pContributions = [];
     for (let p = 1; p <= pCount; p += 1) {
       const pBin = Math.round(f0Bin * p);
       if (pBin < minBin || pBin > maxBin) break;
@@ -204,9 +203,11 @@ function detectPitchSpectrumV5Detailed(spectrumBins, sampleRate, minHz, maxHz, o
       }
       const offBin = Math.round(f0Bin * (p + 0.5));
       const offMagnitude = offBin >= minBin && offBin <= maxBin ? spectrumBins[offBin] : 0;
-      score += onMagnitude - (offWeight * offMagnitude);
+      const contribution = onMagnitude - (offWeight * offMagnitude);
+      score += contribution;
+      pContributions.push(contribution);
     }
-    return {score, p0Magnitude};
+    return {score, p0Magnitude, pContributions};
   }
 
   function refineF0FromPartials(baseF0Bin) {
@@ -251,10 +252,16 @@ function detectPitchSpectrumV5Detailed(spectrumBins, sampleRate, minHz, maxHz, o
   let bestP = 1;
   let bestF0Bin = strongestPeakBin;
   let bestScore = Number.NEGATIVE_INFINITY;
+  const byPContributions = {};
+  const byPScore = {};
   for (let p = 1; p <= maxP; p += 1) {
     const f0Bin = strongestPeakBin / p;
-    if (f0Bin < minBin || f0Bin > maxBin) continue;
-    const {score, p0Magnitude} = scoreHypothesis(f0Bin);
+    if (f0Bin < minBin || f0Bin > maxBin) {
+      byPContributions[`ifP${p - 1}`] = [];
+      byPScore[`ifP${p - 1}`] = Number.NEGATIVE_INFINITY;
+      continue;
+    }
+    const {score, p0Magnitude, pContributions} = scoreHypothesis(f0Bin);
     let hypothesisScore = score;
     if (p > 1) {
       const expectedP0Magnitude = strongestPeakMagnitude * expectedP0MinRatio;
@@ -262,6 +269,8 @@ function detectPitchSpectrumV5Detailed(spectrumBins, sampleRate, minHz, maxHz, o
       hypothesisScore -= p0Deficit * expectedP0PenaltyWeight;
     }
     hypothesisScore -= p * downwardBiasPerP;
+    byPContributions[`ifP${p - 1}`] = pContributions;
+    byPScore[`ifP${p - 1}`] = hypothesisScore;
     if (hypothesisScore > bestScore) {
       bestScore = hypothesisScore;
       bestP = p;
@@ -282,76 +291,19 @@ function detectPitchSpectrumV5Detailed(spectrumBins, sampleRate, minHz, maxHz, o
     confidence,
     bestP,
     strongestPeakBin,
+    debug: {
+      strongestPeakBin,
+      strongestPeakHz: strongestPeakBin * binSizeHz,
+      strongestPeakMagnitude,
+      bestP: bestP - 1,
+      bestPScore: bestScore,
+      bestF0Bin,
+      bestF0Hz: bestF0Bin * binSizeHz,
+      prediction: `the peak at ${(strongestPeakBin * binSizeHz).toFixed(2)}hz is P${bestP - 1}`,
+      byPContributions,
+      byPScore,
+    },
   };
-}
-
-export function analyzeAudioWindow(state, timeData, minHz, maxHz, options = {}) {
-  const {hzBuffer} = state;
-  if (!hzBuffer || !timeData || !timeData.length) return null;
-  const {peak} = computeWindowLevel(state, timeData);
-
-  const adaptiveRange = options.adaptiveRange === true;
-  let usedWideSearch = false;
-  let detection = null;
-
-  if (adaptiveRange) {
-    state.adaptiveTick += 1;
-    const canUseTrackedRange =
-        state.lastTrackedHz > 0 &&
-        state.missedDetections < ADAPTIVE_RANGE_REACQUIRE_MISSES;
-    if (canUseTrackedRange) {
-      const narrowMinHz = Math.max(minHz, state.lastTrackedHz * ADAPTIVE_RANGE_MIN_FACTOR);
-      const narrowMaxHz = Math.min(maxHz, state.lastTrackedHz * ADAPTIVE_RANGE_MAX_FACTOR);
-      if (narrowMaxHz > narrowMinHz) {
-        const narrowDetection = detectPitchAutocorrDetailed(
-            timeData,
-            state.sampleRate,
-            narrowMinHz,
-            narrowMaxHz
-        );
-        if (narrowDetection.hz > 0) {
-          detection = narrowDetection;
-          if (state.adaptiveTick % ADAPTIVE_RANGE_FULL_SCAN_INTERVAL === 0) {
-            const fullDetection = detectPitchAutocorrDetailed(
-                timeData,
-                state.sampleRate,
-                minHz,
-                maxHz
-            );
-            usedWideSearch = true;
-            if (
-                fullDetection.hz > 0 &&
-                fullDetection.corrRatio > narrowDetection.corrRatio * ADAPTIVE_RANGE_SWITCH_RATIO
-            ) {
-              detection = fullDetection;
-            }
-          }
-        } else {
-          detection = detectPitchAutocorrDetailed(timeData, state.sampleRate, minHz, maxHz);
-          usedWideSearch = true;
-        }
-      }
-    }
-  }
-
-  if (!detection) {
-    const hz = detectPitchAutocorr(timeData, state.sampleRate, minHz, maxHz);
-    detection = {hz, corrRatio: 0};
-    if (adaptiveRange) {
-      usedWideSearch = true;
-    }
-  }
-
-  const hz = detection.hz;
-
-  return finalizeDetection(state, {
-    peak,
-    hz,
-    minHz,
-    maxHz,
-    adaptiveRange,
-    usedWideSearch,
-  });
 }
 
 export function analyzeAudioWindowSpectrumV5(
@@ -364,12 +316,17 @@ export function analyzeAudioWindowSpectrumV5(
 ) {
   const {hzBuffer} = state;
   if (!hzBuffer || !timeData || !timeData.length || !spectrumBins || !spectrumBins.length) return null;
-  const {peak, rawRms} = computeWindowLevel(state, timeData);
+  const {peak} = computeWindowLevel(state, timeData);
   const adaptiveRange = options.adaptiveRange === true;
   const minRms = Number.isFinite(options.minRms) ? options.minRms : 0.01;
 
+  let sumSquares = 0;
+  for (let i = 0; i < timeData.length; i += 1) {
+    const value = timeData[i];
+    sumSquares += value * value;
+  }
+  const rawRms = Math.sqrt(sumSquares / timeData.length);
   if (rawRms < minRms) {
-    // TODO (@davidgilbertson): combine these?
     const result = finalizeDetection(state, {
       peak,
       hz: 0,
@@ -457,5 +414,6 @@ export function analyzeAudioWindowSpectrumV5(
   return {
     ...result,
     confidence: detection.confidence,
+    debug: detection.debug ?? null,
   };
 }

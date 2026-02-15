@@ -85,3 +85,9 @@ const [pitchDetectorMode, setPitchDetectorMode] = useState(() => safeReadPitchDe
 2. Remove temporary internal switch and any leftover migration scaffolding.
 
 3. Keep `pitchExperiments/` until app behavior is confirmed stable, then remove when no longer needed.
+
+4. Remove adaptive pitch-range scan logic when legacy autocorr is removed:
+
+- Delete adaptive-range state/branches from detector plumbing (`lastTrackedHz`, `missedDetections`, `adaptiveTick`, narrow/full scan switching).
+- Keep V5 as full-range per-window scoring unless/until temporal priors are reintroduced inside V5 scoring itself.
+- Current state: adaptive narrowing is disabled for V5 in app; this is cleanup follow-up for full autocorr removal.

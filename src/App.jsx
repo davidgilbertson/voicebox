@@ -29,8 +29,6 @@ const SAMPLES_PER_SECOND = 200;
 const SILENCE_PAUSE_THRESHOLD_MS = 300;
 const PITCH_SECONDS = 5; // x axis range
 const WAVE_Y_RANGE = 300; // in cents
-const VIBRATO_MIN_HZ = 65; // ~C2
-const VIBRATO_MAX_HZ = 1100; // ~C6
 const CENTER_SECONDS = 1; // Window to use for vertical centering
 const RAW_BUFFER_SECONDS = 8;
 const VIBRATO_RATE_MIN_HZ = 3;
@@ -59,7 +57,7 @@ const USE_LEGACY_AUTOCORR_DEFAULT = true;
 const SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY = "voicebox.spectrogramNoiseProfile";
 const MAX_DRAW_JUMP_CENTS = 80;
 const V5_SETTINGS_DEFAULT = {
-  maxP: 6,
+  maxP: 10,
   pCount: 12,
   pRefineCount: 4,
   searchRadiusBins: 2,
@@ -529,8 +527,8 @@ export default function App() {
     const analysis = analysisRef.current;
     const currentView = activeViewRef.current;
     const shouldDetectPitch = currentView !== "spectrogram" || pitchDetectionOnSpectrogram;
-    const minHz = currentView === "pitch" ? pitchRangeRef.current.minHz : VIBRATO_MIN_HZ;
-    const maxHz = currentView === "pitch" ? pitchRangeRef.current.maxHz : VIBRATO_MAX_HZ;
+    const minHz = currentView === "spectrogram" ? spectrogramMinHz : pitchRangeRef.current.minHz;
+    const maxHz = currentView === "spectrogram" ? spectrogramMaxHz : pitchRangeRef.current.maxHz;
     let processedWindows = 0;
     let analysisElapsedMs = 0;
     let didTimelineChange = false;
@@ -554,26 +552,26 @@ export default function App() {
         );
         spectrogramClockRef.current.accumulator = spectrogramStep.accumulator;
         if (spectrogramStep.steps > 0 && sharedSpectrumBins) {
-            let shouldWriteSpectrogram = true;
-            if (spectrogramResumeNeedsSignalRef.current) {
-              let hasSignal = false;
-              for (let i = 0; i < sharedSpectrumBins.length; i += 1) {
-                if (sharedSpectrumBins[i] > 0) {
-                  hasSignal = true;
-                  break;
-                }
-              }
-              if (hasSignal) {
-                spectrogramResumeNeedsSignalRef.current = false;
-              } else {
-                shouldWriteSpectrogram = false;
+          let shouldWriteSpectrogram = true;
+          if (spectrogramResumeNeedsSignalRef.current) {
+            let hasSignal = false;
+            for (let i = 0; i < sharedSpectrumBins.length; i += 1) {
+              if (sharedSpectrumBins[i] > 0) {
+                hasSignal = true;
+                break;
               }
             }
-            if (shouldWriteSpectrogram) {
-              const filteredBins = applyNoiseProfileToSpectrogramBins(sharedSpectrumBins);
-              writeSpectrogramColumn(spectrogramRef.current, filteredBins, spectrogramStep.steps);
-              didTimelineChange = true;
+            if (hasSignal) {
+              spectrogramResumeNeedsSignalRef.current = false;
+            } else {
+              shouldWriteSpectrogram = false;
             }
+          }
+          if (shouldWriteSpectrogram) {
+            const filteredBins = applyNoiseProfileToSpectrogramBins(sharedSpectrumBins);
+            writeSpectrogramColumn(spectrogramRef.current, filteredBins, spectrogramStep.steps);
+            didTimelineChange = true;
+          }
         }
       }
 
@@ -595,7 +593,7 @@ export default function App() {
               maxHz,
               {
                 ...v5Settings,
-                adaptiveRange: currentView === "pitch",
+                adaptiveRange: false,
               }
           );
       analysisElapsedMs += performance.now() - analysisStart;

@@ -4,7 +4,7 @@ This directory will be used for experimenting with new algorithms to detect pitc
 
 It will be served as a static site, basic html/js/css, no build, etc.
 
-This must be isolated from the rest of the app, never referencing things in other files or vice versa.
+This uses a local mirror of the app V5 detector (`pitchExperiments/audioSeriesV5.local.js`) so experiments stay no-build while preserving app parity.
 
 It will be deleted once the experiments are done.
 

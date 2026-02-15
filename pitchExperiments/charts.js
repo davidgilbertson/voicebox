@@ -1,7 +1,11 @@
 const SHARED_HZ_AXIS_RANGE = [0, 2000];
 let detachWindowKeyHandler = null;
 
-export function renderCharts(payload, options = {}) {
+function hasScores(scores) {
+  return scores != null && Number.isFinite(scores.length) && scores.length > 0;
+}
+
+export async function renderCharts(payload, options = {}) {
   const {selectedWindowIndex = null, onWindowSelect = null} = options;
   const plotly = globalThis.Plotly;
   if (!plotly) {
@@ -48,8 +52,8 @@ export function renderCharts(payload, options = {}) {
     return [mainTrace, selectedTrace];
   }
 
-  function renderPitchChart(activeWindowNumber) {
-    plotly.newPlot("pitchChart", buildPitchTraces(activeWindowNumber), {
+  async function renderPitchChart(activeWindowNumber) {
+    await plotly.newPlot("pitchChart", buildPitchTraces(activeWindowNumber), {
       title: `Pitch by Analysis Window (${payload.track.method}, windowSize=${payload.windowSize}, bins=${payload.frequencyBinCount}, browser analyser FFT)`,
       paper_bgcolor: "#050505",
       plot_bgcolor: "#050505",
@@ -72,14 +76,14 @@ export function renderCharts(payload, options = {}) {
     plotly.restyle("pitchChart", {x, y}, [1]);
   }
 
-  renderPitchChart(0);
+  await renderPitchChart(0);
 
-  function renderCandidateScoresForWindow(windowNumber) {
+  async function renderCandidateScoresForWindow(windowNumber) {
     const startBin = payload.track.freqCandidateStartBins[windowNumber];
     const scores = payload.track.freqCandidateScores[windowNumber];
     const predictedHz = payload.track.hz[windowNumber];
-    if (!Array.isArray(scores) || scores.length === 0 || startBin == null) {
-      plotly.newPlot("candidateChart", [{x: [], y: [], mode: "lines", name: "freqCandidateScores"}], {
+    if (!hasScores(scores) || startBin == null) {
+      await plotly.newPlot("candidateChart", [{x: [], y: [], mode: "lines", name: "freqCandidateScores"}], {
         title: `freqCandidateScores (window ${windowNumber}, no signal)`,
         paper_bgcolor: "#050505",
         plot_bgcolor: "#050505",
@@ -91,11 +95,12 @@ export function renderCharts(payload, options = {}) {
       return;
     }
 
-    const xHz = Array.from({length: scores.length}, (_, i) => (startBin + i) * payload.binSizeHz);
+    const scoreValues = Array.from(scores);
+    const xHz = Array.from({length: scoreValues.length}, (_, i) => (startBin + i) * payload.binSizeHz);
 
-    plotly.newPlot("candidateChart", [{
+    await plotly.newPlot("candidateChart", [{
       x: xHz,
-      y: scores,
+      y: scoreValues,
       mode: "lines",
       name: "freqCandidateScores",
       hovertemplate: "Hz %{x:.1f}<br>Score %{y:.5f}<extra></extra>",
@@ -114,11 +119,11 @@ export function renderCharts(payload, options = {}) {
     }, {responsive: true});
   }
 
-  function renderSpectrumForWindow(windowNumber) {
+  async function renderSpectrumForWindow(windowNumber) {
     const magnitudes = payload.track.windowSpectrumMagnitudes?.[windowNumber];
     const predictedHz = payload.track.hz[windowNumber];
     if (!magnitudes || magnitudes.length === 0) {
-      plotly.newPlot("spectrumChart", [{x: [], y: [], mode: "lines", name: "spectrum"}], {
+      await plotly.newPlot("spectrumChart", [{x: [], y: [], mode: "lines", name: "spectrum"}], {
         title: `Spectrum (window ${windowNumber}, no data)`,
         paper_bgcolor: "#050505",
         plot_bgcolor: "#050505",
@@ -131,7 +136,7 @@ export function renderCharts(payload, options = {}) {
     }
 
     const xHz = Array.from({length: magnitudes.length}, (_, bin) => bin * payload.binSizeHz);
-    plotly.newPlot("spectrumChart", [{
+    await plotly.newPlot("spectrumChart", [{
       x: xHz,
       y: magnitudes,
       mode: "lines",
@@ -158,36 +163,38 @@ export function renderCharts(payload, options = {}) {
     });
   }
 
-  const firstInspectableWindow = payload.track.freqCandidateScores.findIndex((scores) => Array.isArray(scores));
+  const firstInspectableWindow = payload.track.windowSpectrumMagnitudes.findIndex(
+      (magnitudes) => magnitudes && magnitudes.length > 0
+  );
   const maxWindowIndex = Math.max(0, payload.track.windowIndex.length - 1);
   const requestedWindow = Number.isInteger(selectedWindowIndex)
       ? Math.max(0, Math.min(maxWindowIndex, selectedWindowIndex))
       : null;
   const hasRequestedData = requestedWindow !== null
-      && Array.isArray(payload.track.freqCandidateScores[requestedWindow]);
+      && payload.track.windowSpectrumMagnitudes?.[requestedWindow]?.length > 0;
   const initialWindow = hasRequestedData ? requestedWindow : (firstInspectableWindow >= 0 ? firstInspectableWindow : 0);
   let activeWindowNumber = initialWindow;
 
-  function selectWindow(windowNumber) {
+  async function selectWindow(windowNumber) {
     const clampedWindowNumber = Math.max(0, Math.min(maxWindowIndex, windowNumber));
     activeWindowNumber = clampedWindowNumber;
     updateSelectedWindowMarker(clampedWindowNumber);
-    renderSpectrumForWindow(clampedWindowNumber);
-    renderCandidateScoresForWindow(clampedWindowNumber);
+    await renderSpectrumForWindow(clampedWindowNumber);
+    await renderCandidateScoresForWindow(clampedWindowNumber);
     logWindowDebug(clampedWindowNumber);
     if (typeof onWindowSelect === "function") {
       onWindowSelect(clampedWindowNumber);
     }
   }
 
-  selectWindow(initialWindow);
+  await selectWindow(initialWindow);
 
   const pitchChartElement = document.getElementById("pitchChart");
-  pitchChartElement.on("plotly_click", (event) => {
+  pitchChartElement.on("plotly_click", async (event) => {
     const clickedX = event.points?.[0]?.x;
     const windowNumber = Number.isInteger(clickedX) ? clickedX : null;
     if (windowNumber === null) return;
-    selectWindow(windowNumber);
+    await selectWindow(windowNumber);
   });
 
   if (detachWindowKeyHandler) {
@@ -203,10 +210,10 @@ export function renderCharts(payload, options = {}) {
     }
     event.preventDefault();
     if (event.key === "ArrowLeft") {
-      selectWindow(activeWindowNumber - 1);
+      void selectWindow(activeWindowNumber - 1);
       return;
     }
-    selectWindow(activeWindowNumber + 1);
+    void selectWindow(activeWindowNumber + 1);
   };
   window.addEventListener("keydown", keydownHandler);
   detachWindowKeyHandler = () => {
