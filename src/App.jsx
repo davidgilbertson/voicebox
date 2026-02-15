@@ -49,11 +49,13 @@ const AUTO_PAUSE_ON_SILENCE_STORAGE_KEY = "voicebox.autoPauseOnSilence";
 const SHOW_STATS_STORAGE_KEY = "voicebox.showStats";
 const PITCH_ON_SPECTROGRAM_STORAGE_KEY = "voicebox.pitchDetectionOnSpectrogram";
 const USE_LEGACY_AUTOCORR_STORAGE_KEY = "voicebox.useLegacyAutocorr";
+const RUN_AT_30_FPS_STORAGE_KEY = "voicebox.runAt30Fps";
 const V5_SETTINGS_STORAGE_KEY = "voicebox.v5Settings";
 const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
 const SHOW_STATS_DEFAULT = false;
 const PITCH_ON_SPECTROGRAM_DEFAULT = true;
 const USE_LEGACY_AUTOCORR_DEFAULT = true;
+const RUN_AT_30_FPS_DEFAULT = false;
 const SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY = "voicebox.spectrogramNoiseProfile";
 const MAX_DRAW_JUMP_CENTS = 80;
 const V5_SETTINGS_DEFAULT = {
@@ -175,6 +177,7 @@ export default function App() {
   const batteryUsageMonitorRef = useRef(createBatteryUsageMonitor());
   const animationRef = useRef({
     rafId: 0,
+    lastFrameMs: 0,
     drawAvg: 0,
     dataAvg: 0,
     displayedVibratoRateHz: null,
@@ -188,6 +191,7 @@ export default function App() {
   });
   const forceRedrawRef = useRef(false);
   const activeViewRef = useRef(ACTIVE_VIEW_DEFAULT);
+  const runAt30FpsRef = useRef(RUN_AT_30_FPS_DEFAULT);
   const pitchRangeRef = useRef({
     minHz: noteNameToHz(PITCH_MIN_NOTE_DEFAULT),
     maxHz: noteNameToHz(PITCH_MAX_NOTE_DEFAULT),
@@ -224,6 +228,9 @@ export default function App() {
   const [useLegacyAutocorr, setUseLegacyAutocorr] = useState(() => {
     return ls.get(USE_LEGACY_AUTOCORR_STORAGE_KEY, USE_LEGACY_AUTOCORR_DEFAULT) !== false;
   });
+  const [runAt30Fps, setRunAt30Fps] = useState(() => {
+    return ls.get(RUN_AT_30_FPS_STORAGE_KEY, RUN_AT_30_FPS_DEFAULT) === true;
+  });
   const [v5Settings, setV5Settings] = useState(() => safeReadV5Settings());
   const [pitchMinNote, setPitchMinNote] = useState(() => safeReadPitchNote(
       "voicebox.pitchMinNote",
@@ -253,6 +260,10 @@ export default function App() {
   useEffect(() => {
     activeViewRef.current = activeView;
   }, [activeView]);
+
+  useEffect(() => {
+    runAt30FpsRef.current = runAt30Fps;
+  }, [runAt30Fps]);
 
   useEffect(() => {
     pitchRangeRef.current = {
@@ -289,6 +300,10 @@ export default function App() {
   useEffect(() => {
     ls.set(USE_LEGACY_AUTOCORR_STORAGE_KEY, useLegacyAutocorr);
   }, [useLegacyAutocorr]);
+
+  useEffect(() => {
+    ls.set(RUN_AT_30_FPS_STORAGE_KEY, runAt30Fps);
+  }, [runAt30Fps]);
 
   useEffect(() => {
     ls.set(V5_SETTINGS_STORAGE_KEY, v5Settings);
@@ -814,9 +829,19 @@ export default function App() {
     });
   };
 
-  const renderLoop = () => {
+  const renderLoop = (nowMs) => {
+    if (runAt30FpsRef.current) {
+      const lastFrameMs = animationRef.current.lastFrameMs;
+      if (lastFrameMs > 0 && (nowMs - lastFrameMs) <= 25) {
+        animationRef.current.rafId = requestAnimationFrame(renderLoop);
+        return;
+      }
+      animationRef.current.lastFrameMs = nowMs;
+    } else {
+      animationRef.current.lastFrameMs = 0;
+    }
+
     const didTimelineChange = processBufferedAudio();
-    const nowMs = performance.now();
     const previousDisplayedRateHz = animationRef.current.displayedVibratoRateHz;
     let displayedRateHz = null;
     const currentView = activeViewRef.current;
@@ -992,6 +1017,10 @@ export default function App() {
     window.location.reload();
   };
 
+  const onRunAt30FpsChange = (nextValue) => {
+    setRunAt30Fps(nextValue);
+  };
+
   const onV5SettingChange = (key, nextValue) => {
     setV5Settings((prev) => normalizeV5Settings({
       ...prev,
@@ -1139,6 +1168,8 @@ export default function App() {
                   onPitchDetectionOnSpectrogramChange={setPitchDetectionOnSpectrogram}
                   useLegacyAutocorr={useLegacyAutocorr}
                   onUseLegacyAutocorrChange={onUseLegacyAutocorrChange}
+                  runAt30Fps={runAt30Fps}
+                  onRunAt30FpsChange={onRunAt30FpsChange}
                   v5Settings={v5Settings}
                   onV5SettingChange={onV5SettingChange}
                   pitchMinNote={pitchMinNote}

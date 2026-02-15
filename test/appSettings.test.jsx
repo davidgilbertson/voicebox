@@ -12,20 +12,25 @@ test("settings defaults and persistence work via localStorage", async () => {
   const autoPauseCheckbox = screen.getByRole("checkbox", {name: /Auto pause on silence/i});
   const showStatsCheckbox = screen.getByRole("checkbox", {name: /Show stats/i});
   const legacyAutocorrCheckbox = screen.getByRole("checkbox", {name: /Use legacy autocorr/i});
+  const runAt30FpsCheckbox = screen.getByRole("checkbox", {name: /Run at 30 FPS/i});
 
   expect(autoPauseCheckbox).toBeChecked();
   expect(showStatsCheckbox).not.toBeChecked();
   expect(legacyAutocorrCheckbox).toBeChecked();
+  expect(runAt30FpsCheckbox).not.toBeChecked();
 
   await user.click(showStatsCheckbox);
   expect(showStatsCheckbox).toBeChecked();
   await user.click(legacyAutocorrCheckbox);
   expect(legacyAutocorrCheckbox).not.toBeChecked();
+  await user.click(runAt30FpsCheckbox);
+  expect(runAt30FpsCheckbox).toBeChecked();
 
   await waitFor(() => {
     expect(localStorage.getItem("voicebox.showStats")).toBe("true");
     expect(localStorage.getItem("voicebox.autoPauseOnSilence")).toBe("true");
     expect(localStorage.getItem("voicebox.useLegacyAutocorr")).toBe("false");
+    expect(localStorage.getItem("voicebox.runAt30Fps")).toBe("true");
   });
 });
 

@@ -15,6 +15,8 @@ export default function SettingsPanel({
                                         onPitchDetectionOnSpectrogramChange,
                                         useLegacyAutocorr,
                                         onUseLegacyAutocorrChange,
+                                        runAt30Fps,
+                                        onRunAt30FpsChange,
                                         v5Settings,
                                         onV5SettingChange,
                                         pitchMinNote,
@@ -130,6 +132,20 @@ export default function SettingsPanel({
                   type="checkbox"
                   checked={useLegacyAutocorr}
                   onChange={(event) => onUseLegacyAutocorrChange(event.target.checked)}
+                  className={SETTINGS_CHECKBOX_CLASS}
+              />
+            </label>
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <div className="flex flex-col gap-1">
+                <span>Run at 30 FPS</span>
+                <span className="text-xs text-slate-400">
+                  Limit rendering to 30 FPS to reduce battery use.<br/>Default is 60 FPS for most devices.
+                </span>
+              </div>
+              <input
+                  type="checkbox"
+                  checked={runAt30Fps}
+                  onChange={(event) => onRunAt30FpsChange(event.target.checked)}
                   className={SETTINGS_CHECKBOX_CLASS}
               />
             </label>
