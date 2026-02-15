@@ -50,12 +50,14 @@ const SHOW_STATS_STORAGE_KEY = "voicebox.showStats";
 const PITCH_ON_SPECTROGRAM_STORAGE_KEY = "voicebox.pitchDetectionOnSpectrogram";
 const USE_LEGACY_AUTOCORR_STORAGE_KEY = "voicebox.useLegacyAutocorr";
 const RUN_AT_30_FPS_STORAGE_KEY = "voicebox.runAt30Fps";
+const HALF_RESOLUTION_CANVAS_STORAGE_KEY = "voicebox.halfResolutionCanvas";
 const V5_SETTINGS_STORAGE_KEY = "voicebox.v5Settings";
 const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
 const SHOW_STATS_DEFAULT = false;
 const PITCH_ON_SPECTROGRAM_DEFAULT = true;
 const USE_LEGACY_AUTOCORR_DEFAULT = true;
 const RUN_AT_30_FPS_DEFAULT = false;
+const HALF_RESOLUTION_CANVAS_DEFAULT = false;
 const SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY = "voicebox.spectrogramNoiseProfile";
 const MAX_DRAW_JUMP_CENTS = 80;
 const V5_SETTINGS_DEFAULT = {
@@ -231,6 +233,9 @@ export default function App() {
   const [runAt30Fps, setRunAt30Fps] = useState(() => {
     return ls.get(RUN_AT_30_FPS_STORAGE_KEY, RUN_AT_30_FPS_DEFAULT) === true;
   });
+  const [halfResolutionCanvas, setHalfResolutionCanvas] = useState(() => {
+    return ls.get(HALF_RESOLUTION_CANVAS_STORAGE_KEY, HALF_RESOLUTION_CANVAS_DEFAULT) === true;
+  });
   const [v5Settings, setV5Settings] = useState(() => safeReadV5Settings());
   const [pitchMinNote, setPitchMinNote] = useState(() => safeReadPitchNote(
       "voicebox.pitchMinNote",
@@ -304,6 +309,10 @@ export default function App() {
   useEffect(() => {
     ls.set(RUN_AT_30_FPS_STORAGE_KEY, runAt30Fps);
   }, [runAt30Fps]);
+
+  useEffect(() => {
+    ls.set(HALF_RESOLUTION_CANVAS_STORAGE_KEY, halfResolutionCanvas);
+  }, [halfResolutionCanvas]);
 
   useEffect(() => {
     ls.set(V5_SETTINGS_STORAGE_KEY, v5Settings);
@@ -1055,6 +1064,7 @@ export default function App() {
                       vibratoRateMaxHz={VIBRATO_RATE_MAX_HZ}
                       vibratoSweetMinHz={VIBRATO_SWEET_MIN_HZ}
                       vibratoSweetMaxHz={VIBRATO_SWEET_MAX_HZ}
+                      renderScale={halfResolutionCanvas ? 0.5 : 1}
                   />
               ) : activeView === "spectrogram" ? (
                   <SpectrogramChart
@@ -1062,6 +1072,7 @@ export default function App() {
                       className="h-full w-full"
                       minHz={spectrogramMinHz}
                       maxHz={spectrogramMaxHz}
+                      renderScale={halfResolutionCanvas ? 0.5 : 1}
                   />
               ) : (
                   <PitchChart
@@ -1069,6 +1080,7 @@ export default function App() {
                       minCents={pitchMinCents}
                       maxCents={pitchMaxCents}
                       maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
+                      renderScale={halfResolutionCanvas ? 0.5 : 1}
                   />
               )}
               {showStartOverlay ? (
@@ -1170,6 +1182,8 @@ export default function App() {
                   onUseLegacyAutocorrChange={onUseLegacyAutocorrChange}
                   runAt30Fps={runAt30Fps}
                   onRunAt30FpsChange={onRunAt30FpsChange}
+                  halfResolutionCanvas={halfResolutionCanvas}
+                  onHalfResolutionCanvasChange={setHalfResolutionCanvas}
                   v5Settings={v5Settings}
                   onV5SettingChange={onV5SettingChange}
                   pitchMinNote={pitchMinNote}

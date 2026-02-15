@@ -14,7 +14,12 @@ const LABEL_X = 4;
 const PLOT_LEFT = 21;
 const PLOT_Y_INSET = 5;
 
-const PitchChart = forwardRef(function PitchChart({minCents, maxCents, maxDrawJumpCents}, ref) {
+const PitchChart = forwardRef(function PitchChart({
+  minCents,
+  maxCents,
+  maxDrawJumpCents,
+  renderScale = 1,
+}, ref) {
   const chartRef = useRef(null);
   const backgroundCacheRef = useRef(null);
 
@@ -99,7 +104,11 @@ const PitchChart = forwardRef(function PitchChart({minCents, maxCents, maxDrawJu
 
   return (
       <div className="relative min-h-0 flex-[2] p-0">
-        <Chart ref={chartRef} className="h-full w-full"/>
+        <Chart
+            ref={chartRef}
+            className="h-full w-full"
+            renderScale={renderScale}
+        />
       </div>
   );
 });

@@ -13,11 +13,13 @@ test("settings defaults and persistence work via localStorage", async () => {
   const showStatsCheckbox = screen.getByRole("checkbox", {name: /Show stats/i});
   const legacyAutocorrCheckbox = screen.getByRole("checkbox", {name: /Use legacy autocorr/i});
   const runAt30FpsCheckbox = screen.getByRole("checkbox", {name: /Run at 30 FPS/i});
+  const halfResolutionCanvasCheckbox = screen.getByRole("checkbox", {name: /Half-resolution canvas/i});
 
   expect(autoPauseCheckbox).toBeChecked();
   expect(showStatsCheckbox).not.toBeChecked();
   expect(legacyAutocorrCheckbox).toBeChecked();
   expect(runAt30FpsCheckbox).not.toBeChecked();
+  expect(halfResolutionCanvasCheckbox).not.toBeChecked();
 
   await user.click(showStatsCheckbox);
   expect(showStatsCheckbox).toBeChecked();
@@ -25,12 +27,15 @@ test("settings defaults and persistence work via localStorage", async () => {
   expect(legacyAutocorrCheckbox).not.toBeChecked();
   await user.click(runAt30FpsCheckbox);
   expect(runAt30FpsCheckbox).toBeChecked();
+  await user.click(halfResolutionCanvasCheckbox);
+  expect(halfResolutionCanvasCheckbox).toBeChecked();
 
   await waitFor(() => {
     expect(localStorage.getItem("voicebox.showStats")).toBe("true");
     expect(localStorage.getItem("voicebox.autoPauseOnSilence")).toBe("true");
     expect(localStorage.getItem("voicebox.useLegacyAutocorr")).toBe("false");
     expect(localStorage.getItem("voicebox.runAt30Fps")).toBe("true");
+    expect(localStorage.getItem("voicebox.halfResolutionCanvas")).toBe("true");
   });
 });
 

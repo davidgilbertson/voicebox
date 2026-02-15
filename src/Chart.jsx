@@ -2,7 +2,10 @@ import {forwardRef, useImperativeHandle, useRef} from "react";
 import colors from "tailwindcss/colors";
 import {smoothDisplayTimeline} from "./displaySmoothing.js";
 
-const Chart = forwardRef(function Chart({className = ""}, ref) {
+const Chart = forwardRef(function Chart({
+  className = "",
+  renderScale = 1,
+}, ref) {
   const canvasRef = useRef(null);
   const smoothedValuesRef = useRef(null);
 
@@ -31,16 +34,20 @@ const Chart = forwardRef(function Chart({className = ""}, ref) {
     const cssWidth = Math.max(1, Math.floor(clientWidth));
     const cssHeight = Math.max(1, Math.floor(clientHeight));
     const dpr = window.devicePixelRatio || 1;
-    const width = Math.max(1, Math.round(cssWidth * dpr));
-    const height = Math.max(1, Math.round(cssHeight * dpr));
+    const effectiveScale = Math.max(0.25, Math.min(1, renderScale));
+    const renderDpr = dpr * effectiveScale;
+    const width = Math.max(1, Math.round(cssWidth * renderDpr));
+    const height = Math.max(1, Math.round(cssHeight * renderDpr));
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
       canvas.height = height;
     }
+    const actualScaleX = width / cssWidth;
+    const actualScaleY = height / cssHeight;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, width, height);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(actualScaleX, 0, 0, actualScaleY, 0, 0);
 
     if (drawBackground) {
       drawBackground(ctx, cssWidth, cssHeight);
@@ -108,13 +115,20 @@ const Chart = forwardRef(function Chart({className = ""}, ref) {
     if (hasActivePath) {
       ctx.stroke();
     }
+
   };
 
   useImperativeHandle(ref, () => ({
     draw,
   }));
 
-  return <canvas ref={canvasRef} className={className}/>;
+  return (
+      <canvas
+          ref={canvasRef}
+          className={className}
+          style={{imageRendering: "pixelated"}}
+      />
+  );
 });
 
 export default Chart;

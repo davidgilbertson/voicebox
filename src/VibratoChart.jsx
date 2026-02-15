@@ -16,6 +16,7 @@ const VibratoChart = forwardRef(function VibratoChart({
   vibratoRateMaxHz,
   vibratoSweetMinHz,
   vibratoSweetMaxHz,
+  renderScale = 1,
 }, ref) {
   const chartRef = useRef(null);
   const barRef = useRef(null);
@@ -95,7 +96,11 @@ const VibratoChart = forwardRef(function VibratoChart({
   return (
       <>
         <div className="relative min-h-0 flex-[2] p-0">
-          <Chart ref={chartRef} className="h-full w-full"/>
+          <Chart
+              ref={chartRef}
+              className="h-full w-full"
+              renderScale={renderScale}
+          />
         </div>
         <div className="pointer-events-none border-t border-slate-800/70 px-2 pb-2 pt-1">
           <div className="relative">

@@ -86,7 +86,12 @@ function fillSpectrogramColumns({
   return imageStartX;
 }
 
-const SpectrogramChart = forwardRef(function SpectrogramChart({className = "", minHz, maxHz}, ref) {
+const SpectrogramChart = forwardRef(function SpectrogramChart({
+  className = "",
+  minHz,
+  maxHz,
+  renderScale = 1,
+}, ref) {
   const canvasRef = useRef(null);
   const palette = useMemo(() => createPalette(), []);
   const renderCanvasRef = useRef(null);
@@ -115,18 +120,22 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({className = "", m
       const cssWidth = Math.max(1, Math.floor(clientWidth));
       const cssHeight = Math.max(1, Math.floor(clientHeight));
       const dpr = window.devicePixelRatio || 1;
-      const width = Math.max(1, Math.round(cssWidth * dpr));
-      const height = Math.max(1, Math.round(cssHeight * dpr));
+      const effectiveScale = Math.max(0.25, Math.min(1, renderScale));
+      const renderDpr = dpr * effectiveScale;
+      const width = Math.max(1, Math.round(cssWidth * renderDpr));
+      const height = Math.max(1, Math.round(cssHeight * renderDpr));
       if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width;
         canvas.height = height;
       }
+      const actualScaleX = width / cssWidth;
+      const actualScaleY = height / cssHeight;
 
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, width, height);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.setTransform(actualScaleX, 0, 0, actualScaleY, 0, 0);
 
       const plotLeft = Math.max(0, PLOT_LEFT);
       const plotTop = Math.max(0, PLOT_Y_INSET);
@@ -282,7 +291,7 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({className = "", m
         if (labelCtx) {
           labelCtx.setTransform(1, 0, 0, 1, 0, 0);
           labelCtx.clearRect(0, 0, width, height);
-          labelCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          labelCtx.setTransform(actualScaleX, 0, 0, actualScaleY, 0, 0);
           labelCtx.font = LABEL_FONT;
           labelCtx.textAlign = "left";
           labelCtx.textBaseline = "middle";
@@ -314,12 +323,17 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({className = "", m
 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(labelCanvas, 0, 0, width, height);
+
     },
-  }), [maxHz, minHz, palette]);
+  }), [maxHz, minHz, palette, renderScale]);
 
   return (
       <div className="relative min-h-0 flex-[2] p-0">
-        <canvas ref={canvasRef} className={className}/>
+        <canvas
+            ref={canvasRef}
+            className={className}
+            style={{imageRendering: "pixelated"}}
+        />
       </div>
   );
 });
