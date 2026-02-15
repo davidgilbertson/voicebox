@@ -2,9 +2,9 @@ import {createWindowSpectrumComputer} from "./browserSpectrum.js";
 import {analyzeAudioWindowSpectrumV5, createAudioState, setupAudioState} from "./audioSeriesV5.local.js";
 
 export const FFT_HARMONIC_COMB_METHOD = "fftHarmonicComb";
-// export const AUDIO_PATH = "./assets/david_vocals.wav";
+export const AUDIO_PATH = "./assets/david_vocals.wav";
 // export const AUDIO_PATH = "./assets/david_vocals2.wav";
-export const AUDIO_PATH = "./assets/david_subharmonics.wav";
+// export const AUDIO_PATH = "./assets/david_subharmonics.wav";
 // export const AUDIO_PATH = "./assets/david_vocals_vibrato.wav";
 // export const AUDIO_PATH = "./assets/opera-vocals_129bpm_F_minor.wav";
 // export const AUDIO_PATH = "./assets/opera-female-vocals_140bpm_A_major.wav";
