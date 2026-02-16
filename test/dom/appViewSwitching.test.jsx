@@ -12,12 +12,14 @@ test("active view is restored from localStorage and saved on switch", async () =
   const pitchButton = screen.getByRole("button", {name: "Pitch"});
   const vibratoButton = screen.getByRole("button", {name: "Vibrato"});
   const spectrogramButton = screen.getByRole("button", {name: "Spectrogram"});
-  expect(spectrogramButton).toHaveClass("bg-sky-400");
-  expect(pitchButton).not.toHaveClass("bg-sky-400");
-  expect(vibratoButton).not.toHaveClass("bg-sky-400");
+  expect(spectrogramButton).toHaveAttribute("aria-pressed", "true");
+  expect(pitchButton).toHaveAttribute("aria-pressed", "false");
+  expect(vibratoButton).toHaveAttribute("aria-pressed", "false");
 
   await user.click(vibratoButton);
-  expect(vibratoButton).toHaveClass("bg-sky-400");
+  expect(vibratoButton).toHaveAttribute("aria-pressed", "true");
+  expect(pitchButton).toHaveAttribute("aria-pressed", "false");
+  expect(spectrogramButton).toHaveAttribute("aria-pressed", "false");
 
   await waitFor(() => {
     expect(localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY)).toBe("vibrato");
@@ -32,5 +34,5 @@ test("switching views redraws the active chart without errors", async () => {
   await user.click(screen.getByRole("button", {name: "Spectrogram"}));
   await user.click(screen.getByRole("button", {name: "Vibrato"}));
 
-  expect(screen.getByRole("button", {name: "Vibrato"})).toHaveClass("bg-sky-400");
+  expect(screen.getByRole("button", {name: "Vibrato"})).toHaveAttribute("aria-pressed", "true");
 });

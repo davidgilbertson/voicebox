@@ -88,6 +88,7 @@ export function drawSemitoneLabels(ctx, width, height, waveRange, options = {}) 
   for (const step of steps) {
     const cents = step * 100;
     const y = midY - cents * scaleY;
-    ctx.fillText(`${step}`, labelX, y);
+    const label = step > 0 ? `+${step}` : `${step}`;
+    ctx.fillText(label, labelX, y);
   }
 }

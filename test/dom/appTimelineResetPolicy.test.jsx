@@ -13,5 +13,5 @@ test("opening and closing settings does not clear active view", async () => {
   await user.click(screen.getByLabelText("Close settings"));
 
   const pitchButton = screen.getByRole("button", {name: "Pitch"});
-  expect(pitchButton).toHaveClass("bg-sky-400");
+  expect(pitchButton).toHaveAttribute("aria-pressed", "true");
 });

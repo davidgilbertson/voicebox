@@ -92,6 +92,13 @@ const VibratoChart = forwardRef(function VibratoChart({
       : clamp(vibratoRatePositionPct, 8, 92);
   const sweetStartPct = ((vibratoSweetMinHz - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100;
   const sweetEndPct = ((vibratoSweetMaxHz - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100;
+  const sweetSpanHz = Math.max(1e-3, vibratoSweetMaxHz - vibratoSweetMinHz);
+  const fadePct = clamp((1 / sweetSpanHz) * 100, 0, 50);
+  const sweetGradient = `linear-gradient(to right,
+    rgba(52, 211, 153, 0) 0%,
+    rgba(52, 211, 153, 0.85) ${fadePct}%,
+    rgba(52, 211, 153, 0.85) ${100 - fadePct}%,
+    rgba(52, 211, 153, 0) 100%)`;
 
   return (
       <>
@@ -106,10 +113,11 @@ const VibratoChart = forwardRef(function VibratoChart({
           <div className="relative">
             <div ref={barRef} className="relative h-3 w-full overflow-hidden rounded-none bg-slate-600/80">
               <div
-                  className="absolute top-0 bottom-0 bg-emerald-400/85"
+                  className="absolute top-0 bottom-0"
                   style={{
                     left: `${sweetStartPct}%`,
                     width: `${sweetEndPct - sweetStartPct}%`,
+                    background: sweetGradient,
                   }}
               />
             </div>

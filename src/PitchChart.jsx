@@ -5,7 +5,7 @@ import {createPitchGridLines} from "./pitchScale.js";
 
 const GRID_COLORS = {
   octave: colors.slate[300],
-  natural: colors.slate[700],
+  natural: colors.slate[600],
   accidental: colors.slate[800],
 };
 
@@ -15,11 +15,11 @@ const PLOT_LEFT = 21;
 const PLOT_Y_INSET = 5;
 
 const PitchChart = forwardRef(function PitchChart({
-  minCents,
-  maxCents,
-  maxDrawJumpCents,
-  renderScale = 1,
-}, ref) {
+                                                    minCents,
+                                                    maxCents,
+                                                    maxDrawJumpCents,
+                                                    renderScale = 1,
+                                                  }, ref) {
   const chartRef = useRef(null);
   const backgroundCacheRef = useRef(null);
 
@@ -76,7 +76,6 @@ const PitchChart = forwardRef(function PitchChart({
               bgCtx.stroke();
               bgCtx.beginPath();
             }
-
             bgCtx.font = "12px system-ui";
             bgCtx.textAlign = "left";
             bgCtx.textBaseline = "middle";

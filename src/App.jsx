@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useRef, useState} from "react";
+import {Settings} from "lucide-react";
 import {clamp, lerp, ls} from "./tools.js";
 import {
   analyzeAudioWindowFftPitch,
@@ -28,7 +29,7 @@ const SPECTROGRAM_BIN_COUNT = 4096;
 const SAMPLES_PER_SECOND = 200;
 const SILENCE_PAUSE_THRESHOLD_MS = 300;
 const PITCH_SECONDS = 5; // x axis range
-const WAVE_Y_RANGE = 300; // in cents
+const WAVE_Y_RANGE = 305; // in cents
 const CENTER_SECONDS = 1; // Window to use for vertical centering
 const RAW_BUFFER_SECONDS = 8;
 const VIBRATO_RATE_MIN_HZ = 3;
@@ -1057,7 +1058,7 @@ export default function App() {
               ) : null}
               {showPausedOverlay ? (
                   <div className="pointer-events-none absolute inset-0 z-10">
-                    <div className="absolute bottom-[62px] left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-6 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-slate-100">
+                    <div className="pause-pill-fade absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-800/80 px-9 py-3 text-xl font-semibold uppercase tracking-[0.2em] text-slate-100">
                       Paused
                     </div>
                   </div>
@@ -1076,50 +1077,62 @@ export default function App() {
                   <div>Hz: {stats.rawHz ? stats.rawHz.toFixed(1) : "0"}</div>
                 </div>
             ) : null}
-            <footer className="relative flex h-12 items-stretch gap-1 px-2 py-1 text-xs text-slate-300">
-              <div className="flex flex-1 items-stretch gap-1">
+            <footer className="relative flex h-12 items-stretch gap-2 pr-2 pt-0 pb-0 pl-0 text-xs text-slate-300">
+              <div className="flex flex-1 items-stretch">
                 <button
                     type="button"
                     onClick={() => setActiveView("pitch")}
-                    className={`min-h-10 flex-1 rounded-lg px-2 text-sm font-semibold shadow ${
+                    aria-pressed={activeView === "pitch"}
+                    className={`relative h-full flex-1 overflow-hidden rounded-none px-2 text-[0.92rem] font-semibold transition-colors ${
                         activeView === "pitch"
-                            ? "bg-sky-400 text-slate-950"
-                            : "bg-slate-600 text-slate-100"
+                            ? "text-sky-400"
+                            : "text-slate-300 hover:text-slate-100 active:text-slate-200"
                     }`}
                 >
                   Pitch
+                  {activeView === "pitch" ? (
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-sky-400"/>
+                  ) : null}
                 </button>
                 <button
                     type="button"
                     onClick={() => setActiveView("vibrato")}
-                    className={`min-h-10 flex-1 rounded-lg px-2 text-sm font-semibold shadow ${
+                    aria-pressed={activeView === "vibrato"}
+                    className={`relative h-full flex-1 overflow-hidden rounded-none px-2 text-[0.92rem] font-semibold transition-colors ${
                         activeView === "vibrato"
-                            ? "bg-sky-400 text-slate-950"
-                            : "bg-slate-600 text-slate-100"
+                            ? "text-sky-400"
+                            : "text-slate-300 hover:text-slate-100 active:text-slate-200"
                     }`}
                 >
                   Vibrato
+                  {activeView === "vibrato" ? (
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-sky-400"/>
+                  ) : null}
                 </button>
                 <button
                     type="button"
                     onClick={() => setActiveView("spectrogram")}
-                    className={`min-h-10 flex-1 rounded-lg px-2 text-sm font-semibold shadow ${
+                    aria-pressed={activeView === "spectrogram"}
+                    className={`relative h-full flex-1 overflow-hidden rounded-none px-2 text-[0.92rem] font-semibold transition-colors ${
                         activeView === "spectrogram"
-                            ? "bg-sky-400 text-slate-950"
-                            : "bg-slate-600 text-slate-100"
+                            ? "text-sky-400"
+                            : "text-slate-300 hover:text-slate-100 active:text-slate-200"
                     }`}
                 >
                   Spectrogram
+                  {activeView === "spectrogram" ? (
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-sky-400"/>
+                  ) : null}
                 </button>
               </div>
-              <div className="flex w-12 items-stretch justify-end">
+              <div className="flex w-10 items-stretch justify-end">
                 <button
                     type="button"
                     onClick={() => setSettingsOpen(true)}
-                    className="min-h-10 w-full rounded-lg bg-slate-700 px-0 text-lg text-slate-200 shadow transition hover:bg-slate-600 hover:text-white"
+                    className="inline-flex h-full w-full items-center justify-center rounded-none text-slate-400 transition-colors hover:text-slate-100 active:text-white"
                     aria-label="Open settings"
                 >
-                  ⚙
+                  <Settings aria-hidden="true" className="h-5 w-5" strokeWidth={1.8}/>
                 </button>
               </div>
             </footer>

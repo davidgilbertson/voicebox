@@ -48,3 +48,19 @@ body,
   appearance: none;
   margin: 0;
 }
+
+@keyframes pause-pill-fade {
+  0% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.pause-pill-fade {
+  animation: pause-pill-fade 800ms ease-out forwards;
+}
