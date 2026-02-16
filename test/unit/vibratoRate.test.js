@@ -1,6 +1,6 @@
 import {test} from "vitest";
 import assert from "node:assert/strict";
-import {estimateTimelineVibratoRateHz} from "../src/vibratoRate.js";
+import {estimateTimelineVibratoRateHz} from "../../src/vibratoRate.js";
 
 function createTimelineFromSeries(series) {
   return {

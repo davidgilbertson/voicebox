@@ -1,7 +1,7 @@
 import {forwardRef, useImperativeHandle, useRef} from "react";
 import colors from "tailwindcss/colors";
 import Chart from "./Chart.jsx";
-import {drawGrid, drawSemitoneLabels} from "./tools.js";
+import {clamp, drawGrid, drawSemitoneLabels} from "./tools.js";
 
 const WAVEFORM_LINE_COLOR = colors.sky[400];
 const LABEL_X = 4;
@@ -89,7 +89,7 @@ const VibratoChart = forwardRef(function VibratoChart({
       : ((vibratoRateHz - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100;
   const vibratoRatePillPct = vibratoRatePositionPct === null
       ? null
-      : Math.max(8, Math.min(92, vibratoRatePositionPct));
+      : clamp(vibratoRatePositionPct, 8, 92);
   const sweetStartPct = ((vibratoSweetMinHz - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100;
   const sweetEndPct = ((vibratoSweetMaxHz - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100;
 

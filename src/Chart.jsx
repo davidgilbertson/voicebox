@@ -1,6 +1,7 @@
 import {forwardRef, useImperativeHandle, useRef} from "react";
 import colors from "tailwindcss/colors";
 import {smoothDisplayTimeline} from "./displaySmoothing.js";
+import {clamp} from "./tools.js";
 
 const Chart = forwardRef(function Chart({
   className = "",
@@ -34,7 +35,7 @@ const Chart = forwardRef(function Chart({
     const cssWidth = Math.max(1, Math.floor(clientWidth));
     const cssHeight = Math.max(1, Math.floor(clientHeight));
     const dpr = window.devicePixelRatio || 1;
-    const effectiveScale = Math.max(0.25, Math.min(1, renderScale));
+    const effectiveScale = clamp(renderScale, 0.25, 1);
     const renderDpr = dpr * effectiveScale;
     const width = Math.max(1, Math.round(cssWidth * renderDpr));
     const height = Math.max(1, Math.round(cssHeight * renderDpr));

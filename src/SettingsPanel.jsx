@@ -13,14 +13,10 @@ export default function SettingsPanel({
                                         onShowStatsChange,
                                         pitchDetectionOnSpectrogram,
                                         onPitchDetectionOnSpectrogramChange,
-                                        useLegacyAutocorr,
-                                        onUseLegacyAutocorrChange,
                                         runAt30Fps,
                                         onRunAt30FpsChange,
                                         halfResolutionCanvas,
                                         onHalfResolutionCanvasChange,
-                                        v5Settings,
-                                        onV5SettingChange,
                                         pitchMinNote,
                                         pitchMaxNote,
                                         pitchNoteOptions,
@@ -125,20 +121,6 @@ export default function SettingsPanel({
             </label>
             <label className="flex items-start justify-between gap-4 text-sm">
               <div className="flex flex-col gap-1">
-                <span>Use legacy autocorr</span>
-                <span className="text-xs text-slate-400">
-                  Use autocorrelation for pitch/vibrato instead of the shared-FFT detector.
-                </span>
-              </div>
-              <input
-                  type="checkbox"
-                  checked={useLegacyAutocorr}
-                  onChange={(event) => onUseLegacyAutocorrChange(event.target.checked)}
-                  className={SETTINGS_CHECKBOX_CLASS}
-              />
-            </label>
-            <label className="flex items-start justify-between gap-4 text-sm">
-              <div className="flex flex-col gap-1">
                 <span>Run at 30 FPS</span>
                 <span className="text-xs text-slate-400">
                   Limit rendering to 30 FPS to reduce battery use.<br/>Default is 60 FPS for most devices.
@@ -171,158 +153,6 @@ export default function SettingsPanel({
                   <span>{batteryUsageDisplay}</span>
                 </div>
             ) : null}
-            <div className="rounded-md border border-slate-700/80 bg-slate-800/50 p-3">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">
-                V5 Detector
-              </div>
-              <div className="space-y-3">
-                <label className="block text-sm">
-                  <div className="flex items-center justify-between">
-                    <span>Max P hypothesis</span>
-                    <span className="text-xs text-slate-400">2-12</span>
-                  </div>
-                  <div className="text-xs text-slate-400">Higher can recover more octave-down cases, too high can drift and slow down.</div>
-                  <input
-                      type="number"
-                      min="2"
-                      max="12"
-                      step="1"
-                      value={v5Settings.maxP}
-                      onChange={(event) => onV5SettingChange("maxP", event.target.valueAsNumber)}
-                      className="settings-number-input mt-1 h-9 w-full rounded-md border border-slate-600 bg-slate-900 px-2 text-sm text-slate-100"
-                  />
-                </label>
-                <label className="block text-sm">
-                  <div className="flex items-center justify-between">
-                    <span>Scored partial count</span>
-                    <span className="text-xs text-slate-400">4-24</span>
-                  </div>
-                  <div className="text-xs text-slate-400">Too low misses harmonic structure. Too high can overfit noisy tails.</div>
-                  <input
-                      type="number"
-                      min="4"
-                      max="24"
-                      step="1"
-                      value={v5Settings.pCount}
-                      onChange={(event) => onV5SettingChange("pCount", event.target.valueAsNumber)}
-                      className="settings-number-input mt-1 h-9 w-full rounded-md border border-slate-600 bg-slate-900 px-2 text-sm text-slate-100"
-                  />
-                </label>
-                <label className="block text-sm">
-                  <div className="flex items-center justify-between">
-                    <span>Refinement partials</span>
-                    <span className="text-xs text-slate-400">1-8</span>
-                  </div>
-                  <div className="text-xs text-slate-400">Too low is jittery. Too high may pull toward bad higher partials.</div>
-                  <input
-                      type="number"
-                      min="1"
-                      max="8"
-                      step="1"
-                      value={v5Settings.pRefineCount}
-                      onChange={(event) => onV5SettingChange("pRefineCount", event.target.valueAsNumber)}
-                      className="settings-number-input mt-1 h-9 w-full rounded-md border border-slate-600 bg-slate-900 px-2 text-sm text-slate-100"
-                  />
-                </label>
-                <label className="block text-sm">
-                  <div className="flex items-center justify-between">
-                    <span>Search radius (bins)</span>
-                    <span className="text-xs text-slate-400">0-6</span>
-                  </div>
-                  <div className="text-xs text-slate-400">Too low can miss shifted peaks. Too high can latch onto neighbors.</div>
-                  <input
-                      type="number"
-                      min="0"
-                      max="6"
-                      step="1"
-                      value={v5Settings.searchRadiusBins}
-                      onChange={(event) => onV5SettingChange("searchRadiusBins", event.target.valueAsNumber)}
-                      className="settings-number-input mt-1 h-9 w-full rounded-md border border-slate-600 bg-slate-900 px-2 text-sm text-slate-100"
-                  />
-                </label>
-                <label className="block text-sm">
-                  <div className="flex items-center justify-between">
-                    <span>Off-partial penalty</span>
-                    <span className="text-xs text-slate-400">0.00-2.00</span>
-                  </div>
-                  <div className="text-xs text-slate-400">Too low ignores troughs. Too high can punish valid broad peaks.</div>
-                  <input
-                      type="number"
-                      min="0"
-                      max="2"
-                      step="0.05"
-                      value={v5Settings.offWeight}
-                      onChange={(event) => onV5SettingChange("offWeight", event.target.valueAsNumber)}
-                      className="settings-number-input mt-1 h-9 w-full rounded-md border border-slate-600 bg-slate-900 px-2 text-sm text-slate-100"
-                  />
-                </label>
-                <label className="block text-sm">
-                  <div className="flex items-center justify-between">
-                    <span>P0 expected ratio</span>
-                    <span className="text-xs text-slate-400">0.00-1.00</span>
-                  </div>
-                  <div className="text-xs text-slate-400">Higher rejects P1+ guesses unless P0 is visible. Too high can miss weak fundamentals.</div>
-                  <input
-                      type="number"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={v5Settings.expectedP0MinRatio}
-                      onChange={(event) => onV5SettingChange("expectedP0MinRatio", event.target.valueAsNumber)}
-                      className="settings-number-input mt-1 h-9 w-full rounded-md border border-slate-600 bg-slate-900 px-2 text-sm text-slate-100"
-                  />
-                </label>
-                <label className="block text-sm">
-                  <div className="flex items-center justify-between">
-                    <span>P0 penalty weight</span>
-                    <span className="text-xs text-slate-400">0.00-5.00</span>
-                  </div>
-                  <div className="text-xs text-slate-400">Higher strongly favors visible fundamentals. Too high can over-penalize good hypotheses.</div>
-                  <input
-                      type="number"
-                      min="0"
-                      max="5"
-                      step="0.05"
-                      value={v5Settings.expectedP0PenaltyWeight}
-                      onChange={(event) => onV5SettingChange("expectedP0PenaltyWeight", event.target.valueAsNumber)}
-                      className="settings-number-input mt-1 h-9 w-full rounded-md border border-slate-600 bg-slate-900 px-2 text-sm text-slate-100"
-                  />
-                </label>
-                <label className="block text-sm">
-                  <div className="flex items-center justify-between">
-                    <span>Downward bias per P</span>
-                    <span className="text-xs text-slate-400">0.00-0.20</span>
-                  </div>
-                  <div className="text-xs text-slate-400">Higher prefers lower P hypotheses. Too high can force octave-down errors.</div>
-                  <input
-                      type="number"
-                      min="0"
-                      max="0.2"
-                      step="0.005"
-                      value={v5Settings.downwardBiasPerP}
-                      onChange={(event) => onV5SettingChange("downwardBiasPerP", event.target.valueAsNumber)}
-                      className="settings-number-input mt-1 h-9 w-full rounded-md border border-slate-600 bg-slate-900 px-2 text-sm text-slate-100"
-                  />
-                </label>
-                <label className="block text-sm">
-                  <div className="flex items-center justify-between">
-                    <span>RMS gate</span>
-                    <span className="text-xs text-slate-400">0.000-0.100</span>
-                  </div>
-                  <div className="text-xs text-slate-400">Higher suppresses background noise more aggressively, but can mute quiet singing.</div>
-                  <input
-                      type="number"
-                      min="0"
-                      max="0.1"
-                      step="0.001"
-                      value={v5Settings.minRms}
-                      onChange={(event) => onV5SettingChange("minRms", event.target.valueAsNumber)}
-                      className="settings-number-input mt-1 h-9 w-full rounded-md border border-slate-600 bg-slate-900 px-2 text-sm text-slate-100"
-                  />
-                </label>
-              </div>
-            </div>
-
             <div className="border-t border-slate-700/80"/>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">Pitch Page</div>
             <div className="grid grid-cols-2 gap-2">

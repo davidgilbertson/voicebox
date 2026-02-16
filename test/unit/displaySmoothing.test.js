@@ -1,6 +1,6 @@
 import {test} from "vitest";
 import assert from "node:assert/strict";
-import {smoothDisplayTimeline} from "../src/displaySmoothing.js";
+import {smoothDisplayTimeline} from "../../src/displaySmoothing.js";
 
 function orderedValues({values, writeIndex, count}) {
   const result = [];

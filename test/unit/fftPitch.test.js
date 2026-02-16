@@ -1,6 +1,6 @@
 import {test} from "vitest";
 import assert from "node:assert/strict";
-import {detectPitchFftHpsDetailed, detectPitchFftResidualDetailed} from "../src/fftPitch.js";
+import {detectPitchFftHpsDetailed, detectPitchFftResidualDetailed} from "../../src/fftPitch.js";
 
 function createSineSignal({sampleRate, size, hz, amplitude = 1, phase = 0}) {
   const out = new Float32Array(size);

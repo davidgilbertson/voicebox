@@ -4,13 +4,41 @@ module.exports = {
     jsx: "automatic",
   },
   test: {
-    environment: "jsdom",
-    setupFiles: ["test/setup.js"],
-    clearMocks: true,
-    restoreMocks: true,
-    unstubGlobals: true,
-    include: ["test/**/*.test.{js,jsx}"],
-    pool: "threads",
-    maxWorkers: 1,
+    projects: [
+      {
+        extends: true,
+        esbuild: {
+          jsx: "automatic",
+        },
+        test: {
+          name: "dom",
+          environment: "jsdom",
+          setupFiles: ["test/dom/setup.dom.js"],
+          include: ["test/dom/**/*.test.{js,jsx}"],
+          clearMocks: true,
+          restoreMocks: true,
+          unstubGlobals: true,
+          pool: "threads",
+          maxWorkers: 1,
+        },
+      },
+      {
+        extends: true,
+        esbuild: {
+          jsx: "automatic",
+        },
+        test: {
+          name: "unit",
+          environment: "node",
+          setupFiles: ["test/unit/setup.unit.js"],
+          include: ["test/unit/**/*.test.{js,jsx}"],
+          clearMocks: true,
+          restoreMocks: true,
+          unstubGlobals: true,
+          pool: "threads",
+          maxWorkers: 1,
+        },
+      },
+    ],
   },
 };

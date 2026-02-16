@@ -1,5 +1,6 @@
 import {forwardRef, useImperativeHandle, useMemo, useRef} from "react";
 import colors from "tailwindcss/colors";
+import {clamp} from "./tools.js";
 
 const LABEL_X = 4;
 const PLOT_LEFT = 0;
@@ -74,7 +75,7 @@ function fillSpectrogramColumns({
         const highValue = values[base + high];
         value = lowValue + (highValue - lowValue) * mix;
       }
-      const valueIndex = Math.max(0, Math.min(255, Math.round(value * 255)));
+      const valueIndex = clamp(Math.round(value * 255), 0, 255);
       const colorOffset = valueIndex * 3;
       const pixelOffset = (y * imageWidth + x) * 4;
       pixels[pixelOffset] = palette[colorOffset];
@@ -120,7 +121,7 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
       const cssWidth = Math.max(1, Math.floor(clientWidth));
       const cssHeight = Math.max(1, Math.floor(clientHeight));
       const dpr = window.devicePixelRatio || 1;
-      const effectiveScale = Math.max(0.25, Math.min(1, renderScale));
+      const effectiveScale = clamp(renderScale, 0.25, 1);
       const renderDpr = dpr * effectiveScale;
       const width = Math.max(1, Math.round(cssWidth * renderDpr));
       const height = Math.max(1, Math.round(cssHeight * renderDpr));
@@ -162,7 +163,7 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
       const renderCtx = renderCanvas.getContext("2d");
       if (!renderCtx) return;
 
-      const clampedMinHz = Math.max(1e-3, Math.min(minHz, maxHz));
+      const clampedMinHz = clamp(minHz, 1e-3, maxHz);
       const clampedMaxHz = Math.max(clampedMinHz + 1e-3, Math.max(minHz, maxHz));
       const hzPerBin = (sampleRate / 2) / Math.max(1, binCount - 1);
 
@@ -181,9 +182,9 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
         for (let y = 0; y < renderHeight; y += 1) {
           const normalizedY = renderHeight <= 1 ? 0 : y / (renderHeight - 1);
           const hz = clampedMaxHz * Math.pow(freqSpanRatio, normalizedY);
-          const binFloat = Math.max(0, Math.min(binCount - 1, hz / hzPerBin));
+          const binFloat = clamp(hz / hzPerBin, 0, binCount - 1);
           const binLow = Math.floor(binFloat);
-          low[y] = Math.max(0, Math.min(binCount - 1, binLow));
+          low[y] = clamp(binLow, 0, binCount - 1);
           mix[y] = binFloat - binLow;
         }
         yBinCacheRef.current = {

@@ -1,8 +1,5 @@
 import colors from "tailwindcss/colors";
 
-let autocorrScratch = new Float64Array(0);
-const AUTOCORR_CONFIDENCE_MIN = 0.25;
-
 // Linear interpolate between two values.
 export function lerp(current, next, factor) {
   return current + (next - current) * factor;
@@ -93,75 +90,4 @@ export function drawSemitoneLabels(ctx, width, height, waveRange, options = {}) 
     const y = midY - cents * scaleY;
     ctx.fillText(`${step}`, labelX, y);
   }
-}
-
-export function detectPitchAutocorrDetailed(data, sampleRate, minHz, maxHz) {
-  const size = data.length;
-  let rms = 0;
-  for (let i = 0; i < size; i += 1) {
-    const value = data[i];
-    rms += value * value;
-  }
-  rms = Math.sqrt(rms / size);
-  if (rms < 0.01) return {hz: 0, corrRatio: 0};
-  const energy = rms * rms * size;
-
-  const minLag = Math.floor(sampleRate / maxHz);
-  const maxLag = Math.floor(sampleRate / minHz);
-  const requiredSize = maxLag + 1;
-  if (autocorrScratch.length < requiredSize) {
-    autocorrScratch = new Float64Array(requiredSize);
-  }
-  let bestLag = 0;
-  let bestCorr = 0;
-  const correlations = autocorrScratch;
-
-  for (let lag = minLag; lag <= maxLag; lag += 1) {
-    let corr = 0;
-    for (let i = 0; i < size - lag; i += 1) {
-      corr += data[i] * data[i + lag];
-    }
-    correlations[lag] = corr;
-    if (corr > bestCorr) {
-      bestCorr = corr;
-      bestLag = lag;
-    }
-  }
-
-  if (!bestLag) return {hz: 0, corrRatio: 0};
-  const corrRatio = energy > 0 ? bestCorr / energy : 0;
-  if (corrRatio < AUTOCORR_CONFIDENCE_MIN) return {hz: 0, corrRatio};
-  // Refine the lag peak with a 3-point parabolic fit to reduce quantization.
-  let refinedLag = bestLag;
-  if (bestLag > minLag && bestLag < maxLag) {
-    const left = correlations[bestLag - 1];
-    const mid = correlations[bestLag];
-    const right = correlations[bestLag + 1];
-    const denom = left - 2 * mid + right;
-    if (denom !== 0) {
-      const offset = 0.5 * (left - right) / denom;
-      if (Number.isFinite(offset)) {
-        refinedLag = bestLag + Math.max(-1, Math.min(1, offset));
-      }
-    }
-  }
-  if (!Number.isFinite(refinedLag) || refinedLag <= 0) return {hz: 0, corrRatio};
-  return {hz: sampleRate / refinedLag, corrRatio};
-}
-
-// Estimate pitch via autocorrelation with basic confidence gating.
-export function detectPitchAutocorr(data, sampleRate, minHz, maxHz) {
-  return detectPitchAutocorrDetailed(data, sampleRate, minHz, maxHz).hz;
-}
-
-// Return the median of finite, positive values.
-export function median(values) {
-  const filtered = values.filter((v) => Number.isFinite(v) && v > 0);
-  if (!filtered.length) return 0;
-  filtered.sort((a, b) => a - b);
-  const mid = Math.floor(filtered.length / 2);
-  if (filtered.length % 2 === 0) {
-    return (filtered[mid - 1] + filtered[mid]) / 2;
-  }
-  return filtered[mid];
 }

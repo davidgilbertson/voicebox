@@ -2,7 +2,7 @@ import React from "react";
 import {createRef} from "react";
 import {render} from "@testing-library/react";
 import {test, expect, vi} from "vitest";
-import Chart from "../src/Chart.jsx";
+import Chart from "../../src/Chart.jsx";
 
 test("chart draw calls background renderer even when there is no data", () => {
   const chartRef = createRef();

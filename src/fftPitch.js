@@ -129,7 +129,7 @@ function findRefinedPeakBin(magnitudes, bestBin, minBin, maxBin) {
     if (denom !== 0) {
       const offset = 0.5 * (left - right) / denom;
       if (Number.isFinite(offset)) {
-        refinedBin = bestBin + Math.max(-1, Math.min(1, offset));
+        refinedBin = bestBin + clamp(offset, -1, 1);
       }
     }
   }

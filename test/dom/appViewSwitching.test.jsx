@@ -2,25 +2,25 @@ import React from "react";
 import {render, screen, waitFor} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {test, expect} from "vitest";
-import App from "../src/App.jsx";
+import App, {ACTIVE_VIEW_STORAGE_KEY} from "../../src/App.jsx";
 
 test("active view is restored from localStorage and saved on switch", async () => {
-  localStorage.setItem("voicebox.activeView", "spectrogram");
+  localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, "spectrogram");
   const user = userEvent.setup();
   render(<App/>);
 
   const pitchButton = screen.getByRole("button", {name: "Pitch"});
   const vibratoButton = screen.getByRole("button", {name: "Vibrato"});
   const spectrogramButton = screen.getByRole("button", {name: "Spectrogram"});
-  expect(spectrogramButton.className.includes("bg-sky-400")).toBe(true);
-  expect(pitchButton.className.includes("bg-sky-400")).toBe(false);
-  expect(vibratoButton.className.includes("bg-sky-400")).toBe(false);
+  expect(spectrogramButton).toHaveClass("bg-sky-400");
+  expect(pitchButton).not.toHaveClass("bg-sky-400");
+  expect(vibratoButton).not.toHaveClass("bg-sky-400");
 
   await user.click(vibratoButton);
-  expect(vibratoButton.className.includes("bg-sky-400")).toBe(true);
+  expect(vibratoButton).toHaveClass("bg-sky-400");
 
   await waitFor(() => {
-    expect(localStorage.getItem("voicebox.activeView")).toBe("vibrato");
+    expect(localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY)).toBe("vibrato");
   });
 });
 
@@ -32,5 +32,5 @@ test("switching views redraws the active chart without errors", async () => {
   await user.click(screen.getByRole("button", {name: "Spectrogram"}));
   await user.click(screen.getByRole("button", {name: "Vibrato"}));
 
-  expect(screen.getByRole("button", {name: "Vibrato"}).className.includes("bg-sky-400")).toBe(true);
+  expect(screen.getByRole("button", {name: "Vibrato"})).toHaveClass("bg-sky-400");
 });

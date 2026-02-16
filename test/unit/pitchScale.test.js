@@ -5,7 +5,7 @@ import {
   noteNameToCents,
   noteNameToHz,
   PITCH_NOTE_OPTIONS,
-} from "../src/pitchScale.js";
+} from "../../src/pitchScale.js";
 
 test("pitch note options span A0..C8", () => {
   assert.equal(PITCH_NOTE_OPTIONS[0], "A0");

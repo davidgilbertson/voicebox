@@ -1,5 +1,5 @@
 import {expect, test, vi} from "vitest";
-import {createBatteryUsageMonitor} from "../src/batteryUsage.js";
+import {createBatteryUsageMonitor} from "../../src/batteryUsage.js";
 
 test("returns -- until at least one minute has elapsed", async () => {
   vi.useFakeTimers();

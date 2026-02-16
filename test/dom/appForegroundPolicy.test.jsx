@@ -1,7 +1,7 @@
 import React from "react";
 import {render} from "@testing-library/react";
 import {test, expect, vi} from "vitest";
-import App from "../src/App.jsx";
+import App from "../../src/App.jsx";
 
 test("foreground tracking subscribes and unsubscribes to page lifecycle events", () => {
   const documentAdd = vi.spyOn(document, "addEventListener");

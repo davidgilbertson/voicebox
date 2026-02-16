@@ -1,11 +1,7 @@
 # Agent Guidance (Voicebox)
 
 - Platform: Chrome on Android as primary target; PWA/offline supported; portrait only.
-- Desktop: constrain UI to a phone-like panel (~450x800) centered on screen.
-- UI priority: maximize chart area; avoid bulky headers/padding; controls may float over chart.
-- Charts: canvas-based; 5s x-axis; main waveform centered on ~0.5s window; y-axis fixed to -200..200 cents; no pitch labels.
-- Metrics: show Hz and BPM; no stability metric.
-- Audio scope: voice only; limit detection to ~C2–C6 (+margin if helpful).
+- Performance is a serious concern. More for battery life than FPS. Think carefully about performance implications of any change. If there's a "simple + slow" way and a "complex + fast" way, do the simple one and let the user know it could be made faster and explain how.
 - Assume the dev server is running, no need to run builds steps.
 - Bugfix workflow:
   1. If feasible, first write a sensible failing test that reproduces the bug behavior (not a brittle or contrived test).

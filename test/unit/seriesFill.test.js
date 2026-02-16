@@ -1,6 +1,6 @@
 import {test} from "vitest";
 import assert from "node:assert/strict";
-import {interpolateFillValues} from "../src/seriesFill.js";
+import {interpolateFillValues} from "../../src/seriesFill.js";
 
 test("returns empty list for non-positive steps", () => {
   assert.deepEqual(interpolateFillValues(1, 2, 0), []);

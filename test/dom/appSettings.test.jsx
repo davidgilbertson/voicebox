@@ -2,7 +2,14 @@ import React from "react";
 import {fireEvent, render, screen, waitFor} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {test, expect, vi} from "vitest";
-import App from "../src/App.jsx";
+import App, {
+  AUTO_PAUSE_ON_SILENCE_STORAGE_KEY,
+  HALF_RESOLUTION_CANVAS_STORAGE_KEY,
+  RUN_AT_30_FPS_STORAGE_KEY,
+  SHOW_STATS_STORAGE_KEY,
+  SPECTROGRAM_MAX_HZ_DEFAULT,
+  SPECTROGRAM_MIN_HZ_DEFAULT,
+} from "../../src/App.jsx";
 
 test("settings defaults and persistence work via localStorage", async () => {
   const user = userEvent.setup();
@@ -11,31 +18,26 @@ test("settings defaults and persistence work via localStorage", async () => {
   await user.click(screen.getByLabelText("Open settings"));
   const autoPauseCheckbox = screen.getByRole("checkbox", {name: /Auto pause on silence/i});
   const showStatsCheckbox = screen.getByRole("checkbox", {name: /Show stats/i});
-  const legacyAutocorrCheckbox = screen.getByRole("checkbox", {name: /Use legacy autocorr/i});
   const runAt30FpsCheckbox = screen.getByRole("checkbox", {name: /Run at 30 FPS/i});
   const halfResolutionCanvasCheckbox = screen.getByRole("checkbox", {name: /Half-resolution canvas/i});
 
   expect(autoPauseCheckbox).toBeChecked();
   expect(showStatsCheckbox).not.toBeChecked();
-  expect(legacyAutocorrCheckbox).toBeChecked();
   expect(runAt30FpsCheckbox).not.toBeChecked();
   expect(halfResolutionCanvasCheckbox).not.toBeChecked();
 
   await user.click(showStatsCheckbox);
   expect(showStatsCheckbox).toBeChecked();
-  await user.click(legacyAutocorrCheckbox);
-  expect(legacyAutocorrCheckbox).not.toBeChecked();
   await user.click(runAt30FpsCheckbox);
   expect(runAt30FpsCheckbox).toBeChecked();
   await user.click(halfResolutionCanvasCheckbox);
   expect(halfResolutionCanvasCheckbox).toBeChecked();
 
   await waitFor(() => {
-    expect(localStorage.getItem("voicebox.showStats")).toBe("true");
-    expect(localStorage.getItem("voicebox.autoPauseOnSilence")).toBe("true");
-    expect(localStorage.getItem("voicebox.useLegacyAutocorr")).toBe("false");
-    expect(localStorage.getItem("voicebox.runAt30Fps")).toBe("true");
-    expect(localStorage.getItem("voicebox.halfResolutionCanvas")).toBe("true");
+    expect(localStorage.getItem(SHOW_STATS_STORAGE_KEY)).toBe("true");
+    expect(localStorage.getItem(AUTO_PAUSE_ON_SILENCE_STORAGE_KEY)).toBe("true");
+    expect(localStorage.getItem(RUN_AT_30_FPS_STORAGE_KEY)).toBe("true");
+    expect(localStorage.getItem(HALF_RESOLUTION_CANVAS_STORAGE_KEY)).toBe("true");
   });
 });
 
@@ -47,8 +49,8 @@ test("spectrogram frequency settings are editable and persisted", async () => {
   const minInput = screen.getByLabelText("Spectrogram minimum frequency (Hz)");
   const maxInput = screen.getByLabelText("Spectrogram maximum frequency (Hz)");
 
-  expect(minInput).toHaveValue(10);
-  expect(maxInput).toHaveValue(10000);
+  expect(minInput).toHaveValue(SPECTROGRAM_MIN_HZ_DEFAULT);
+  expect(maxInput).toHaveValue(SPECTROGRAM_MAX_HZ_DEFAULT);
   expect(minInput).not.toHaveAttribute("min");
   expect(minInput).not.toHaveAttribute("max");
   expect(maxInput).not.toHaveAttribute("min");
