@@ -2,11 +2,11 @@ import React from "react";
 import {render, screen} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {test, expect} from "vitest";
-import App from "../../src/App.jsx";
+import AppShell from "../../src/AppShell.jsx";
 
 test("opening and closing settings does not clear active view", async () => {
   const user = userEvent.setup();
-  render(<App/>);
+  render(<AppShell/>);
 
   await user.click(screen.getByRole("button", {name: "Pitch"}));
   await user.click(screen.getByLabelText("Open settings"));

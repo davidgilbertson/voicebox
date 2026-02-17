@@ -1,7 +1,7 @@
 import {forwardRef, useImperativeHandle, useRef} from "react";
 import colors from "tailwindcss/colors";
 import Chart from "./Chart.jsx";
-import {clamp, drawGrid, drawSemitoneLabels} from "./tools.js";
+import {clamp, drawGrid, drawSemitoneLabels} from "../tools.js";
 
 const WAVEFORM_LINE_COLOR = colors.sky[400];
 const LABEL_X = 4;

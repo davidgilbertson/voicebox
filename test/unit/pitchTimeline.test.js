@@ -1,6 +1,6 @@
 import {test} from "vitest";
 import assert from "node:assert/strict";
-import {createPitchTimeline, writePitchTimeline} from "../../src/pitchTimeline.js";
+import {createPitchTimeline, writePitchTimeline} from "../../src/Recorder/pitchTimeline.js";
 
 function orderedValues(state) {
   const values = [];

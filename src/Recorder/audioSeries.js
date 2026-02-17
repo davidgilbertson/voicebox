@@ -1,4 +1,6 @@
-import {clamp, lerp} from "./tools.js";
+import {clamp, lerp} from "../tools.js";
+
+const FFT_PITCH_MIN_RMS = 0.01;
 
 export function createAudioState(defaultSamplesPerSecond) {
   return {
@@ -125,7 +127,7 @@ function finalizeDetection(state, {
   };
 }
 
-function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz, options = {}) {
+function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
   if (!spectrumBins || spectrumBins.length < 8) {
     return {hz: 0, confidence: 0};
   }
@@ -140,18 +142,18 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz, options 
   // Set max P to the highest likely partial that the biggest peak could be.
   // With subharmonics this can easily be 7 or 8.
   // Linear-ish effect on performance
-  const maxP = options.maxP ?? 6;
+  const maxP = 10;
   // P count defines how many peaks to simulate for each hypothesis spectrum
   // That hypothesis spectrum is then compared to the real spectrum
-  const pCount = options.pCount ?? 12;
+  const pCount = 12;
   // Once a fundamental pitch has been selected, it is refined by looking
   //  at `pRefineCount` different partials
-  const pRefineCount = options.pRefineCount ?? 4;
-  const offWeight = options.offWeight ?? 0.5;
-  const expectedP0MinRatio = options.expectedP0MinRatio ?? 0.18;
-  const expectedP0PenaltyWeight = options.expectedP0PenaltyWeight ?? 2.0;
-  const downwardBiasPerP = options.downwardBiasPerP ?? 0.02;
-  const searchRadiusBins = options.searchRadiusBins ?? 2;
+  const pRefineCount = 4;
+  const offWeight = 0.5;
+  const expectedP0MinRatio = 0.18;
+  const expectedP0PenaltyWeight = 2.0;
+  const downwardBiasPerP = 0.02;
+  const searchRadiusBins = 2;
 
   function refineLocalPeakBinParabolic(binIndex) {
     const clampedBin = clamp(Math.round(binIndex), 1, nyquistBin - 1);
@@ -270,15 +272,13 @@ export function analyzeAudioWindowFftPitch(
     timeData,
     spectrumBins,
     minHz,
-    maxHz,
-    options = {}
+    maxHz
 ) {
   const {hzBuffer} = state;
   if (!hzBuffer || !timeData || !timeData.length || !spectrumBins || !spectrumBins.length) return null;
   const {peak, rawRms} = computeWindowLevel(state, timeData);
-  const minRms = Number.isFinite(options.minRms) ? options.minRms : 0.01;
 
-  if (rawRms < minRms) {
+  if (rawRms < FFT_PITCH_MIN_RMS) {
     const result = finalizeDetection(state, {
       peak,
       hz: 0,
@@ -295,8 +295,7 @@ export function analyzeAudioWindowFftPitch(
       spectrumBins,
       state.sampleRate,
       minHz,
-      maxHz,
-      options
+      maxHz
   );
 
   const result = finalizeDetection(state, {

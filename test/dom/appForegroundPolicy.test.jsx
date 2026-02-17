@@ -1,7 +1,7 @@
 import React from "react";
 import {render} from "@testing-library/react";
 import {test, expect, vi} from "vitest";
-import App from "../../src/App.jsx";
+import AppShell from "../../src/AppShell.jsx";
 
 test("foreground tracking subscribes and unsubscribes to page lifecycle events", () => {
   const documentAdd = vi.spyOn(document, "addEventListener");
@@ -9,7 +9,7 @@ test("foreground tracking subscribes and unsubscribes to page lifecycle events",
   const windowAdd = vi.spyOn(window, "addEventListener");
   const windowRemove = vi.spyOn(window, "removeEventListener");
 
-  const {unmount} = render(<App/>);
+  const {unmount} = render(<AppShell/>);
   unmount();
 
   expect(documentAdd).toHaveBeenCalledWith("visibilitychange", expect.any(Function));

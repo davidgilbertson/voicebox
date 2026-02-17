@@ -1,7 +1,7 @@
 import {test} from "vitest";
 import assert from "node:assert/strict";
-import {interpolateFillValues} from "../../src/seriesFill.js";
-import {consumeTimelineElapsed} from "../../src/timelineSteps.js";
+import {interpolateFillValues} from "../../src/Recorder/seriesFill.js";
+import {consumeTimelineElapsed} from "../../src/Recorder/timelineSteps.js";
 
 test("vibrato timeline produces expected step count for 5-second window", () => {
   const durationSeconds = 5;

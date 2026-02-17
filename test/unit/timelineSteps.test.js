@@ -1,6 +1,6 @@
 import {test} from "vitest";
 import assert from "node:assert/strict";
-import {consumeTimelineElapsed} from "../../src/timelineSteps.js";
+import {consumeTimelineElapsed} from "../../src/Recorder/timelineSteps.js";
 
 test("consumeTimelineElapsed computes expected steps and carry", () => {
   const samplesPerSecond = 300;

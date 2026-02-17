@@ -5,7 +5,7 @@ import {
   createRawAudioBuffer,
   drainRawBuffer,
   enqueueAudioSamples,
-} from "../../src/audioPipeline.js";
+} from "../../src/Recorder/audioPipeline.js";
 
 test("enqueueAudioSamples overwrites oldest samples when raw buffer is full", () => {
   const raw = createRawAudioBuffer(10, {windowSize: 4, rawBufferSeconds: 0.2});

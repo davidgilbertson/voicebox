@@ -2,18 +2,20 @@ import React from "react";
 import {fireEvent, render, screen, waitFor} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {test, expect, vi} from "vitest";
-import App, {
-  AUTO_PAUSE_ON_SILENCE_STORAGE_KEY,
-  HALF_RESOLUTION_CANVAS_STORAGE_KEY,
-  RUN_AT_30_FPS_STORAGE_KEY,
-  SHOW_STATS_STORAGE_KEY,
-  SPECTROGRAM_MAX_HZ_DEFAULT,
-  SPECTROGRAM_MIN_HZ_DEFAULT,
-} from "../../src/App.jsx";
+import AppShell from "../../src/AppShell.jsx";
+import {
+  readAutoPauseOnSilence,
+  readHalfResolutionCanvas,
+  readPitchDetectionOnSpectrogram,
+  readRunAt30Fps,
+  readShowStats,
+  readSpectrogramMaxHz,
+  readSpectrogramMinHz,
+} from "../../src/Recorder/config.js";
 
 test("settings defaults and persistence work via localStorage", async () => {
   const user = userEvent.setup();
-  render(<App/>);
+  render(<AppShell/>);
 
   await user.click(screen.getByLabelText("Open settings"));
   const autoPauseCheckbox = screen.getByRole("checkbox", {name: /Auto pause on silence/i});
@@ -34,23 +36,23 @@ test("settings defaults and persistence work via localStorage", async () => {
   expect(halfResolutionCanvasCheckbox).toBeChecked();
 
   await waitFor(() => {
-    expect(localStorage.getItem(SHOW_STATS_STORAGE_KEY)).toBe("true");
-    expect(localStorage.getItem(AUTO_PAUSE_ON_SILENCE_STORAGE_KEY)).toBe("true");
-    expect(localStorage.getItem(RUN_AT_30_FPS_STORAGE_KEY)).toBe("true");
-    expect(localStorage.getItem(HALF_RESOLUTION_CANVAS_STORAGE_KEY)).toBe("true");
+    expect(readShowStats()).toBe(true);
+    expect(readAutoPauseOnSilence()).toBe(true);
+    expect(readRunAt30Fps()).toBe(true);
+    expect(readHalfResolutionCanvas()).toBe(true);
   });
 });
 
 test("spectrogram frequency settings are editable and persisted", async () => {
   const user = userEvent.setup();
-  render(<App/>);
+  render(<AppShell/>);
 
   await user.click(screen.getByLabelText("Open settings"));
   const minInput = screen.getByLabelText("Spectrogram minimum frequency (Hz)");
   const maxInput = screen.getByLabelText("Spectrogram maximum frequency (Hz)");
 
-  expect(minInput).toHaveValue(SPECTROGRAM_MIN_HZ_DEFAULT);
-  expect(maxInput).toHaveValue(SPECTROGRAM_MAX_HZ_DEFAULT);
+  expect(minInput).toHaveValue(readSpectrogramMinHz());
+  expect(maxInput).toHaveValue(readSpectrogramMaxHz());
   expect(minInput).not.toHaveAttribute("min");
   expect(minInput).not.toHaveAttribute("max");
   expect(maxInput).not.toHaveAttribute("min");
@@ -62,14 +64,14 @@ test("spectrogram frequency settings are editable and persisted", async () => {
   fireEvent.blur(maxInput);
 
   await waitFor(() => {
-    expect(localStorage.getItem("voicebox.spectrogramMinHz")).toBe("55");
-    expect(localStorage.getItem("voicebox.spectrogramMaxHz")).toBe("7200");
+    expect(readSpectrogramMinHz()).toBe(55);
+    expect(readSpectrogramMaxHz()).toBe(7200);
   });
 });
 
 test("spectrogram frequency inputs can be cleared while editing and commit on blur", async () => {
   const user = userEvent.setup();
-  render(<App/>);
+  render(<AppShell/>);
 
   await user.click(screen.getByLabelText("Open settings"));
   const minInput = screen.getByLabelText("Spectrogram minimum frequency (Hz)");
@@ -81,13 +83,13 @@ test("spectrogram frequency inputs can be cleared while editing and commit on bl
   fireEvent.blur(minInput);
 
   await waitFor(() => {
-    expect(localStorage.getItem("voicebox.spectrogramMinHz")).toBe("65");
+    expect(readSpectrogramMinHz()).toBe(65);
   });
 });
 
 test("enabling show stats displays stats panel", async () => {
   const user = userEvent.setup();
-  render(<App/>);
+  render(<AppShell/>);
 
   expect(screen.queryByText(/Data:/)).toBeNull();
   await user.click(screen.getByLabelText("Open settings"));
@@ -98,7 +100,7 @@ test("enabling show stats displays stats panel", async () => {
 
 test("disabling pitch detection on spectrogram stores faster mode", async () => {
   const user = userEvent.setup();
-  render(<App/>);
+  render(<AppShell/>);
 
   await user.click(screen.getByLabelText("Open settings"));
   const disablePitchDetectionCheckbox = screen.getByRole("checkbox", {
@@ -110,13 +112,13 @@ test("disabling pitch detection on spectrogram stores faster mode", async () => 
   expect(disablePitchDetectionCheckbox).toBeChecked();
 
   await waitFor(() => {
-    expect(localStorage.getItem("voicebox.pitchDetectionOnSpectrogram")).toBe("false");
+    expect(readPitchDetectionOnSpectrogram()).toBe(false);
   });
 });
 
 test("temporary pitch detector overlay buttons are removed", async () => {
   const user = userEvent.setup();
-  render(<App/>);
+  render(<AppShell/>);
 
   await user.click(screen.getByRole("button", {name: "Pitch"}));
   expect(screen.queryByRole("button", {name: "FFT residual"})).toBeNull();
@@ -125,7 +127,7 @@ test("temporary pitch detector overlay buttons are removed", async () => {
 
 test("temporary window/bin overlay buttons are removed", async () => {
   const user = userEvent.setup();
-  render(<App/>);
+  render(<AppShell/>);
 
   await user.click(screen.getByRole("button", {name: "Pitch"}));
   expect(screen.queryByRole("button", {name: "WINDOW_SIZE 4096"})).toBeNull();
@@ -140,7 +142,7 @@ test("battery use shows -- in the first minute", async () => {
   navigator.getBattery = vi.fn(async () => battery);
 
   const user = userEvent.setup();
-  render(<App/>);
+  render(<AppShell/>);
 
   await user.click(screen.getByLabelText("Open settings"));
   expect(await screen.findByText("Battery use")).toBeInTheDocument();
@@ -154,7 +156,7 @@ test("battery use is hidden while charging", async () => {
   }));
 
   const user = userEvent.setup();
-  render(<App/>);
+  render(<AppShell/>);
 
   await user.click(screen.getByLabelText("Open settings"));
   await waitFor(() => {
@@ -169,7 +171,7 @@ test("battery use is hidden when battery level is unavailable", async () => {
   }));
 
   const user = userEvent.setup();
-  render(<App/>);
+  render(<AppShell/>);
 
   await user.click(screen.getByLabelText("Open settings"));
   await waitFor(() => {

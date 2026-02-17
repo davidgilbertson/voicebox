@@ -65,12 +65,6 @@ export function noteNameToCents(noteName) {
   return hzToCents(hz);
 }
 
-export function centsToNoteName(cents) {
-  if (!Number.isFinite(cents)) return null;
-  const midi = Math.round(A4_MIDI + (12 * Math.log2(centsToHz(cents) / A4_HZ)));
-  return midiToNoteName(midi);
-}
-
 export function isNaturalNote(noteName) {
   const parsed = parseNoteName(noteName);
   return parsed ? NATURAL_NOTE_NAMES.has(parsed.note) : false;

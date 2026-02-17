@@ -1,4 +1,4 @@
-import {clamp} from "./tools.js";
+import {clamp} from "../tools.js";
 
 export function createSpectrogramTimeline({samplesPerSecond, seconds, binCount}) {
   const columnCount = Math.max(1, Math.floor(samplesPerSecond * seconds));

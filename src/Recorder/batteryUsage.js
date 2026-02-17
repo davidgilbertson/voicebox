@@ -1,4 +1,4 @@
-import {clamp} from "./tools.js";
+import {clamp} from "../tools.js";
 
 export const BATTERY_SAMPLE_INTERVAL_MS = 60_000;
 

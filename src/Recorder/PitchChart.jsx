@@ -1,7 +1,7 @@
 import {forwardRef, useImperativeHandle, useRef} from "react";
 import colors from "tailwindcss/colors";
 import Chart from "./Chart.jsx";
-import {createPitchGridLines} from "./pitchScale.js";
+import {createPitchGridLines} from "../pitchScale.js";
 
 const GRID_COLORS = {
   octave: colors.slate[300],

@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import App from './App.jsx';
+import AppShell from './AppShell.jsx';
 import './index.css';
 import { registerSW } from 'virtual:pwa-register';
 
@@ -28,6 +28,6 @@ document.addEventListener('gesturechange', preventGestureZoom, { passive: false 
 document.addEventListener('gestureend', preventGestureZoom, { passive: false });
 
 const root = createRoot(document.getElementById('root'));
-root.render(<App />);
+root.render(<AppShell />);
 
 registerSW({ immediate: true });

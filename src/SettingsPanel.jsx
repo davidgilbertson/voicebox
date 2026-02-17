@@ -32,7 +32,7 @@ export default function SettingsPanel({
                                         onNoiseCalibratePointerUp,
                                         onNoiseCalibrateContextMenu,
                                         onClearSpectrogramNoiseProfile,
-                                        batteryUsageDisplay,
+                                        batteryUsagePerMinute,
 }) {
   const dialogRef = useRef(null);
   const [spectrogramMinHzDraft, setSpectrogramMinHzDraft] = useState(() => String(spectrogramMinHz));
@@ -77,6 +77,12 @@ export default function SettingsPanel({
     }
     onSpectrogramMaxHzChange(nextValue);
   };
+  const batteryUsageDisplay =
+      batteryUsagePerMinute === null
+          ? null
+          : batteryUsagePerMinute === "--"
+              ? "-- %/min"
+              : `${batteryUsagePerMinute.toFixed(2)} %/min`;
 
   return (
       <dialog

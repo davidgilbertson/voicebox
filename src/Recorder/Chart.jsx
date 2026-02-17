@@ -1,7 +1,7 @@
 import {forwardRef, useImperativeHandle, useRef} from "react";
 import colors from "tailwindcss/colors";
 import {smoothDisplayTimeline} from "./displaySmoothing.js";
-import {clamp} from "./tools.js";
+import {clamp} from "../tools.js";
 
 const Chart = forwardRef(function Chart({
   className = "",

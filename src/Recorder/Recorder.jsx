@@ -1,6 +1,5 @@
 import {useEffect, useMemo, useRef, useState} from "react";
-import {Settings} from "lucide-react";
-import {clamp, lerp, ls} from "./tools.js";
+import {clamp, lerp} from "../tools.js";
 import {
   analyzeAudioWindowFftPitch,
   createAudioState,
@@ -17,56 +16,56 @@ import {createPitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
 import {estimateTimelineVibratoRateHz} from "./vibratoRate.js";
 import {createSpectrogramTimeline, writeSpectrogramColumn} from "./spectrogramTimeline.js";
 import {consumeTimelineElapsed} from "./timelineSteps.js";
-import SettingsPanel from "./SettingsPanel.jsx";
 import VibratoChart from "./VibratoChart.jsx";
 import PitchChart from "./PitchChart.jsx";
 import SpectrogramChart from "./SpectrogramChart.jsx";
-import {noteNameToCents, noteNameToHz, PITCH_NOTE_OPTIONS} from "./pitchScale.js";
+import {noteNameToCents, noteNameToHz, PITCH_NOTE_OPTIONS} from "../pitchScale.js";
 import {BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor} from "./batteryUsage.js";
+import {
+  ANALYSIS_WINDOW_SIZE,
+  CENTER_SECONDS,
+  PITCH_MAX_NOTE_DEFAULT,
+  PITCH_MIN_NOTE_DEFAULT,
+  PITCH_SECONDS,
+  RAW_BUFFER_SECONDS,
+  SAMPLES_PER_SECOND,
+  SILENCE_PAUSE_THRESHOLD_MS,
+  SPECTROGRAM_BIN_COUNT,
+  VIBRATO_ANALYSIS_WINDOW_SECONDS,
+  VIBRATO_MAX_MARKER_PX_PER_FRAME,
+  VIBRATO_MIN_CONTIGUOUS_SECONDS,
+  VIBRATO_RATE_HOLD_MS,
+  VIBRATO_RATE_MAX_HZ,
+  VIBRATO_RATE_MIN_HZ,
+  VIBRATO_SWEET_MAX_HZ,
+  VIBRATO_SWEET_MIN_HZ,
+  readAutoPauseOnSilence,
+  readHalfResolutionCanvas,
+  readKeepRunningInBackground,
+  readPitchDetectionOnSpectrogram,
+  readPitchMaxNote,
+  readPitchMinNote,
+  readRunAt30Fps,
+  readShowStats,
+  readSpectrogramMaxHz,
+  readSpectrogramMinHz,
+  readSpectrogramNoiseProfile,
+  writeAutoPauseOnSilence,
+  writeHalfResolutionCanvas,
+  writeKeepRunningInBackground,
+  writePitchDetectionOnSpectrogram,
+  writePitchMaxNote,
+  writePitchMinNote,
+  writeRunAt30Fps,
+  writeShowStats,
+  writeSpectrogramMaxHz,
+  writeSpectrogramMinHz,
+  writeSpectrogramNoiseProfile,
+} from "./config.js";
 
-const ANALYSIS_WINDOW_SIZE = 2048;
-const SPECTROGRAM_BIN_COUNT = 4096;
-const SAMPLES_PER_SECOND = 200;
-const SILENCE_PAUSE_THRESHOLD_MS = 300;
-const PITCH_SECONDS = 5; // x axis range
-const WAVE_Y_RANGE = 305; // in cents
-const CENTER_SECONDS = 1; // Window to use for vertical centering
-const RAW_BUFFER_SECONDS = 8;
-const VIBRATO_RATE_MIN_HZ = 3;
-const VIBRATO_SWEET_MIN_HZ = 4;
-const VIBRATO_SWEET_MAX_HZ = 8;
-const VIBRATO_RATE_MAX_HZ = 9;
-const VIBRATO_ANALYSIS_WINDOW_SECONDS = 0.5;
-const VIBRATO_MIN_CONTIGUOUS_SECONDS = 0.4;
-const VIBRATO_MAX_MARKER_PX_PER_FRAME = 2;
-const VIBRATO_RATE_HOLD_MS = 300;
-const PITCH_MIN_NOTE_DEFAULT = "C1";
-const PITCH_MAX_NOTE_DEFAULT = "F6";
-export const SPECTROGRAM_MIN_HZ_DEFAULT = 30;
-export const SPECTROGRAM_MAX_HZ_DEFAULT = 11_000;
-export const ACTIVE_VIEW_STORAGE_KEY = "voicebox.activeView";
-const ACTIVE_VIEW_DEFAULT = "vibrato";
-export const AUTO_PAUSE_ON_SILENCE_STORAGE_KEY = "voicebox.autoPauseOnSilence";
-export const SHOW_STATS_STORAGE_KEY = "voicebox.showStats";
-const PITCH_ON_SPECTROGRAM_STORAGE_KEY = "voicebox.pitchDetectionOnSpectrogram";
-export const RUN_AT_30_FPS_STORAGE_KEY = "voicebox.runAt30Fps";
-export const HALF_RESOLUTION_CANVAS_STORAGE_KEY = "voicebox.halfResolutionCanvas";
-const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
-const SHOW_STATS_DEFAULT = false;
-const PITCH_ON_SPECTROGRAM_DEFAULT = true;
 const RUN_AT_30_FPS_DEFAULT = false;
-const HALF_RESOLUTION_CANVAS_DEFAULT = false;
-const SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY = "voicebox.spectrogramNoiseProfile";
+const WAVE_Y_RANGE = 305; // in cents
 const MAX_DRAW_JUMP_CENTS = 80;
-const FFT_PITCH_MAX_P = 10;
-const FFT_PITCH_PARTIAL_COUNT = 12;
-const FFT_PITCH_REFINEMENT_PARTIAL_COUNT = 4;
-const FFT_PITCH_SEARCH_RADIUS_BINS = 2;
-const FFT_PITCH_OFF_PARTIAL_WEIGHT = 0.5;
-const FFT_PITCH_EXPECTED_P0_MIN_RATIO = 0.18;
-const FFT_PITCH_EXPECTED_P0_PENALTY_WEIGHT = 2.0;
-const FFT_PITCH_DOWNWARD_BIAS_PER_P = 0.02;
-const FFT_PITCH_MIN_RMS = 0.01;
 
 function computeIsForeground() {
   if (document.visibilityState === "hidden") return false;
@@ -76,38 +75,12 @@ function computeIsForeground() {
   return true;
 }
 
-function safeReadPitchNote(storageKey, fallback) {
-  const stored = ls.get(storageKey, fallback);
-  if (typeof stored !== "string") return fallback;
-  return PITCH_NOTE_OPTIONS.includes(stored) ? stored : fallback;
-}
-
-function safeReadActiveView() {
-  const stored = ls.get(ACTIVE_VIEW_STORAGE_KEY, ACTIVE_VIEW_DEFAULT);
-  return stored === "pitch" || stored === "vibrato" || stored === "spectrogram"
-      ? stored
-      : ACTIVE_VIEW_DEFAULT;
-}
-
-function safeReadPositiveNumber(storageKey, fallback) {
-  const stored = ls.get(storageKey, fallback);
-  const value = Number(stored);
-  return Number.isFinite(value) && value > 0 ? value : fallback;
-}
-
-function safeReadSpectrogramNoiseProfile() {
-  const stored = ls.get(SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY, null);
-  if (!Array.isArray(stored) || stored.length === 0) return null;
-  const profile = new Float32Array(stored.length);
-  for (let i = 0; i < stored.length; i += 1) {
-    const value = Number(stored[i]);
-    profile[i] = Number.isFinite(value) ? clamp(value, 0, 1) : 0;
-  }
-  return profile;
-}
-
-export default function App() {
-  const initialNoiseProfile = useMemo(() => safeReadSpectrogramNoiseProfile(), []);
+export default function Recorder({
+  activeView,
+  settingsOpen,
+  onSettingsModelChange,
+}) {
+  const initialNoiseProfile = useMemo(() => readSpectrogramNoiseProfile(), []);
   const vibratoChartRef = useRef(null);
   const pitchChartRef = useRef(null);
   const spectrogramChartRef = useRef(null);
@@ -119,7 +92,7 @@ export default function App() {
     samplesPerSecond: SAMPLES_PER_SECOND,
     seconds: PITCH_SECONDS,
     silencePauseThresholdMs: SILENCE_PAUSE_THRESHOLD_MS,
-    autoPauseOnSilence: AUTO_PAUSE_ON_SILENCE_DEFAULT,
+    autoPauseOnSilence: true,
     nowMs: performance.now(),
   }));
   const rawBufferRef = useRef(createRawAudioBuffer(48_000, {
@@ -167,7 +140,7 @@ export default function App() {
     hasDataTiming: false,
   });
   const forceRedrawRef = useRef(false);
-  const activeViewRef = useRef(ACTIVE_VIEW_DEFAULT);
+  const activeViewRef = useRef(activeView);
   const runAt30FpsRef = useRef(RUN_AT_30_FPS_DEFAULT);
   const pitchRangeRef = useRef({
     minHz: noteNameToHz(PITCH_MIN_NOTE_DEFAULT),
@@ -186,44 +159,18 @@ export default function App() {
     level: {rms: 0},
     rawHz: 0,
   });
-  const [activeView, setActiveView] = useState(() => safeReadActiveView());
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [wantsToRun, setWantsToRun] = useState(true);
   const [isForeground, setIsForeground] = useState(() => computeIsForeground());
-  const [keepRunningInBackground, setKeepRunningInBackground] = useState(() => {
-    return ls.get("voicebox.keepRunningInBackground", false) === true;
-  });
-  const [autoPauseOnSilence, setAutoPauseOnSilence] = useState(() => {
-    return ls.get(AUTO_PAUSE_ON_SILENCE_STORAGE_KEY, AUTO_PAUSE_ON_SILENCE_DEFAULT) === true;
-  });
-  const [showStats, setShowStats] = useState(() => {
-    return ls.get(SHOW_STATS_STORAGE_KEY, SHOW_STATS_DEFAULT) === true;
-  });
-  const [pitchDetectionOnSpectrogram, setPitchDetectionOnSpectrogram] = useState(() => {
-    return ls.get(PITCH_ON_SPECTROGRAM_STORAGE_KEY, PITCH_ON_SPECTROGRAM_DEFAULT) !== false;
-  });
-  const [runAt30Fps, setRunAt30Fps] = useState(() => {
-    return ls.get(RUN_AT_30_FPS_STORAGE_KEY, RUN_AT_30_FPS_DEFAULT) === true;
-  });
-  const [halfResolutionCanvas, setHalfResolutionCanvas] = useState(() => {
-    return ls.get(HALF_RESOLUTION_CANVAS_STORAGE_KEY, HALF_RESOLUTION_CANVAS_DEFAULT) === true;
-  });
-  const [pitchMinNote, setPitchMinNote] = useState(() => safeReadPitchNote(
-      "voicebox.pitchMinNote",
-      PITCH_MIN_NOTE_DEFAULT
-  ));
-  const [pitchMaxNote, setPitchMaxNote] = useState(() => safeReadPitchNote(
-      "voicebox.pitchMaxNote",
-      PITCH_MAX_NOTE_DEFAULT
-  ));
-  const [spectrogramMinHz, setSpectrogramMinHz] = useState(() => safeReadPositiveNumber(
-      "voicebox.spectrogramMinHz",
-      SPECTROGRAM_MIN_HZ_DEFAULT
-  ));
-  const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => safeReadPositiveNumber(
-      "voicebox.spectrogramMaxHz",
-      SPECTROGRAM_MAX_HZ_DEFAULT
-  ));
+  const [keepRunningInBackground, setKeepRunningInBackground] = useState(() => readKeepRunningInBackground());
+  const [autoPauseOnSilence, setAutoPauseOnSilence] = useState(() => readAutoPauseOnSilence());
+  const [showStats, setShowStats] = useState(() => readShowStats());
+  const [pitchDetectionOnSpectrogram, setPitchDetectionOnSpectrogram] = useState(() => readPitchDetectionOnSpectrogram());
+  const [runAt30Fps, setRunAt30Fps] = useState(() => readRunAt30Fps());
+  const [halfResolutionCanvas, setHalfResolutionCanvas] = useState(() => readHalfResolutionCanvas());
+  const [pitchMinNote, setPitchMinNote] = useState(() => readPitchMinNote());
+  const [pitchMaxNote, setPitchMaxNote] = useState(() => readPitchMaxNote());
+  const [spectrogramMinHz, setSpectrogramMinHz] = useState(() => readSpectrogramMinHz());
+  const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => readSpectrogramMaxHz());
   const [spectrogramNoiseCalibrating, setSpectrogramNoiseCalibrating] = useState(false);
   const [spectrogramNoiseProfileReady, setSpectrogramNoiseProfileReady] = useState(() => initialNoiseProfile !== null);
   const [batteryUsagePerMinute, setBatteryUsagePerMinute] = useState(null);
@@ -257,43 +204,39 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    ls.set("voicebox.keepRunningInBackground", keepRunningInBackground);
+    writeKeepRunningInBackground(keepRunningInBackground);
   }, [keepRunningInBackground]);
 
   useEffect(() => {
     timelineRef.current.autoPauseOnSilence = autoPauseOnSilence;
-    ls.set(AUTO_PAUSE_ON_SILENCE_STORAGE_KEY, autoPauseOnSilence);
+    writeAutoPauseOnSilence(autoPauseOnSilence);
   }, [autoPauseOnSilence]);
 
   useEffect(() => {
-    ls.set(SHOW_STATS_STORAGE_KEY, showStats);
+    writeShowStats(showStats);
   }, [showStats]);
 
   useEffect(() => {
-    ls.set(PITCH_ON_SPECTROGRAM_STORAGE_KEY, pitchDetectionOnSpectrogram);
+    writePitchDetectionOnSpectrogram(pitchDetectionOnSpectrogram);
   }, [pitchDetectionOnSpectrogram]);
 
   useEffect(() => {
-    ls.set(RUN_AT_30_FPS_STORAGE_KEY, runAt30Fps);
+    writeRunAt30Fps(runAt30Fps);
   }, [runAt30Fps]);
 
   useEffect(() => {
-    ls.set(HALF_RESOLUTION_CANVAS_STORAGE_KEY, halfResolutionCanvas);
+    writeHalfResolutionCanvas(halfResolutionCanvas);
   }, [halfResolutionCanvas]);
 
   useEffect(() => {
-    ls.set("voicebox.pitchMinNote", pitchMinNote);
-    ls.set("voicebox.pitchMaxNote", pitchMaxNote);
+    writePitchMinNote(pitchMinNote);
+    writePitchMaxNote(pitchMaxNote);
   }, [pitchMinNote, pitchMaxNote]);
 
   useEffect(() => {
-    ls.set("voicebox.spectrogramMinHz", spectrogramMinHz);
-    ls.set("voicebox.spectrogramMaxHz", spectrogramMaxHz);
+    writeSpectrogramMinHz(spectrogramMinHz);
+    writeSpectrogramMaxHz(spectrogramMaxHz);
   }, [spectrogramMaxHz, spectrogramMinHz]);
-
-  useEffect(() => {
-    ls.set(ACTIVE_VIEW_STORAGE_KEY, activeView);
-  }, [activeView]);
 
   useEffect(() => {
     const updateForeground = () => {
@@ -382,7 +325,7 @@ export default function App() {
     }
     if (noiseState.profile && noiseState.profile.length !== binCount) {
       noiseState.profile = null;
-      ls.set(SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY, null);
+      writeSpectrogramNoiseProfile(null);
       setSpectrogramNoiseProfileReady(false);
     }
     forceRedrawRef.current = true;
@@ -447,7 +390,7 @@ export default function App() {
         profile[i] = noiseState.sumBins[i] / noiseState.sampleCount;
       }
       noiseState.profile = profile;
-      ls.set(SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY, Array.from(profile));
+      writeSpectrogramNoiseProfile(profile);
       setSpectrogramNoiseProfileReady(true);
     }
     noiseState.calibrating = false;
@@ -459,7 +402,7 @@ export default function App() {
   const clearSpectrogramNoiseProfile = () => {
     const noiseState = spectrogramNoiseRef.current;
     noiseState.profile = null;
-    ls.set(SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY, null);
+    writeSpectrogramNoiseProfile(null);
     setSpectrogramNoiseProfileReady(false);
   };
 
@@ -575,18 +518,7 @@ export default function App() {
           windowSamples,
           detectorSpectrumBins,
           minHz,
-          maxHz,
-          {
-            maxP: FFT_PITCH_MAX_P,
-            pCount: FFT_PITCH_PARTIAL_COUNT,
-            pRefineCount: FFT_PITCH_REFINEMENT_PARTIAL_COUNT,
-            searchRadiusBins: FFT_PITCH_SEARCH_RADIUS_BINS,
-            offWeight: FFT_PITCH_OFF_PARTIAL_WEIGHT,
-            expectedP0MinRatio: FFT_PITCH_EXPECTED_P0_MIN_RATIO,
-            expectedP0PenaltyWeight: FFT_PITCH_EXPECTED_P0_PENALTY_WEIGHT,
-            downwardBiasPerP: FFT_PITCH_DOWNWARD_BIAS_PER_P,
-            minRms: FFT_PITCH_MIN_RMS,
-          }
+          maxHz
       );
       analysisElapsedMs += performance.now() - analysisStart;
       processedWindows += 1;
@@ -996,182 +928,128 @@ export default function App() {
     setRunAt30Fps(nextValue);
   };
 
+  const settingsModel = useMemo(() => ({
+    keepRunningInBackground,
+    onKeepRunningInBackgroundChange: setKeepRunningInBackground,
+    autoPauseOnSilence,
+    onAutoPauseOnSilenceChange: setAutoPauseOnSilence,
+    showStats,
+    onShowStatsChange: setShowStats,
+    pitchDetectionOnSpectrogram,
+    onPitchDetectionOnSpectrogramChange: setPitchDetectionOnSpectrogram,
+    runAt30Fps,
+    onRunAt30FpsChange,
+    halfResolutionCanvas,
+    onHalfResolutionCanvasChange: setHalfResolutionCanvas,
+    pitchMinNote,
+    pitchMaxNote,
+    pitchNoteOptions: PITCH_NOTE_OPTIONS,
+    onPitchMinNoteChange,
+    onPitchMaxNoteChange,
+    spectrogramMinHz,
+    spectrogramMaxHz,
+    onSpectrogramMinHzChange,
+    onSpectrogramMaxHzChange,
+    spectrogramNoiseCalibrating,
+    spectrogramNoiseProfileReady,
+    onNoiseCalibratePointerDown,
+    onNoiseCalibratePointerUp,
+    onNoiseCalibrateContextMenu,
+    onClearSpectrogramNoiseProfile: clearSpectrogramNoiseProfile,
+    batteryUsagePerMinute,
+  }), [
+    autoPauseOnSilence,
+    batteryUsagePerMinute,
+    halfResolutionCanvas,
+    keepRunningInBackground,
+    onNoiseCalibrateContextMenu,
+    pitchDetectionOnSpectrogram,
+    pitchMaxNote,
+    pitchMinNote,
+    runAt30Fps,
+    showStats,
+    spectrogramMaxHz,
+    spectrogramMinHz,
+    spectrogramNoiseCalibrating,
+    spectrogramNoiseProfileReady,
+  ]);
+
+  useEffect(() => {
+    onSettingsModelChange(settingsModel);
+  }, [onSettingsModelChange, settingsModel]);
+
   const showStartOverlay = !ui.isRunning && !wantsToRun && (ui.error || !hasEverRun);
   const showPausedOverlay = !ui.isRunning && !wantsToRun && hasEverRun && !ui.error;
-  const batteryUsageDisplay =
-      batteryUsagePerMinute === null
-          ? null
-          : batteryUsagePerMinute === "--"
-              ? "-- %/min"
-              : `${batteryUsagePerMinute.toFixed(2)} %/min`;
-
   return (
-      <div className="h-[var(--app-height)] w-full overflow-hidden bg-black text-slate-100">
-        <div className="mx-auto flex h-full w-full max-w-none items-stretch px-0 py-0 md:max-w-[450px] md:items-center md:justify-center md:px-2 md:py-2">
-          <main className="relative flex min-h-0 flex-1 flex-col bg-black md:h-full md:w-full md:max-h-[1000px] md:flex-none md:rounded-xl md:border md:border-slate-800 md:shadow-2xl">
-            <div
-                className="relative flex min-h-0 flex-1 flex-col"
-                onClick={onChartTogglePause}
-            >
-              {activeView === "vibrato" ? (
-                  <VibratoChart
-                      ref={vibratoChartRef}
-                      yRange={WAVE_Y_RANGE}
-                      maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
-                      vibratoRateHz={ui.vibratoRateHz}
-                      vibratoRateMinHz={VIBRATO_RATE_MIN_HZ}
-                      vibratoRateMaxHz={VIBRATO_RATE_MAX_HZ}
-                      vibratoSweetMinHz={VIBRATO_SWEET_MIN_HZ}
-                      vibratoSweetMaxHz={VIBRATO_SWEET_MAX_HZ}
-                      renderScale={halfResolutionCanvas ? 0.5 : 1}
-                  />
-              ) : activeView === "spectrogram" ? (
-                  <SpectrogramChart
-                      ref={spectrogramChartRef}
-                      className="h-full w-full"
-                      minHz={spectrogramMinHz}
-                      maxHz={spectrogramMaxHz}
-                      renderScale={halfResolutionCanvas ? 0.5 : 1}
-                  />
-              ) : (
-                  <PitchChart
-                      ref={pitchChartRef}
-                      minCents={pitchMinCents}
-                      maxCents={pitchMaxCents}
-                      maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
-                      renderScale={halfResolutionCanvas ? 0.5 : 1}
-                  />
-              )}
-              {showStartOverlay ? (
-                  <div
-                      className="absolute inset-0 z-10 flex items-center justify-center bg-black/60"
-                      onClick={(event) => event.stopPropagation()}
-                  >
-                    <button
-                        type="button"
-                        onClick={onStartButtonClick}
-                        className="rounded-full bg-sky-400 px-6 py-3 text-base font-semibold text-slate-950 shadow-lg shadow-sky-400/30"
-                    >
-                      Start
-                    </button>
-                  </div>
-              ) : null}
-              {showPausedOverlay ? (
-                  <div className="pointer-events-none absolute inset-0 z-10">
-                    <div className="pause-pill-fade absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-800/80 px-9 py-3 text-xl font-semibold uppercase tracking-[0.2em] text-slate-100">
-                      Paused
-                    </div>
-                  </div>
-              ) : null}
-            </div>
-            {ui.error && !showStartOverlay ? (
-                <div className="absolute inset-x-3 top-14 rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-200">
-                  {ui.error}
-                </div>
-            ) : null}
-            {showStats ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-4 py-2 text-xs text-slate-300">
-                  <div>Data: {stats.timings.data === null ? "--" : `${stats.timings.data.toFixed(2)} ms`}</div>
-                  <div>Draw: {stats.timings.draw.toFixed(2)} ms</div>
-                  <div>RMS: {stats.level.rms?.toFixed(3) ?? "--"}</div>
-                  <div>Hz: {stats.rawHz ? stats.rawHz.toFixed(1) : "0"}</div>
-                </div>
-            ) : null}
-            <footer className="relative flex h-12 items-stretch gap-2 pr-2 pt-0 pb-0 pl-0 text-xs text-slate-300">
-              <div className="flex flex-1 items-stretch">
-                <button
-                    type="button"
-                    onClick={() => setActiveView("pitch")}
-                    aria-pressed={activeView === "pitch"}
-                    className={`relative h-full flex-1 overflow-hidden rounded-none px-2 text-[0.92rem] font-semibold transition-colors ${
-                        activeView === "pitch"
-                            ? "text-sky-400"
-                            : "text-slate-300 hover:text-slate-100 active:text-slate-200"
-                    }`}
-                >
-                  Pitch
-                  {activeView === "pitch" ? (
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-sky-400"/>
-                  ) : null}
-                </button>
-                <button
-                    type="button"
-                    onClick={() => setActiveView("vibrato")}
-                    aria-pressed={activeView === "vibrato"}
-                    className={`relative h-full flex-1 overflow-hidden rounded-none px-2 text-[0.92rem] font-semibold transition-colors ${
-                        activeView === "vibrato"
-                            ? "text-sky-400"
-                            : "text-slate-300 hover:text-slate-100 active:text-slate-200"
-                    }`}
-                >
-                  Vibrato
-                  {activeView === "vibrato" ? (
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-sky-400"/>
-                  ) : null}
-                </button>
-                <button
-                    type="button"
-                    onClick={() => setActiveView("spectrogram")}
-                    aria-pressed={activeView === "spectrogram"}
-                    className={`relative h-full flex-1 overflow-hidden rounded-none px-2 text-[0.92rem] font-semibold transition-colors ${
-                        activeView === "spectrogram"
-                            ? "text-sky-400"
-                            : "text-slate-300 hover:text-slate-100 active:text-slate-200"
-                    }`}
-                >
-                  Spectrogram
-                  {activeView === "spectrogram" ? (
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-sky-400"/>
-                  ) : null}
-                </button>
-              </div>
-              <div className="flex w-10 items-stretch justify-end">
-                <button
-                    type="button"
-                    onClick={() => setSettingsOpen(true)}
-                    className="inline-flex h-full w-full items-center justify-center rounded-none text-slate-400 transition-colors hover:text-slate-100 active:text-white"
-                    aria-label="Open settings"
-                >
-                  <Settings aria-hidden="true" className="h-5 w-5" strokeWidth={1.8}/>
-                </button>
-              </div>
-            </footer>
-          </main>
-          {settingsOpen ? (
-              <SettingsPanel
-                  open={settingsOpen}
-                  onClose={() => setSettingsOpen(false)}
-                  keepRunningInBackground={keepRunningInBackground}
-                  onKeepRunningInBackgroundChange={setKeepRunningInBackground}
-                  autoPauseOnSilence={autoPauseOnSilence}
-                  onAutoPauseOnSilenceChange={setAutoPauseOnSilence}
-                  showStats={showStats}
-                  onShowStatsChange={setShowStats}
-                  pitchDetectionOnSpectrogram={pitchDetectionOnSpectrogram}
-                  onPitchDetectionOnSpectrogramChange={setPitchDetectionOnSpectrogram}
-                  runAt30Fps={runAt30Fps}
-                  onRunAt30FpsChange={onRunAt30FpsChange}
-                  halfResolutionCanvas={halfResolutionCanvas}
-                  onHalfResolutionCanvasChange={setHalfResolutionCanvas}
-                  pitchMinNote={pitchMinNote}
-                  pitchMaxNote={pitchMaxNote}
-                  pitchNoteOptions={PITCH_NOTE_OPTIONS}
-                  onPitchMinNoteChange={onPitchMinNoteChange}
-                  onPitchMaxNoteChange={onPitchMaxNoteChange}
-                  spectrogramMinHz={spectrogramMinHz}
-                  spectrogramMaxHz={spectrogramMaxHz}
-                  onSpectrogramMinHzChange={onSpectrogramMinHzChange}
-                  onSpectrogramMaxHzChange={onSpectrogramMaxHzChange}
-                  spectrogramNoiseCalibrating={spectrogramNoiseCalibrating}
-                  spectrogramNoiseProfileReady={spectrogramNoiseProfileReady}
-                  onNoiseCalibratePointerDown={onNoiseCalibratePointerDown}
-                  onNoiseCalibratePointerUp={onNoiseCalibratePointerUp}
-                  onNoiseCalibrateContextMenu={onNoiseCalibrateContextMenu}
-                  onClearSpectrogramNoiseProfile={clearSpectrogramNoiseProfile}
-                  batteryUsageDisplay={batteryUsageDisplay}
+      <>
+        <div
+            className="relative flex min-h-0 flex-1 flex-col"
+            onClick={onChartTogglePause}
+        >
+          {activeView === "vibrato" ? (
+              <VibratoChart
+                  ref={vibratoChartRef}
+                  yRange={WAVE_Y_RANGE}
+                  maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
+                  vibratoRateHz={ui.vibratoRateHz}
+                  vibratoRateMinHz={VIBRATO_RATE_MIN_HZ}
+                  vibratoRateMaxHz={VIBRATO_RATE_MAX_HZ}
+                  vibratoSweetMinHz={VIBRATO_SWEET_MIN_HZ}
+                  vibratoSweetMaxHz={VIBRATO_SWEET_MAX_HZ}
+                  renderScale={halfResolutionCanvas ? 0.5 : 1}
               />
+          ) : activeView === "spectrogram" ? (
+              <SpectrogramChart
+                  ref={spectrogramChartRef}
+                  className="h-full w-full"
+                  minHz={spectrogramMinHz}
+                  maxHz={spectrogramMaxHz}
+                  renderScale={halfResolutionCanvas ? 0.5 : 1}
+              />
+          ) : (
+              <PitchChart
+                  ref={pitchChartRef}
+                  minCents={pitchMinCents}
+                  maxCents={pitchMaxCents}
+                  maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
+                  renderScale={halfResolutionCanvas ? 0.5 : 1}
+              />
+          )}
+          {showStartOverlay ? (
+              <div
+                  className="absolute inset-0 z-10 flex items-center justify-center bg-black/60"
+                  onClick={(event) => event.stopPropagation()}
+              >
+                <button
+                    type="button"
+                    onClick={onStartButtonClick}
+                    className="rounded-full bg-sky-400 px-6 py-3 text-base font-semibold text-slate-950 shadow-lg shadow-sky-400/30"
+                >
+                  Start
+                </button>
+              </div>
+          ) : null}
+          {showPausedOverlay ? (
+              <div className="pointer-events-none absolute inset-0 z-10">
+                <div className="pause-pill-fade absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-800/80 px-9 py-3 text-xl font-semibold uppercase tracking-[0.2em] text-slate-100">
+                  Paused
+                </div>
+              </div>
           ) : null}
         </div>
-      </div>
+        {ui.error && !showStartOverlay ? (
+            <div className="absolute inset-x-3 top-14 rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-200">
+              {ui.error}
+            </div>
+        ) : null}
+        {showStats ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-4 py-2 text-xs text-slate-300">
+              <div>Data: {stats.timings.data === null ? "--" : `${stats.timings.data.toFixed(2)} ms`}</div>
+              <div>Draw: {stats.timings.draw.toFixed(2)} ms</div>
+              <div>RMS: {stats.level.rms?.toFixed(3) ?? "--"}</div>
+              <div>Hz: {stats.rawHz ? stats.rawHz.toFixed(1) : "0"}</div>
+            </div>
+        ) : null}
+      </>
   );
 }

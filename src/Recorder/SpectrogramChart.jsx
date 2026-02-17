@@ -1,6 +1,6 @@
 import {forwardRef, useImperativeHandle, useMemo, useRef} from "react";
 import colors from "tailwindcss/colors";
-import {clamp} from "./tools.js";
+import {clamp} from "../tools.js";
 
 const LABEL_X = 4;
 const PLOT_LEFT = 0;
