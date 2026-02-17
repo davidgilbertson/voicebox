@@ -1,4 +1,4 @@
-import {useEffect, useRef} from "react";
+import {useEffect, useRef, useState} from "react";
 
 const SETTINGS_CHECKBOX_CLASS = "settings-checkbox h-5 w-5";
 
@@ -33,8 +33,10 @@ export default function SettingsPanel({
                                         onNoiseCalibrateContextMenu,
                                         onClearSpectrogramNoiseProfile,
                                         batteryUsageDisplay,
-                                      }) {
+}) {
   const dialogRef = useRef(null);
+  const [spectrogramMinHzDraft, setSpectrogramMinHzDraft] = useState(() => String(spectrogramMinHz));
+  const [spectrogramMaxHzDraft, setSpectrogramMaxHzDraft] = useState(() => String(spectrogramMaxHz));
   const pitchMinIndex = pitchNoteOptions.indexOf(pitchMinNote);
   const pitchMaxIndex = pitchNoteOptions.indexOf(pitchMaxNote);
 
@@ -49,6 +51,32 @@ export default function SettingsPanel({
       dialog.close();
     }
   }, [open]);
+
+  useEffect(() => {
+    setSpectrogramMinHzDraft(String(spectrogramMinHz));
+  }, [spectrogramMinHz]);
+
+  useEffect(() => {
+    setSpectrogramMaxHzDraft(String(spectrogramMaxHz));
+  }, [spectrogramMaxHz]);
+
+  const onSpectrogramMinHzBlur = () => {
+    const nextValue = Number(spectrogramMinHzDraft);
+    if (!Number.isFinite(nextValue) || nextValue <= 0) {
+      setSpectrogramMinHzDraft(String(spectrogramMinHz));
+      return;
+    }
+    onSpectrogramMinHzChange(nextValue);
+  };
+
+  const onSpectrogramMaxHzBlur = () => {
+    const nextValue = Number(spectrogramMaxHzDraft);
+    if (!Number.isFinite(nextValue) || nextValue <= 0) {
+      setSpectrogramMaxHzDraft(String(spectrogramMaxHz));
+      return;
+    }
+    onSpectrogramMaxHzChange(nextValue);
+  };
 
   return (
       <dialog
@@ -102,48 +130,6 @@ export default function SettingsPanel({
                   type="checkbox"
                   checked={autoPauseOnSilence}
                   onChange={(event) => onAutoPauseOnSilenceChange(event.target.checked)}
-                  className={SETTINGS_CHECKBOX_CLASS}
-              />
-            </label>
-            <label className="flex items-start justify-between gap-4 text-sm">
-              <div className="flex flex-col gap-1">
-                <span>Show stats</span>
-                <span className="text-xs text-slate-400">
-                  Show perf + signal stats under the chart.
-                </span>
-              </div>
-              <input
-                  type="checkbox"
-                  checked={showStats}
-                  onChange={(event) => onShowStatsChange(event.target.checked)}
-                  className={SETTINGS_CHECKBOX_CLASS}
-              />
-            </label>
-            <label className="flex items-start justify-between gap-4 text-sm">
-              <div className="flex flex-col gap-1">
-                <span>Run at 30 FPS</span>
-                <span className="text-xs text-slate-400">
-                  Limit rendering to 30 FPS to reduce battery use.<br/>Default is 60 FPS for most devices.
-                </span>
-              </div>
-              <input
-                  type="checkbox"
-                  checked={runAt30Fps}
-                  onChange={(event) => onRunAt30FpsChange(event.target.checked)}
-                  className={SETTINGS_CHECKBOX_CLASS}
-              />
-            </label>
-            <label className="flex items-start justify-between gap-4 text-sm">
-              <div className="flex flex-col gap-1">
-                <span>Half-resolution canvas</span>
-                <span className="text-xs text-slate-400">
-                  Render charts at 50% pixel density to reduce GPU/CPU cost.
-                </span>
-              </div>
-              <input
-                  type="checkbox"
-                  checked={halfResolutionCanvas}
-                  onChange={(event) => onHalfResolutionCanvasChange(event.target.checked)}
                   className={SETTINGS_CHECKBOX_CLASS}
               />
             </label>
@@ -208,20 +194,6 @@ export default function SettingsPanel({
 
             <div className="border-t border-slate-700/80"/>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">Spectrogram Page</div>
-            <label className="flex items-start justify-between gap-4 text-sm">
-              <div className="flex flex-col gap-1">
-                <span>Pitch detect on spectrogram</span>
-                <span className="text-xs text-slate-400">
-                  Keep pitch/vibrato data live while spectrogram is active.
-                </span>
-              </div>
-              <input
-                  type="checkbox"
-                  checked={pitchDetectionOnSpectrogram}
-                  onChange={(event) => onPitchDetectionOnSpectrogramChange(event.target.checked)}
-                  className={SETTINGS_CHECKBOX_CLASS}
-              />
-            </label>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
                 <label htmlFor="spectrogram-min-hz" className="block text-xs uppercase tracking-wide text-slate-400">
@@ -232,8 +204,9 @@ export default function SettingsPanel({
                       id="spectrogram-min-hz"
                       type="number"
                       inputMode="decimal"
-                      value={spectrogramMinHz}
-                      onChange={(event) => onSpectrogramMinHzChange(event.target.valueAsNumber)}
+                      value={spectrogramMinHzDraft}
+                      onChange={(event) => setSpectrogramMinHzDraft(event.target.value)}
+                      onBlur={onSpectrogramMinHzBlur}
                       className="settings-number-input h-10 w-full rounded-md border border-slate-600 bg-slate-900 px-3 text-sm text-slate-100"
                       aria-label="Spectrogram minimum frequency (Hz)"
                   />
@@ -248,8 +221,9 @@ export default function SettingsPanel({
                       id="spectrogram-max-hz"
                       type="number"
                       inputMode="decimal"
-                      value={spectrogramMaxHz}
-                      onChange={(event) => onSpectrogramMaxHzChange(event.target.valueAsNumber)}
+                      value={spectrogramMaxHzDraft}
+                      onChange={(event) => setSpectrogramMaxHzDraft(event.target.value)}
+                      onBlur={onSpectrogramMaxHzBlur}
                       className="settings-number-input h-10 w-full rounded-md border border-slate-600 bg-slate-900 px-3 text-sm text-slate-100"
                       aria-label="Spectrogram maximum frequency (Hz)"
                   />
@@ -288,6 +262,64 @@ export default function SettingsPanel({
                 Hold to record background noise to subtract from chart.
               </div>
             </div>
+            <div className="border-t border-slate-700/80"/>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">Performance</div>
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <div className="flex flex-col gap-1">
+                <span>Show stats</span>
+                <span className="text-xs text-slate-400">
+                  Show perf + signal stats under the chart.
+                </span>
+              </div>
+              <input
+                  type="checkbox"
+                  checked={showStats}
+                  onChange={(event) => onShowStatsChange(event.target.checked)}
+                  className={SETTINGS_CHECKBOX_CLASS}
+              />
+            </label>
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <div className="flex flex-col gap-1">
+                <span>Run at 30 FPS</span>
+                <span className="text-xs text-slate-400">
+                  Limit rendering to 30 FPS to reduce battery use.<br/>Default is 60 FPS for most devices.
+                </span>
+              </div>
+              <input
+                  type="checkbox"
+                  checked={runAt30Fps}
+                  onChange={(event) => onRunAt30FpsChange(event.target.checked)}
+                  className={SETTINGS_CHECKBOX_CLASS}
+              />
+            </label>
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <div className="flex flex-col gap-1">
+                <span>Half-resolution canvas</span>
+                <span className="text-xs text-slate-400">
+                  Render charts at 50% pixel density to reduce GPU/CPU cost.
+                </span>
+              </div>
+              <input
+                  type="checkbox"
+                  checked={halfResolutionCanvas}
+                  onChange={(event) => onHalfResolutionCanvasChange(event.target.checked)}
+                  className={SETTINGS_CHECKBOX_CLASS}
+              />
+            </label>
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <div className="flex flex-col gap-1">
+                <span>Disable pitch detection while on spectrogram page</span>
+                <span className="text-xs text-slate-400">
+                  Faster while spectrogram is active, but pitch/vibrato data pauses.
+                </span>
+              </div>
+              <input
+                  type="checkbox"
+                  checked={!pitchDetectionOnSpectrogram}
+                  onChange={(event) => onPitchDetectionOnSpectrogramChange(!event.target.checked)}
+                  className={SETTINGS_CHECKBOX_CLASS}
+              />
+            </label>
             <a
                 href="https://github.com/davidgilbertson/voicebox"
                 target="_blank"

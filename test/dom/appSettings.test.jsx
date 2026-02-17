@@ -58,10 +58,30 @@ test("spectrogram frequency settings are editable and persisted", async () => {
 
   fireEvent.change(minInput, {target: {value: "55"}});
   fireEvent.change(maxInput, {target: {value: "7200"}});
+  fireEvent.blur(minInput);
+  fireEvent.blur(maxInput);
 
   await waitFor(() => {
     expect(localStorage.getItem("voicebox.spectrogramMinHz")).toBe("55");
     expect(localStorage.getItem("voicebox.spectrogramMaxHz")).toBe("7200");
+  });
+});
+
+test("spectrogram frequency inputs can be cleared while editing and commit on blur", async () => {
+  const user = userEvent.setup();
+  render(<App/>);
+
+  await user.click(screen.getByLabelText("Open settings"));
+  const minInput = screen.getByLabelText("Spectrogram minimum frequency (Hz)");
+
+  fireEvent.change(minInput, {target: {value: ""}});
+  expect(minInput).toHaveValue(null);
+
+  fireEvent.change(minInput, {target: {value: "65"}});
+  fireEvent.blur(minInput);
+
+  await waitFor(() => {
+    expect(localStorage.getItem("voicebox.spectrogramMinHz")).toBe("65");
   });
 });
 
@@ -74,6 +94,24 @@ test("enabling show stats displays stats panel", async () => {
   await user.click(screen.getByRole("checkbox", {name: /Show stats/i}));
 
   expect(await screen.findByText(/Data:/)).toBeInTheDocument();
+});
+
+test("disabling pitch detection on spectrogram stores faster mode", async () => {
+  const user = userEvent.setup();
+  render(<App/>);
+
+  await user.click(screen.getByLabelText("Open settings"));
+  const disablePitchDetectionCheckbox = screen.getByRole("checkbox", {
+    name: /Disable pitch detection while on spectrogram page/i,
+  });
+
+  expect(disablePitchDetectionCheckbox).not.toBeChecked();
+  await user.click(disablePitchDetectionCheckbox);
+  expect(disablePitchDetectionCheckbox).toBeChecked();
+
+  await waitFor(() => {
+    expect(localStorage.getItem("voicebox.pitchDetectionOnSpectrogram")).toBe("false");
+  });
 });
 
 test("temporary pitch detector overlay buttons are removed", async () => {
