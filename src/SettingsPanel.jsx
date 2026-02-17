@@ -83,6 +83,14 @@ export default function SettingsPanel({
           : batteryUsagePerMinute === "--"
               ? "-- %/min"
               : `${batteryUsagePerMinute.toFixed(2)} %/min`;
+  const buildTimeDisplay = new Date(__BUILD_TIME_ISO__).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 
   return (
       <dialog
@@ -326,14 +334,17 @@ export default function SettingsPanel({
                   className={SETTINGS_CHECKBOX_CLASS}
               />
             </label>
-            <a
-                href="https://github.com/davidgilbertson/voicebox"
-                target="_blank"
-                rel="noreferrer"
-                className="block pt-3 text-xs text-slate-400 underline decoration-slate-500/80 underline-offset-4 transition hover:text-slate-200"
-            >
-              About
-            </a>
+            <div className="flex items-center justify-between gap-3 pt-3">
+              <a
+                  href="https://github.com/davidgilbertson/voicebox"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-slate-400 underline decoration-slate-500/80 underline-offset-4 transition hover:text-slate-200"
+              >
+                About
+              </a>
+              <div className="text-right text-xs text-slate-500">Build: {buildTimeDisplay}</div>
+            </div>
           </div>
         </section>
       </dialog>

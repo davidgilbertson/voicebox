@@ -54,7 +54,7 @@ body,
     opacity: 1;
   }
   75% {
-    opacity: 1;
+    opacity: 0.8;
   }
   100% {
     opacity: 0;
@@ -62,5 +62,5 @@ body,
 }
 
 .pause-pill-fade {
-  animation: pause-pill-fade 800ms ease-out forwards;
+  animation: pause-pill-fade 1000ms ease-out forwards;
 }
