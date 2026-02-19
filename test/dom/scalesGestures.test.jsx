@@ -18,6 +18,11 @@ function swipe(area, {startX, startY, endX, endY, pointerId = 1}) {
   fireEvent.pointerUp(area, {pointerId, clientX: endX, clientY: endY});
 }
 
+function tap(area, {x = 200, y = 200, pointerId = 1} = {}) {
+  fireEvent.pointerDown(area, {pointerId, clientX: x, clientY: y});
+  fireEvent.pointerUp(area, {pointerId, clientX: x, clientY: y});
+}
+
 beforeEach(() => {
   playNoteMock.mockClear();
   vi.useFakeTimers();
@@ -74,7 +79,7 @@ test("left swipe does nothing and tap on empty area toggles play/pause", async (
   act(() => {
     vi.advanceTimersByTime(400);
   });
-  fireEvent.click(area);
+  tap(area);
   await act(async () => {
     await Promise.resolve();
   });
@@ -89,7 +94,7 @@ test("left swipe does nothing and tap on empty area toggles play/pause", async (
   expect(playNoteMock.mock.calls.length).toBeGreaterThan(18);
   expect(playNoteMock.mock.calls[18][0]).toBe(49);
 
-  fireEvent.click(area);
+  tap(area);
   const pausedCalls = playNoteMock.mock.calls.length;
   act(() => {
     vi.advanceTimersByTime(1500);
@@ -137,18 +142,13 @@ test("fast pointer swipe without move event does not toggle play", async () => {
   expect(playNoteMock).not.toHaveBeenCalled();
 });
 
-test("fast touch swipe without move event does not toggle play", async () => {
+test("tap on help button does not toggle play", async () => {
   render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
   await waitForReady();
-  const area = screen.getByTestId("scales-gesture-area");
 
-  fireEvent.touchStart(area, {
-    changedTouches: [{identifier: 1, clientX: 100, clientY: 200}],
-  });
-  fireEvent.touchEnd(area, {
-    changedTouches: [{identifier: 1, clientX: 340, clientY: 200}],
-  });
-  fireEvent.click(area);
+  fireEvent.pointerDown(screen.getByRole("button", {name: "Got it"}), {pointerId: 1, clientX: 100, clientY: 200});
+  fireEvent.pointerUp(screen.getByRole("button", {name: "Got it"}), {pointerId: 1, clientX: 100, clientY: 200});
+  fireEvent.click(screen.getByRole("button", {name: "Got it"}));
   act(() => {
     vi.advanceTimersByTime(1500);
   });

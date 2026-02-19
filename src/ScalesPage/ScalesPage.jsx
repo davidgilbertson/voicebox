@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from "react";
-import {ArrowDown, ArrowRight, ArrowUp} from "lucide-react";
 import StepperControl from "../components/StepperControl.jsx";
 import Piano from "./Piano.jsx";
+import GestureArea from "./GestureArea.jsx";
 import {
   readScaleBpm,
   readScaleGestureHelpDismissed,
@@ -38,12 +38,7 @@ const SCALE_PATTERNS = {
   Major: MAJOR_PATTERN,
   "2 Up 1 Down": TWO_UP_ONE_DOWN_PATTERN,
 };
-const TAP_GESTURE_MAX_PX = 10;
-const SWIPE_GESTURE_THRESHOLD_PX = 100;
-const SWIPE_CLICK_SUPPRESS_MS = 350;
 const RAPID_VERTICAL_SWIPE_MS = 500;
-const SWIPE_FLASH_HOLD_MS = 140;
-const SWIPE_FLASH_TOTAL_MS = 700;
 const MIDI_MIN = 21;
 const MIDI_MAX = 108;
 
@@ -53,20 +48,6 @@ function buildSetTimeline(pattern) {
 
 function semitoneDeltaForRepeatDirection(repeatDirection) {
   return repeatDirection === "up" ? 1 : repeatDirection === "down" ? -1 : 0;
-}
-
-function isGestureTapTarget(element) {
-  return element?.closest?.("button,input,select,textarea,a,label,[role='button'],[data-no-gesture-tap]") !== null;
-}
-
-function classifyGesture(deltaX, deltaY) {
-  const absX = Math.abs(deltaX);
-  const absY = Math.abs(deltaY);
-  const maxAxisPx = Math.max(absX, absY);
-  return {
-    isTap: maxAxisPx < TAP_GESTURE_MAX_PX,
-    isSwipe: maxAxisPx > SWIPE_GESTURE_THRESHOLD_PX,
-  };
 }
 
 export default function ScalesPage({
@@ -95,18 +76,6 @@ export default function ScalesPage({
     atMs: 0,
     count: 0,
   });
-  const swipeGestureRef = useRef({
-    pointerId: null,
-    touchIdentifier: null,
-    startX: 0,
-    startY: 0,
-    handled: false,
-  });
-  const suppressClicksUntilRef = useRef(0);
-  const [swipeFlash, setSwipeFlash] = useState(null);
-  const [swipeFlashFading, setSwipeFlashFading] = useState(false);
-  const swipeFlashFadeTimeoutRef = useRef(0);
-  const swipeFlashTimeoutRef = useRef(0);
 
   const selectedScalePattern = SCALE_PATTERNS[selectedScaleName] ?? SEMITONE_PATTERN;
 
@@ -195,17 +164,6 @@ export default function ScalesPage({
       stopPlayback();
     };
   }, [stopPlayback]);
-
-  useEffect(() => {
-    return () => {
-      if (swipeFlashFadeTimeoutRef.current) {
-        window.clearTimeout(swipeFlashFadeTimeoutRef.current);
-      }
-      if (swipeFlashTimeoutRef.current) {
-        window.clearTimeout(swipeFlashTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const playStepRef = useRef(null);
   const restartIntervalRef = useRef(null);
@@ -313,32 +271,7 @@ export default function ScalesPage({
     };
   }, [isPlaying, stopPlayback]);
 
-  const onGesturePointerDownCapture = (event) => {
-    swipeGestureRef.current.pointerId = event.pointerId;
-    swipeGestureRef.current.touchIdentifier = null;
-    swipeGestureRef.current.startX = event.clientX;
-    swipeGestureRef.current.startY = event.clientY;
-    swipeGestureRef.current.handled = false;
-  };
-
-  const showSwipeFlash = (direction) => {
-    setSwipeFlash((prev) => ({direction, id: (prev?.id ?? 0) + 1}));
-    setSwipeFlashFading(false);
-    if (swipeFlashFadeTimeoutRef.current) {
-      window.clearTimeout(swipeFlashFadeTimeoutRef.current);
-    }
-    swipeFlashFadeTimeoutRef.current = window.setTimeout(() => {
-      setSwipeFlashFading(true);
-    }, SWIPE_FLASH_HOLD_MS);
-    if (swipeFlashTimeoutRef.current) {
-      window.clearTimeout(swipeFlashTimeoutRef.current);
-    }
-    swipeFlashTimeoutRef.current = window.setTimeout(() => {
-      setSwipeFlash(null);
-    }, SWIPE_FLASH_TOTAL_MS);
-  };
-
-  const restartSetImmediately = (direction) => {
+  const restartSetImmediately = useCallback((direction) => {
     const nextRootMidi = currentSetRootMidiRef.current + semitoneDeltaForRepeatDirection(direction);
     currentSetRootMidiRef.current = clamp(nextRootMidi, scaleMinMidiRef.current, scaleMaxMidiRef.current);
     timelineIndexRef.current = 0;
@@ -350,9 +283,9 @@ export default function ScalesPage({
     }
     playStepRef.current?.();
     restartIntervalRef.current?.();
-  };
+  }, []);
 
-  const updateRapidVerticalSwipeState = (direction) => {
+  const updateRapidVerticalSwipeState = useCallback((direction) => {
     const nowMs = performance.now();
     const rapid = rapidVerticalSwipeRef.current;
     const isSameDirection = rapid.direction === direction;
@@ -361,149 +294,38 @@ export default function ScalesPage({
     rapid.direction = direction;
     rapid.atMs = nowMs;
     return rapid.count;
-  };
+  }, []);
 
-  const handleGestureMove = (deltaX, deltaY) => {
-    const gesture = swipeGestureRef.current;
-    if (gesture.handled) return true;
-    if (
-        Math.abs(deltaX) < SWIPE_GESTURE_THRESHOLD_PX &&
-        Math.abs(deltaY) < SWIPE_GESTURE_THRESHOLD_PX
-    ) {
-      return false;
-    }
-
-    gesture.handled = true;
-    suppressClicksUntilRef.current = performance.now() + SWIPE_CLICK_SUPPRESS_MS;
-    if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+  const onGestureSwipe = useCallback((direction) => {
+    if (direction === "right") {
       rapidVerticalSwipeRef.current.direction = null;
       rapidVerticalSwipeRef.current.count = 0;
-      if (deltaX >= SWIPE_GESTURE_THRESHOLD_PX) {
-        setRepeatDirectionIfChanged("stay");
-        showSwipeFlash("stay");
-      }
-    } else if (deltaY <= -SWIPE_GESTURE_THRESHOLD_PX || deltaY >= SWIPE_GESTURE_THRESHOLD_PX) {
-      const direction = deltaY <= -SWIPE_GESTURE_THRESHOLD_PX ? "up" : "down";
+      setRepeatDirectionIfChanged("stay");
+      return;
+    }
+    if (direction === "left") {
+      rapidVerticalSwipeRef.current.direction = null;
+      rapidVerticalSwipeRef.current.count = 0;
+      return;
+    }
+    if (direction === "up" || direction === "down") {
       const rapidCount = updateRapidVerticalSwipeState(direction);
       setRepeatDirectionIfChanged(direction);
-      showSwipeFlash(direction);
       if (isPlayingRef.current && rapidCount >= 2) {
         restartSetImmediately(direction);
       }
     }
-    return true;
-  };
+  }, [restartSetImmediately, setRepeatDirectionIfChanged, updateRapidVerticalSwipeState]);
 
-  const onGesturePointerMoveCapture = (event) => {
-    const gesture = swipeGestureRef.current;
-    if (gesture.pointerId !== event.pointerId || gesture.handled) {
-      return;
-    }
-    const deltaX = event.clientX - gesture.startX;
-    const deltaY = event.clientY - gesture.startY;
-    const handled = handleGestureMove(deltaX, deltaY);
-    if (!handled) return;
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
-  const onGesturePointerUpCapture = (event) => {
-    const gesture = swipeGestureRef.current;
-    if (gesture.pointerId !== event.pointerId) {
-      return;
-    }
-    const deltaX = event.clientX - gesture.startX;
-    const deltaY = event.clientY - gesture.startY;
-    const gestureType = classifyGesture(deltaX, deltaY);
-    const handled = gestureType.isSwipe ? handleGestureMove(deltaX, deltaY) : gesture.handled;
-    swipeGestureRef.current.pointerId = null;
-    if (gesture.handled || handled || !gestureType.isTap) {
-      suppressClicksUntilRef.current = performance.now() + SWIPE_CLICK_SUPPRESS_MS;
-      event.preventDefault();
-      event.stopPropagation();
-    }
-  };
-
-  const onGesturePointerCancelCapture = () => {
-    swipeGestureRef.current.pointerId = null;
-    swipeGestureRef.current.touchIdentifier = null;
-    swipeGestureRef.current.handled = false;
-  };
-
-  const onGestureTouchStartCapture = (event) => {
-    if (swipeGestureRef.current.pointerId !== null) return;
-    const touch = event.changedTouches?.[0];
-    if (!touch) return;
-    swipeGestureRef.current.pointerId = null;
-    swipeGestureRef.current.touchIdentifier = touch.identifier;
-    swipeGestureRef.current.startX = touch.clientX;
-    swipeGestureRef.current.startY = touch.clientY;
-    swipeGestureRef.current.handled = false;
-  };
-
-  const onGestureTouchMoveCapture = (event) => {
-    const gesture = swipeGestureRef.current;
-    if (gesture.pointerId !== null) return;
-    if (gesture.touchIdentifier === null || gesture.handled) {
-      return;
-    }
-    const touch = Array.from(event.changedTouches || []).find((entry) => entry.identifier === gesture.touchIdentifier);
-    if (!touch) return;
-    const deltaX = touch.clientX - gesture.startX;
-    const deltaY = touch.clientY - gesture.startY;
-    const handled = handleGestureMove(deltaX, deltaY);
-    if (!handled) return;
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
-  const onGestureTouchEndCapture = (event) => {
-    const gesture = swipeGestureRef.current;
-    if (gesture.pointerId !== null) return;
-    if (gesture.touchIdentifier === null) return;
-    const touch = Array.from(event.changedTouches || []).find((entry) => entry.identifier === gesture.touchIdentifier);
-    if (!touch) return;
-    const deltaX = touch.clientX - gesture.startX;
-    const deltaY = touch.clientY - gesture.startY;
-    const gestureType = classifyGesture(deltaX, deltaY);
-    const handled = gestureType.isSwipe ? handleGestureMove(deltaX, deltaY) : gesture.handled;
-    swipeGestureRef.current.touchIdentifier = null;
-    if (gesture.handled || handled || !gestureType.isTap) {
-      suppressClicksUntilRef.current = performance.now() + SWIPE_CLICK_SUPPRESS_MS;
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-  };
-
-  const onGestureTouchCancelCapture = () => {
-    swipeGestureRef.current.touchIdentifier = null;
-    swipeGestureRef.current.handled = false;
-  };
-
-  const onGestureClickCapture = (event) => {
-    if (isGestureTapTarget(event.target)) {
-      return;
-    }
-    if (performance.now() < suppressClicksUntilRef.current) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
+  const onGestureTap = useCallback(() => {
     if (!isPianoReady) return;
     setIsPlaying((prev) => !prev);
-  };
+  }, [isPianoReady]);
 
   const onDismissGestureHelp = () => {
     setShowGestureHelp(false);
     writeScaleGestureHelpDismissed(true);
   };
-
-  const swipeFlashIcon = swipeFlash?.direction === "up" ? ArrowUp
-      : swipeFlash?.direction === "down" ? ArrowDown
-          : swipeFlash?.direction === "stay" ? ArrowRight
-              : null;
-  const SwipeFlashIcon = swipeFlashIcon;
 
   return (
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
@@ -561,20 +383,13 @@ export default function ScalesPage({
             {isPlaying ? "Pause" : "Play"}
           </button>
 
-          <div
-              data-testid="scales-gesture-area"
+          <GestureArea
+              testId="scales-gesture-area"
               className="relative flex min-h-0 flex-1 items-center justify-center rounded-md touch-none"
-              onPointerDownCapture={onGesturePointerDownCapture}
-              onPointerMoveCapture={onGesturePointerMoveCapture}
-              onPointerUpCapture={onGesturePointerUpCapture}
-              onPointerCancelCapture={onGesturePointerCancelCapture}
-              onTouchStartCapture={onGestureTouchStartCapture}
-              onTouchMoveCapture={onGestureTouchMoveCapture}
-              onTouchEndCapture={onGestureTouchEndCapture}
-              onTouchCancelCapture={onGestureTouchCancelCapture}
-              onClickCapture={onGestureClickCapture}
-          >
-            {showGestureHelp ? (
+              onTap={onGestureTap}
+              onSwipe={onGestureSwipe}
+              showHelp={showGestureHelp}
+              helpContent={
                 <div
                     className="h-full w-full rounded-md border border-slate-700 bg-slate-900/95 p-3 text-sm text-slate-200 shadow-xl"
                     data-no-gesture-tap
@@ -599,15 +414,8 @@ export default function ScalesPage({
                     Got it
                   </button>
                 </div>
-            ) : SwipeFlashIcon ? (
-                <SwipeFlashIcon
-                    key={swipeFlash.id}
-                    className={`h-24 w-24 text-sky-300 transition-opacity duration-500 ${
-                        swipeFlashFading ? "opacity-0" : "opacity-100"
-                    }`}
-                />
-            ) : null}
-          </div>
+              }
+          />
         </div>
       </div>
   );
