@@ -5,7 +5,7 @@ const ACTIVE_VIEW_DEFAULT = "vibrato";
 
 export function readActiveView() {
   const stored = ls.get(ACTIVE_VIEW_STORAGE_KEY, ACTIVE_VIEW_DEFAULT);
-  return stored === "pitch" || stored === "vibrato" || stored === "spectrogram"
+  return stored === "scales" || stored === "pitch" || stored === "vibrato" || stored === "spectrogram"
       ? stored
       : ACTIVE_VIEW_DEFAULT;
 }
@@ -13,4 +13,3 @@ export function readActiveView() {
 export function writeActiveView(value) {
   ls.set(ACTIVE_VIEW_STORAGE_KEY, value);
 }
-

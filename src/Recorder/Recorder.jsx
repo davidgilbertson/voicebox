@@ -19,7 +19,7 @@ import {consumeTimelineElapsed} from "./timelineSteps.js";
 import VibratoChart from "./VibratoChart.jsx";
 import PitchChart from "./PitchChart.jsx";
 import SpectrogramChart from "./SpectrogramChart.jsx";
-import {noteNameToCents, noteNameToHz, PITCH_NOTE_OPTIONS} from "../pitchScale.js";
+import {noteNameToCents, noteNameToHz} from "../pitchScale.js";
 import {BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor} from "./batteryUsage.js";
 import {
   ANALYSIS_WINDOW_SIZE,
@@ -39,27 +39,7 @@ import {
   VIBRATO_RATE_MIN_HZ,
   VIBRATO_SWEET_MAX_HZ,
   VIBRATO_SWEET_MIN_HZ,
-  readAutoPauseOnSilence,
-  readHalfResolutionCanvas,
-  readKeepRunningInBackground,
-  readPitchDetectionOnSpectrogram,
-  readPitchMaxNote,
-  readPitchMinNote,
-  readRunAt30Fps,
-  readShowStats,
-  readSpectrogramMaxHz,
-  readSpectrogramMinHz,
   readSpectrogramNoiseProfile,
-  writeAutoPauseOnSilence,
-  writeHalfResolutionCanvas,
-  writeKeepRunningInBackground,
-  writePitchDetectionOnSpectrogram,
-  writePitchMaxNote,
-  writePitchMinNote,
-  writeRunAt30Fps,
-  writeShowStats,
-  writeSpectrogramMaxHz,
-  writeSpectrogramMinHz,
   writeSpectrogramNoiseProfile,
 } from "./config.js";
 
@@ -78,7 +58,17 @@ function computeIsForeground() {
 export default function Recorder({
   activeView,
   settingsOpen,
-  onSettingsModelChange,
+  keepRunningInBackground,
+  autoPauseOnSilence,
+  showStats,
+  pitchDetectionOnSpectrogram,
+  runAt30Fps,
+  halfResolutionCanvas,
+  pitchMinNote,
+  pitchMaxNote,
+  spectrogramMinHz,
+  spectrogramMaxHz,
+  onSettingsRuntimeChange,
 }) {
   const initialNoiseProfile = useMemo(() => readSpectrogramNoiseProfile(), []);
   const vibratoChartRef = useRef(null);
@@ -161,16 +151,6 @@ export default function Recorder({
   });
   const [wantsToRun, setWantsToRun] = useState(true);
   const [isForeground, setIsForeground] = useState(() => computeIsForeground());
-  const [keepRunningInBackground, setKeepRunningInBackground] = useState(() => readKeepRunningInBackground());
-  const [autoPauseOnSilence, setAutoPauseOnSilence] = useState(() => readAutoPauseOnSilence());
-  const [showStats, setShowStats] = useState(() => readShowStats());
-  const [pitchDetectionOnSpectrogram, setPitchDetectionOnSpectrogram] = useState(() => readPitchDetectionOnSpectrogram());
-  const [runAt30Fps, setRunAt30Fps] = useState(() => readRunAt30Fps());
-  const [halfResolutionCanvas, setHalfResolutionCanvas] = useState(() => readHalfResolutionCanvas());
-  const [pitchMinNote, setPitchMinNote] = useState(() => readPitchMinNote());
-  const [pitchMaxNote, setPitchMaxNote] = useState(() => readPitchMaxNote());
-  const [spectrogramMinHz, setSpectrogramMinHz] = useState(() => readSpectrogramMinHz());
-  const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => readSpectrogramMaxHz());
   const [spectrogramNoiseCalibrating, setSpectrogramNoiseCalibrating] = useState(false);
   const [spectrogramNoiseProfileReady, setSpectrogramNoiseProfileReady] = useState(() => initialNoiseProfile !== null);
   const [batteryUsagePerMinute, setBatteryUsagePerMinute] = useState(null);
@@ -204,39 +184,8 @@ export default function Recorder({
   }, []);
 
   useEffect(() => {
-    writeKeepRunningInBackground(keepRunningInBackground);
-  }, [keepRunningInBackground]);
-
-  useEffect(() => {
     timelineRef.current.autoPauseOnSilence = autoPauseOnSilence;
-    writeAutoPauseOnSilence(autoPauseOnSilence);
   }, [autoPauseOnSilence]);
-
-  useEffect(() => {
-    writeShowStats(showStats);
-  }, [showStats]);
-
-  useEffect(() => {
-    writePitchDetectionOnSpectrogram(pitchDetectionOnSpectrogram);
-  }, [pitchDetectionOnSpectrogram]);
-
-  useEffect(() => {
-    writeRunAt30Fps(runAt30Fps);
-  }, [runAt30Fps]);
-
-  useEffect(() => {
-    writeHalfResolutionCanvas(halfResolutionCanvas);
-  }, [halfResolutionCanvas]);
-
-  useEffect(() => {
-    writePitchMinNote(pitchMinNote);
-    writePitchMaxNote(pitchMaxNote);
-  }, [pitchMinNote, pitchMaxNote]);
-
-  useEffect(() => {
-    writeSpectrogramMinHz(spectrogramMinHz);
-    writeSpectrogramMaxHz(spectrogramMaxHz);
-  }, [spectrogramMaxHz, spectrogramMinHz]);
 
   useEffect(() => {
     const updateForeground = () => {
@@ -878,105 +827,25 @@ export default function Recorder({
     }
   }, [shouldRun, ui.isRunning]);
 
-  const onPitchMinNoteChange = (nextNote) => {
-    const lastIndex = PITCH_NOTE_OPTIONS.length - 1;
-    let nextMinIndex = PITCH_NOTE_OPTIONS.indexOf(nextNote);
-    let nextMaxIndex = PITCH_NOTE_OPTIONS.indexOf(pitchMaxNote);
-    if (nextMinIndex < 0 || nextMaxIndex < 0) return;
-    if (nextMinIndex >= nextMaxIndex) {
-      nextMaxIndex = Math.min(lastIndex, nextMinIndex + 1);
-      if (nextMinIndex >= nextMaxIndex) {
-        nextMinIndex = Math.max(0, nextMaxIndex - 1);
-      }
-    }
-    setPitchMinNote(PITCH_NOTE_OPTIONS[nextMinIndex]);
-    setPitchMaxNote(PITCH_NOTE_OPTIONS[nextMaxIndex]);
-  };
-
-  const onPitchMaxNoteChange = (nextNote) => {
-    const lastIndex = PITCH_NOTE_OPTIONS.length - 1;
-    let nextMaxIndex = PITCH_NOTE_OPTIONS.indexOf(nextNote);
-    let nextMinIndex = PITCH_NOTE_OPTIONS.indexOf(pitchMinNote);
-    if (nextMinIndex < 0 || nextMaxIndex < 0) return;
-    if (nextMaxIndex <= nextMinIndex) {
-      nextMinIndex = Math.max(0, nextMaxIndex - 1);
-      if (nextMaxIndex <= nextMinIndex) {
-        nextMaxIndex = Math.min(lastIndex, nextMinIndex + 1);
-      }
-    }
-    setPitchMinNote(PITCH_NOTE_OPTIONS[nextMinIndex]);
-    setPitchMaxNote(PITCH_NOTE_OPTIONS[nextMaxIndex]);
-  };
-
-  const onSpectrogramMinHzChange = (nextValue) => {
-    if (!Number.isFinite(nextValue) || nextValue <= 0) return;
-    setSpectrogramMinHz(nextValue);
-    if (nextValue >= spectrogramMaxHz) {
-      setSpectrogramMaxHz(nextValue + 1);
-    }
-  };
-
-  const onSpectrogramMaxHzChange = (nextValue) => {
-    if (!Number.isFinite(nextValue) || nextValue <= 0) return;
-    setSpectrogramMaxHz(nextValue);
-    if (nextValue <= spectrogramMinHz) {
-      setSpectrogramMinHz(Math.max(1e-3, nextValue - 1));
-    }
-  };
-
-  const onRunAt30FpsChange = (nextValue) => {
-    setRunAt30Fps(nextValue);
-  };
-
-  const settingsModel = useMemo(() => ({
-    keepRunningInBackground,
-    onKeepRunningInBackgroundChange: setKeepRunningInBackground,
-    autoPauseOnSilence,
-    onAutoPauseOnSilenceChange: setAutoPauseOnSilence,
-    showStats,
-    onShowStatsChange: setShowStats,
-    pitchDetectionOnSpectrogram,
-    onPitchDetectionOnSpectrogramChange: setPitchDetectionOnSpectrogram,
-    runAt30Fps,
-    onRunAt30FpsChange,
-    halfResolutionCanvas,
-    onHalfResolutionCanvasChange: setHalfResolutionCanvas,
-    pitchMinNote,
-    pitchMaxNote,
-    pitchNoteOptions: PITCH_NOTE_OPTIONS,
-    onPitchMinNoteChange,
-    onPitchMaxNoteChange,
-    spectrogramMinHz,
-    spectrogramMaxHz,
-    onSpectrogramMinHzChange,
-    onSpectrogramMaxHzChange,
-    spectrogramNoiseCalibrating,
-    spectrogramNoiseProfileReady,
+  useEffect(() => {
+    onSettingsRuntimeChange({
+      spectrogramNoiseCalibrating,
+      spectrogramNoiseProfileReady,
+      onNoiseCalibratePointerDown,
+      onNoiseCalibratePointerUp,
+      onNoiseCalibrateContextMenu,
+      onClearSpectrogramNoiseProfile: clearSpectrogramNoiseProfile,
+      batteryUsagePerMinute,
+    });
+  }, [
+    batteryUsagePerMinute,
+    onNoiseCalibrateContextMenu,
     onNoiseCalibratePointerDown,
     onNoiseCalibratePointerUp,
-    onNoiseCalibrateContextMenu,
-    onClearSpectrogramNoiseProfile: clearSpectrogramNoiseProfile,
-    batteryUsagePerMinute,
-  }), [
-    autoPauseOnSilence,
-    batteryUsagePerMinute,
-    halfResolutionCanvas,
-    keepRunningInBackground,
-    onNoiseCalibrateContextMenu,
-    pitchDetectionOnSpectrogram,
-    pitchMaxNote,
-    pitchMinNote,
-    runAt30Fps,
-    showStats,
-    spectrogramMaxHz,
-    spectrogramMinHz,
+    onSettingsRuntimeChange,
     spectrogramNoiseCalibrating,
     spectrogramNoiseProfileReady,
   ]);
-
-  useEffect(() => {
-    onSettingsModelChange(settingsModel);
-  }, [onSettingsModelChange, settingsModel]);
 
   const showStartOverlay = !ui.isRunning && !wantsToRun && (ui.error || !hasEverRun);
   const showPausedOverlay = !ui.isRunning && !wantsToRun && hasEverRun && !ui.error;

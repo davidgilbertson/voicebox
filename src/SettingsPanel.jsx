@@ -1,10 +1,16 @@
 import {useEffect, useRef, useState} from "react";
+import StepperControl from "./components/StepperControl.jsx";
 
 const SETTINGS_CHECKBOX_CLASS = "settings-checkbox h-5 w-5";
 
 export default function SettingsPanel({
                                         open,
                                         onClose,
+                                        scaleMinNote,
+                                        scaleMaxNote,
+                                        scaleNoteOptions,
+                                        onScaleMinNoteChange,
+                                        onScaleMaxNoteChange,
                                         keepRunningInBackground,
                                         onKeepRunningInBackgroundChange,
                                         autoPauseOnSilence,
@@ -33,10 +39,13 @@ export default function SettingsPanel({
                                         onNoiseCalibrateContextMenu,
                                         onClearSpectrogramNoiseProfile,
                                         batteryUsagePerMinute,
+                                        disableNoiseSampling = false,
 }) {
   const dialogRef = useRef(null);
   const [spectrogramMinHzDraft, setSpectrogramMinHzDraft] = useState(() => String(spectrogramMinHz));
   const [spectrogramMaxHzDraft, setSpectrogramMaxHzDraft] = useState(() => String(spectrogramMaxHz));
+  const scaleMinIndex = scaleNoteOptions.indexOf(scaleMinNote);
+  const scaleMaxIndex = scaleNoteOptions.indexOf(scaleMaxNote);
   const pitchMinIndex = pitchNoteOptions.indexOf(pitchMinNote);
   const pitchMaxIndex = pitchNoteOptions.indexOf(pitchMaxNote);
 
@@ -83,7 +92,10 @@ export default function SettingsPanel({
           : batteryUsagePerMinute === "--"
               ? "-- %/min"
               : `${batteryUsagePerMinute.toFixed(2)} %/min`;
-  const buildTimeDisplay = new Date(__BUILD_TIME_ISO__).toLocaleString("en-US", {
+  const buildTimeIso = typeof __BUILD_TIME_ISO__ === "string"
+      ? __BUILD_TIME_ISO__
+      : "1970-01-01T00:00:00.000Z";
+  const buildTimeDisplay = new Date(buildTimeIso).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -154,58 +166,35 @@ export default function SettingsPanel({
                 </div>
             ) : null}
             <div className="border-t border-slate-700/80"/>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">Pitch Page</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">Scales Page</div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
                 <div className="text-xs uppercase tracking-wide text-slate-400">Min</div>
-                <div className="flex items-center justify-between gap-2 rounded-md bg-slate-800/80 p-2">
-                  <button
-                      type="button"
-                      onClick={() => onPitchMinNoteChange(pitchNoteOptions[pitchMinIndex - 1])}
-                      disabled={pitchMinIndex <= 0}
-                      className="h-10 w-10 rounded-md bg-slate-700 text-lg font-semibold text-slate-100 disabled:opacity-40"
-                      aria-label="Decrease pitch minimum"
-                  >
-                    -
-                  </button>
-                  <div className="min-w-14 text-center text-base font-semibold text-slate-100">{pitchMinNote}</div>
-                  <button
-                      type="button"
-                      onClick={() => onPitchMinNoteChange(pitchNoteOptions[pitchMinIndex + 1])}
-                      disabled={pitchMinIndex >= pitchMaxIndex - 1}
-                      className="h-10 w-10 rounded-md bg-slate-700 text-lg font-semibold text-slate-100 disabled:opacity-40"
-                      aria-label="Increase pitch minimum"
-                  >
-                    +
-                  </button>
-                </div>
+                <StepperControl
+                    value={scaleMinNote}
+                    onDecrement={() => onScaleMinNoteChange(scaleNoteOptions[scaleMinIndex - 1])}
+                    onIncrement={() => onScaleMinNoteChange(scaleNoteOptions[scaleMinIndex + 1])}
+                    decrementDisabled={scaleMinIndex <= 0}
+                    incrementDisabled={scaleMinIndex >= scaleMaxIndex - 1}
+                    decrementAriaLabel="Decrease scales minimum"
+                    incrementAriaLabel="Increase scales minimum"
+                    contentWidth="4ch"
+                />
               </div>
               <div className="space-y-2">
                 <div className="text-xs uppercase tracking-wide text-slate-400">Max</div>
-                <div className="flex items-center justify-between gap-2 rounded-md bg-slate-800/80 p-2">
-                  <button
-                      type="button"
-                      onClick={() => onPitchMaxNoteChange(pitchNoteOptions[pitchMaxIndex - 1])}
-                      disabled={pitchMaxIndex <= pitchMinIndex + 1}
-                      className="h-10 w-10 rounded-md bg-slate-700 text-lg font-semibold text-slate-100 disabled:opacity-40"
-                      aria-label="Decrease pitch maximum"
-                  >
-                    -
-                  </button>
-                  <div className="min-w-14 text-center text-base font-semibold text-slate-100">{pitchMaxNote}</div>
-                  <button
-                      type="button"
-                      onClick={() => onPitchMaxNoteChange(pitchNoteOptions[pitchMaxIndex + 1])}
-                      disabled={pitchMaxIndex >= pitchNoteOptions.length - 1}
-                      className="h-10 w-10 rounded-md bg-slate-700 text-lg font-semibold text-slate-100 disabled:opacity-40"
-                      aria-label="Increase pitch maximum"
-                  >
-                    +
-                  </button>
-                </div>
+                <StepperControl
+                    value={scaleMaxNote}
+                    onDecrement={() => onScaleMaxNoteChange(scaleNoteOptions[scaleMaxIndex - 1])}
+                    onIncrement={() => onScaleMaxNoteChange(scaleNoteOptions[scaleMaxIndex + 1])}
+                    decrementDisabled={scaleMaxIndex <= scaleMinIndex + 1}
+                    incrementDisabled={scaleMaxIndex >= scaleNoteOptions.length - 1}
+                    decrementAriaLabel="Decrease scales maximum"
+                    incrementAriaLabel="Increase scales maximum"
+                    contentWidth="4ch"
+                />
               </div>
             </div>
-
             <div className="border-t border-slate-700/80"/>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">Spectrogram Page</div>
             <div className="grid grid-cols-2 gap-2">
@@ -252,18 +241,19 @@ export default function SettingsPanel({
                     onPointerUp={onNoiseCalibratePointerUp}
                     onPointerCancel={onNoiseCalibratePointerUp}
                     onContextMenu={onNoiseCalibrateContextMenu}
+                    disabled={disableNoiseSampling}
                     className={`rounded-md px-2 py-1 text-xs font-semibold ${
                         spectrogramNoiseCalibrating
                             ? "bg-amber-400 text-amber-950"
                             : "bg-slate-600 text-slate-100"
-                    } select-none touch-manipulation`}
+                    } select-none touch-manipulation disabled:opacity-40`}
                 >
                   Hold to sample
                 </button>
                 <button
                     type="button"
                     onClick={onClearSpectrogramNoiseProfile}
-                    disabled={!spectrogramNoiseProfileReady}
+                    disabled={disableNoiseSampling || !spectrogramNoiseProfileReady}
                     className="rounded-md bg-slate-700 px-2 py-1 text-xs font-semibold text-slate-100 disabled:opacity-40"
                 >
                   Clear
@@ -274,6 +264,36 @@ export default function SettingsPanel({
               </div>
               <div className="mt-2 text-xs text-slate-400">
                 Hold to record background noise to subtract from chart.
+              </div>
+            </div>
+            <div className="border-t border-slate-700/80"/>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">Pitch Page</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <div className="text-xs uppercase tracking-wide text-slate-400">Min</div>
+                <StepperControl
+                    value={pitchMinNote}
+                    onDecrement={() => onPitchMinNoteChange(pitchNoteOptions[pitchMinIndex - 1])}
+                    onIncrement={() => onPitchMinNoteChange(pitchNoteOptions[pitchMinIndex + 1])}
+                    decrementDisabled={pitchMinIndex <= 0}
+                    incrementDisabled={pitchMinIndex >= pitchMaxIndex - 1}
+                    decrementAriaLabel="Decrease pitch minimum"
+                    incrementAriaLabel="Increase pitch minimum"
+                    contentWidth="4ch"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs uppercase tracking-wide text-slate-400">Max</div>
+                <StepperControl
+                    value={pitchMaxNote}
+                    onDecrement={() => onPitchMaxNoteChange(pitchNoteOptions[pitchMaxIndex - 1])}
+                    onIncrement={() => onPitchMaxNoteChange(pitchNoteOptions[pitchMaxIndex + 1])}
+                    decrementDisabled={pitchMaxIndex <= pitchMinIndex + 1}
+                    incrementDisabled={pitchMaxIndex >= pitchNoteOptions.length - 1}
+                    decrementAriaLabel="Decrease pitch maximum"
+                    incrementAriaLabel="Increase pitch maximum"
+                    contentWidth="4ch"
+                />
               </div>
             </div>
             <div className="border-t border-slate-700/80"/>
