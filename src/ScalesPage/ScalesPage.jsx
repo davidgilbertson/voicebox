@@ -2,18 +2,7 @@ import {useCallback, useEffect, useRef, useState} from "react";
 import StepperControl from "../components/StepperControl.jsx";
 import Piano from "./Piano.jsx";
 import GestureArea from "./GestureArea.jsx";
-import {
-  readScaleBpm,
-  readScaleGestureHelpDismissed,
-  readScaleMaxNote,
-  readScaleMinNote,
-  readScaleSelectedName,
-  SCALE_BPM_MAX,
-  SCALE_BPM_MIN,
-  writeScaleGestureHelpDismissed,
-  writeScaleBpm,
-  writeScaleSelectedName,
-} from "./config.js";
+import {readScaleBpm, readScaleGestureHelpDismissed, readScaleMaxNote, readScaleMinNote, readScaleSelectedName, SCALE_BPM_MAX, SCALE_BPM_MIN, writeScaleBpm, writeScaleGestureHelpDismissed, writeScaleSelectedName,} from "./config.js";
 import {clamp} from "../tools.js";
 import {noteNameToMidi} from "../pitchScale.js";
 import {ensurePianoLoaded, ensurePianoReadyForPlayback, playNote} from "./piano.js";
@@ -167,6 +156,8 @@ export default function ScalesPage({
 
   const playStepRef = useRef(null);
   const restartIntervalRef = useRef(null);
+  const stepInFlightRef = useRef(false);
+  const lastStepAtMsRef = useRef(0);
 
   useEffect(() => {
     restartIntervalRef.current = () => {
@@ -177,13 +168,21 @@ export default function ScalesPage({
       if (!isPlayingRef.current) return;
       const stepMs = (60 / activeBpmRef.current) * 1000;
       playbackIntervalRef.current = window.setInterval(() => {
-        playStepRef.current?.();
+        if (stepInFlightRef.current) return;
+        const playStep = playStepRef.current;
+        if (!playStep) return;
+        lastStepAtMsRef.current = performance.now();
+        stepInFlightRef.current = true;
+        Promise.resolve(playStep())
+            .finally(() => {
+              stepInFlightRef.current = false;
+            });
       }, stepMs);
     };
   }, []);
 
   useEffect(() => {
-    playStepRef.current = () => {
+    playStepRef.current = async () => {
       if (!isPlayingRef.current) return;
       const timeline = setTimelineRef.current;
       const currentBpm = activeBpmRef.current;
@@ -193,16 +192,16 @@ export default function ScalesPage({
       if (timelineEntry === "cue") {
         const cueRootMidi = clamp(currentSetRootMidiRef.current, scaleMinMidiRef.current, scaleMaxMidiRef.current);
 
-        playNote(cueRootMidi, stepDuration * 2)
-            .then((startedNote) => {
-              if (!startedNote?.stop) return;
-              activeNotesRef.current.push(startedNote);
-              if (activeNotesRef.current.length > 16) {
-                activeNotesRef.current.shift()?.stop?.();
-              }
-            })
-            .catch(() => {
-            });
+        try {
+          const startedNote = await playNote(cueRootMidi, stepDuration * 2);
+          if (startedNote?.stop) {
+            activeNotesRef.current.push(startedNote);
+            if (activeNotesRef.current.length > 16) {
+              activeNotesRef.current.shift()?.stop?.();
+            }
+          }
+        } catch {
+        }
       } else if (timelineEntry !== "rest") {
         const rangeMinMidi = scaleMinMidiRef.current;
         const rangeMaxMidi = scaleMaxMidiRef.current;
@@ -219,16 +218,16 @@ export default function ScalesPage({
           setRepeatDirectionIfChanged("up");
         }
 
-        playNote(noteMidi, stepDuration)
-            .then((startedNote) => {
-              if (!startedNote?.stop) return;
-              activeNotesRef.current.push(startedNote);
-              if (activeNotesRef.current.length > 16) {
-                activeNotesRef.current.shift()?.stop?.();
-              }
-            })
-            .catch(() => {
-            });
+        try {
+          const startedNote = await playNote(noteMidi, stepDuration);
+          if (startedNote?.stop) {
+            activeNotesRef.current.push(startedNote);
+            if (activeNotesRef.current.length > 16) {
+              activeNotesRef.current.shift()?.stop?.();
+            }
+          }
+        } catch {
+        }
       }
 
       const nextIndex = (timelineIndexRef.current + 1) % timeline.length;
@@ -250,6 +249,8 @@ export default function ScalesPage({
   useEffect(() => {
     if (!isPlaying) {
       stopPlayback();
+      stepInFlightRef.current = false;
+      lastStepAtMsRef.current = 0;
       return;
     }
     let cancelled = false;
@@ -261,6 +262,8 @@ export default function ScalesPage({
         .then((ready) => {
           if (!ready || cancelled || !isPlayingRef.current) return;
           timelineIndexRef.current = 0;
+          stepInFlightRef.current = false;
+          lastStepAtMsRef.current = 0;
           restartIntervalRef.current?.();
         })
         .catch(() => {

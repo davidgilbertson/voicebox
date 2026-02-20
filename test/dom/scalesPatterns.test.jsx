@@ -46,8 +46,8 @@ test.each([
     await Promise.resolve();
   });
 
-  act(() => {
-    vi.advanceTimersByTime(2200);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2200);
   });
 
   expect(playNoteMock.mock.calls.length).toBeGreaterThanOrEqual(firstNotes.length);

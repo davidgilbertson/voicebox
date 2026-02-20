@@ -39,15 +39,15 @@ test("changing BPM while playing does not restart at the base note", async () =>
     await Promise.resolve();
   });
 
-  act(() => {
-    vi.advanceTimersByTime(900);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(900);
   });
   expect(playNoteMock.mock.calls.slice(0, 2).map((args) => args[0])).toEqual([48, 48]);
 
   fireEvent.click(screen.getByRole("button", {name: "Increase scales BPM"}));
 
-  act(() => {
-    vi.advanceTimersByTime(300);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(300);
   });
   expect(playNoteMock.mock.calls[2][0]).toBe(49);
 });
@@ -61,8 +61,8 @@ test("pause and resume restarts the current set from the cue note", async () => 
     await Promise.resolve();
   });
 
-  act(() => {
-    vi.advanceTimersByTime(1100);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1100);
   });
   expect(playNoteMock.mock.calls.slice(0, 3).map((args) => args[0])).toEqual([48, 48, 49]);
 
@@ -72,8 +72,8 @@ test("pause and resume restarts the current set from the cue note", async () => 
     await Promise.resolve();
   });
 
-  act(() => {
-    vi.advanceTimersByTime(300);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(300);
   });
   expect(playNoteMock.mock.calls[3][0]).toBe(48);
 });

@@ -76,28 +76,28 @@ test("left swipe does nothing and tap on empty area toggles play/pause", async (
   const area = screen.getByTestId("scales-gesture-area");
 
   swipe(area, {startX: 320, startY: 220, endX: 80, endY: 220});
-  act(() => {
-    vi.advanceTimersByTime(400);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(400);
   });
   tap(area);
   await act(async () => {
     await Promise.resolve();
   });
-  act(() => {
-    vi.advanceTimersByTime(1500);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1500);
   });
   expect(playNoteMock.mock.calls.length).toBeGreaterThan(0);
 
-  act(() => {
-    vi.advanceTimersByTime(25000);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(25000);
   });
   expect(playNoteMock.mock.calls.length).toBeGreaterThan(18);
   expect(playNoteMock.mock.calls[18][0]).toBe(49);
 
   tap(area);
   const pausedCalls = playNoteMock.mock.calls.length;
-  act(() => {
-    vi.advanceTimersByTime(1500);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1500);
   });
   expect(playNoteMock.mock.calls.length).toBe(pausedCalls);
 });
@@ -111,8 +111,8 @@ test("swiping the same vertical direction twice mid-set starts a new set immedia
     await Promise.resolve();
   });
 
-  act(() => {
-    vi.advanceTimersByTime(900);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(900);
   });
   const callsBeforeSwipe = playNoteMock.mock.calls.length;
 
@@ -135,8 +135,8 @@ test("fast pointer swipe without move event does not toggle play", async () => {
   fireEvent.pointerDown(area, {pointerId: 1, clientX: 100, clientY: 200});
   fireEvent.pointerUp(area, {pointerId: 1, clientX: 340, clientY: 200});
   fireEvent.click(area);
-  act(() => {
-    vi.advanceTimersByTime(1500);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1500);
   });
 
   expect(playNoteMock).not.toHaveBeenCalled();
@@ -149,8 +149,8 @@ test("tap on help button does not toggle play", async () => {
   fireEvent.pointerDown(screen.getByRole("button", {name: "Got it"}), {pointerId: 1, clientX: 100, clientY: 200});
   fireEvent.pointerUp(screen.getByRole("button", {name: "Got it"}), {pointerId: 1, clientX: 100, clientY: 200});
   fireEvent.click(screen.getByRole("button", {name: "Got it"}));
-  act(() => {
-    vi.advanceTimersByTime(1500);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1500);
   });
 
   expect(playNoteMock).not.toHaveBeenCalled();
