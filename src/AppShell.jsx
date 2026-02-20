@@ -3,6 +3,7 @@ import {useEffect, useState} from "react";
 import Recorder from "./Recorder/Recorder.jsx";
 import ScalesPage from "./ScalesPage/ScalesPage.jsx";
 import SettingsPanel from "./SettingsPanel.jsx";
+import {ensurePianoLoaded} from "./ScalesPage/piano.js";
 import {readActiveView, writeActiveView} from "./AppShell/config.js";
 import {PITCH_NOTE_OPTIONS} from "./pitchScale.js";
 import {
@@ -61,6 +62,12 @@ export default function AppShell() {
   useEffect(() => {
     writeActiveView(activeView);
   }, [activeView]);
+
+  useEffect(() => {
+    // We pre-fetch here so it's warmed up as soon as possible
+    ensurePianoLoaded().catch(() => {
+    });
+  }, []);
 
   useEffect(() => {
     writeScaleMinNote(scaleMinNote);

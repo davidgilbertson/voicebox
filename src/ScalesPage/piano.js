@@ -6,6 +6,8 @@ let loadingPianoPromise = null;
 let resumeAudioPromise = null;
 let pianoGain = 1;
 const playedNoteListeners = new Set();
+const LOCAL_PIANO_SOUNDFONT_URL = "/soundfonts/acoustic_grand_piano-mp3.js";
+// Downloaded from: https://gleitz.github.io/midi-js-soundfonts/MusyngKite/acoustic_grand_piano-mp3.js
 
 function ensureAudioContext() {
   if (!audioContext) {
@@ -41,7 +43,12 @@ export async function ensurePianoLoaded() {
   if (piano) return piano;
   ensureAudioContext();
   if (!loadingPianoPromise) {
-    loadingPianoPromise = Soundfont.instrument(audioContext, "acoustic_grand_piano")
+    loadingPianoPromise = Soundfont.instrument(audioContext, "acoustic_grand_piano", {
+      nameToUrl: (name) => {
+        if (name === "acoustic_grand_piano") return LOCAL_PIANO_SOUNDFONT_URL;
+        return Soundfont.nameToUrl(name);
+      },
+    })
         .then((instrument) => {
           piano = instrument;
           pianoGain = computePeakNormalizationGain(instrument);

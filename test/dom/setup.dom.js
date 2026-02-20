@@ -40,17 +40,26 @@ window.matchMedia = window.matchMedia || ((query) => ({
   matches: false,
   media: query,
   onchange: null,
-  addEventListener: () => {},
-  removeEventListener: () => {},
-  addListener: () => {},
-  removeListener: () => {},
+  addEventListener: () => {
+  },
+  removeEventListener: () => {
+  },
+  addListener: () => {
+  },
+  removeListener: () => {
+  },
   dispatchEvent: () => false,
 }));
 
 window.ResizeObserver = window.ResizeObserver || class ResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
+  observe() {
+  }
+
+  unobserve() {
+  }
+
+  disconnect() {
+  }
 };
 
 const rafHandles = new Map();
@@ -73,20 +82,29 @@ window.cancelAnimationFrame = (id) => {
 };
 
 const canvasCtx = {
-  setTransform: () => {},
-  clearRect: () => {},
-  beginPath: () => {},
-  moveTo: () => {},
-  lineTo: () => {},
-  stroke: () => {},
-  fillText: () => {},
-  drawImage: () => {},
+  setTransform: () => {
+  },
+  clearRect: () => {
+  },
+  beginPath: () => {
+  },
+  moveTo: () => {
+  },
+  lineTo: () => {
+  },
+  stroke: () => {
+  },
+  fillText: () => {
+  },
+  drawImage: () => {
+  },
   createImageData: (width, height) => ({
     width,
     height,
     data: new Uint8ClampedArray(width * height * 4),
   }),
-  putImageData: () => {},
+  putImageData: () => {
+  },
   lineWidth: 1,
   strokeStyle: "",
   fillStyle: "",
@@ -108,24 +126,30 @@ class FakeAudioContext {
     this.state = "running";
     this.destination = {};
     this.audioWorklet = {
-      addModule: async () => {},
+      addModule: async () => {
+      },
     };
   }
 
-  async resume() {}
+  async resume() {
+  }
 
   createMediaStreamSource() {
     return {
-      connect: () => {},
-      disconnect: () => {},
+      connect: () => {
+      },
+      disconnect: () => {
+      },
     };
   }
 
   createGain() {
     return {
       gain: {value: 0},
-      connect: () => {},
-      disconnect: () => {},
+      connect: () => {
+      },
+      disconnect: () => {
+      },
     };
   }
 
@@ -142,11 +166,14 @@ class FakeAudioContext {
         return Math.max(1, Math.floor(fftSize / 2));
       },
       smoothingTimeConstant: 0,
+      // TODO (@davidgilbertson): never used now?
       getByteFrequencyData: (array) => {
         array.fill(0);
       },
-      connect: () => {},
-      disconnect: () => {},
+      connect: () => {
+      },
+      disconnect: () => {
+      },
     };
   }
 
@@ -162,8 +189,11 @@ class FakeAudioWorkletNode {
     };
   }
 
-  connect() {}
-  disconnect() {}
+  connect() {
+  }
+
+  disconnect() {
+  }
 }
 
 window.AudioContext = FakeAudioContext;
@@ -173,7 +203,10 @@ if (!navigator.mediaDevices) {
   navigator.mediaDevices = {};
 }
 navigator.mediaDevices.getUserMedia = vi.fn(async () => ({
-  getTracks: () => [{stop: () => {}}],
+  getTracks: () => [{
+    stop: () => {
+    }
+  }],
 }));
 
 Object.defineProperty(navigator, "getBattery", {

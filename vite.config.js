@@ -23,7 +23,7 @@ export default defineConfig(({mode}) => {
       cloudflare(),
       VitePWA({
         registerType: "autoUpdate",
-        includeAssets: ["icon-voice.svg"],
+        includeAssets: ["**/*", "!_headers", "!**/_headers"],
         manifest: {
           id: "/",
           name: APP_DISPLAY_NAME,
@@ -45,6 +45,7 @@ export default defineConfig(({mode}) => {
         },
         workbox: {
           navigateFallback: "/index.html",
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         },
       }),
       ...(useHttps ? [basicSsl()] : []),
