@@ -111,7 +111,7 @@ test("battery use shows -- in the first minute", async () => {
   expect(screen.getByText("-- %/min")).toBeInTheDocument();
 });
 
-test("battery use is hidden while charging", async () => {
+test("battery use shows NA while charging", async () => {
   navigator.getBattery = vi.fn(async () => ({
     level: 0.52,
     charging: true,
@@ -122,11 +122,12 @@ test("battery use is hidden while charging", async () => {
 
   await user.click(screen.getByLabelText("Open settings"));
   await waitFor(() => {
-    expect(screen.queryByText("Battery use")).toBeNull();
+    expect(screen.getByText("Battery use")).toBeInTheDocument();
+    expect(screen.getByText("NA")).toBeInTheDocument();
   });
 });
 
-test("battery use is hidden when battery level is unavailable", async () => {
+test("battery use shows NA when battery level is unavailable", async () => {
   navigator.getBattery = vi.fn(async () => ({
     level: undefined,
     charging: false,
@@ -137,6 +138,7 @@ test("battery use is hidden when battery level is unavailable", async () => {
 
   await user.click(screen.getByLabelText("Open settings"));
   await waitFor(() => {
-    expect(screen.queryByText("Battery use")).toBeNull();
+    expect(screen.getByText("Battery use")).toBeInTheDocument();
+    expect(screen.getByText("NA")).toBeInTheDocument();
   });
 });

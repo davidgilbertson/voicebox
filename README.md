@@ -69,4 +69,4 @@ The Spectrogram, Pitch, and Vibrato pages are all linked, so you can switch betw
 
 - **Run at 30 FPS**: lowers frame rate to reduce battery use. This makes quite a big difference to battery use and is barely noticable.
 - **Half-resolution canvas**: lowers chart render resolution for lower CPU/GPU use.
-- **Battery use**: estimated battery drain rate (`%/min`). This reading only makes sense if Voicebox is the only app you're using and it stays active. It updates once per minute.
+- **Battery use**: estimated battery drain rate (`%/min`). Shows `NA` when battery stats are unavailable. This reading only makes sense if Voicebox is the only app you're using and it stays active. It updates once per minute.

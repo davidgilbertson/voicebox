@@ -85,7 +85,7 @@ export default function SettingsPanel({
   };
   const batteryUsageDisplay =
       batteryUsagePerMinute === null
-          ? null
+          ? "NA"
           : batteryUsagePerMinute === "--"
               ? "-- %/min"
               : `${batteryUsagePerMinute.toFixed(2)} %/min`;
@@ -318,12 +318,10 @@ export default function SettingsPanel({
               />
             </label>
 
-            {batteryUsageDisplay ? (
-                <div className="flex items-center justify-between gap-4 text-sm">
-                  <span>Battery use</span>
-                  <span>{batteryUsageDisplay}</span>
-                </div>
-            ) : null}
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span>Battery use</span>
+              <span>{batteryUsageDisplay}</span>
+            </div>
             <div className="flex items-center justify-between gap-3 pt-3">
               <a
                   href="https://github.com/davidgilbertson/voicebox"
