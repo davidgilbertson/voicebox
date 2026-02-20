@@ -5,7 +5,6 @@ import {clamp, ls} from "../tools.js";
 const KEEP_RUNNING_IN_BACKGROUND_STORAGE_KEY = "voicebox.keepRunningInBackground";
 const AUTO_PAUSE_ON_SILENCE_STORAGE_KEY = "voicebox.autoPauseOnSilence";
 const SHOW_STATS_STORAGE_KEY = "voicebox.showStats";
-const PITCH_ON_SPECTROGRAM_STORAGE_KEY = "voicebox.pitchDetectionOnSpectrogram";
 const RUN_AT_30_FPS_STORAGE_KEY = "voicebox.runAt30Fps";
 const HALF_RESOLUTION_CANVAS_STORAGE_KEY = "voicebox.halfResolutionCanvas";
 const PITCH_MIN_NOTE_STORAGE_KEY = "voicebox.pitchMinNote";
@@ -36,7 +35,6 @@ const SPECTROGRAM_MIN_HZ_DEFAULT = 30;
 const SPECTROGRAM_MAX_HZ_DEFAULT = 11_000;
 const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
 const SHOW_STATS_DEFAULT = false;
-const PITCH_ON_SPECTROGRAM_DEFAULT = true;
 const RUN_AT_30_FPS_DEFAULT = false;
 const HALF_RESOLUTION_CANVAS_DEFAULT = false;
 
@@ -74,14 +72,6 @@ export function readShowStats() {
 
 export function writeShowStats(value) {
   ls.set(SHOW_STATS_STORAGE_KEY, value);
-}
-
-export function readPitchDetectionOnSpectrogram() {
-  return ls.get(PITCH_ON_SPECTROGRAM_STORAGE_KEY, PITCH_ON_SPECTROGRAM_DEFAULT) !== false;
-}
-
-export function writePitchDetectionOnSpectrogram(value) {
-  ls.set(PITCH_ON_SPECTROGRAM_STORAGE_KEY, value);
 }
 
 export function readRunAt30Fps() {

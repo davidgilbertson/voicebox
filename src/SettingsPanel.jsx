@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from "react";
 import StepperControl from "./components/StepperControl.jsx";
 
 const SETTINGS_CHECKBOX_CLASS = "settings-checkbox h-5 w-5";
+const SETTINGS_SECTION_HEADING_CLASS = "text-sm font-semibold uppercase tracking-[0.18em] text-sky-500";
 
 export default function SettingsPanel({
                                         open,
@@ -17,8 +18,6 @@ export default function SettingsPanel({
                                         onAutoPauseOnSilenceChange,
                                         showStats,
                                         onShowStatsChange,
-                                        pitchDetectionOnSpectrogram,
-                                        onPitchDetectionOnSpectrogramChange,
                                         runAt30Fps,
                                         onRunAt30FpsChange,
                                         halfResolutionCanvas,
@@ -129,13 +128,13 @@ export default function SettingsPanel({
               &times;
             </button>
           </div>
-          <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">General</div>
+          <div className="flex-1 space-y-4 overflow-y-auto px-4 pt-2 pb-4">
+            <div className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-500">General</div>
             <label className="flex items-start justify-between gap-4 text-sm">
               <div className="flex flex-col gap-1">
                 <span>Keep running in background</span>
                 <span className="text-xs text-slate-400">
-                  When off, recording stops if the app loses focus.
+                  Keep recording even if the app doesn't have focus.
                 </span>
               </div>
               <input
@@ -159,8 +158,8 @@ export default function SettingsPanel({
                   className={SETTINGS_CHECKBOX_CLASS}
               />
             </label>
-            <div className="border-t border-slate-700/80"/>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">Scales Page</div>
+            <div className="h-2 border-t border-slate-700/80"/>
+            <div className={SETTINGS_SECTION_HEADING_CLASS}>Scales Page</div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
                 <div className="text-xs uppercase tracking-wide text-slate-400">Min</div>
@@ -189,8 +188,8 @@ export default function SettingsPanel({
                 />
               </div>
             </div>
-            <div className="border-t border-slate-700/80"/>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">Spectrogram Page</div>
+            <div className="h-2 border-t border-slate-700/80"/>
+            <div className={SETTINGS_SECTION_HEADING_CLASS}>Spectrogram Page</div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
                 <label htmlFor="spectrogram-min-hz" className="block text-xs uppercase tracking-wide text-slate-400">
@@ -260,8 +259,8 @@ export default function SettingsPanel({
                 Hold to record background noise to subtract from chart.
               </div>
             </div>
-            <div className="border-t border-slate-700/80"/>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">Pitch Page</div>
+            <div className="h-2 border-t border-slate-700/80"/>
+            <div className={SETTINGS_SECTION_HEADING_CLASS}>Pitch Page</div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
                 <div className="text-xs uppercase tracking-wide text-slate-400">Min</div>
@@ -290,22 +289,8 @@ export default function SettingsPanel({
                 />
               </div>
             </div>
-            <div className="border-t border-slate-700/80"/>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">Performance</div>
-            <label className="flex items-start justify-between gap-4 text-sm">
-              <div className="flex flex-col gap-1">
-                <span>Show stats</span>
-                <span className="text-xs text-slate-400">
-                  Show perf + signal stats under the chart.
-                </span>
-              </div>
-              <input
-                  type="checkbox"
-                  checked={showStats}
-                  onChange={(event) => onShowStatsChange(event.target.checked)}
-                  className={SETTINGS_CHECKBOX_CLASS}
-              />
-            </label>
+            <div className="h-2 border-t border-slate-700/80"/>
+            <div className={SETTINGS_SECTION_HEADING_CLASS}>Performance</div>
             <label className="flex items-start justify-between gap-4 text-sm">
               <div className="flex flex-col gap-1">
                 <span>Run at 30 FPS</span>
@@ -334,21 +319,21 @@ export default function SettingsPanel({
                   className={SETTINGS_CHECKBOX_CLASS}
               />
             </label>
+
             <label className="flex items-start justify-between gap-4 text-sm">
               <div className="flex flex-col gap-1">
-                <span>Disable pitch detection while on spectrogram page</span>
+                <span>Show stats</span>
                 <span className="text-xs text-slate-400">
-                  Faster while spectrogram is active, but pitch/vibrato data pauses.
+                  Show stats for nerds under the charts.
                 </span>
               </div>
               <input
                   type="checkbox"
-                  checked={!pitchDetectionOnSpectrogram}
-                  onChange={(event) => onPitchDetectionOnSpectrogramChange(!event.target.checked)}
+                  checked={showStats}
+                  onChange={(event) => onShowStatsChange(event.target.checked)}
                   className={SETTINGS_CHECKBOX_CLASS}
               />
             </label>
-
             {batteryUsageDisplay ? (
                 <div className="flex items-center justify-between gap-4 text-sm">
                   <span>Battery use</span>

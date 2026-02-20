@@ -41,7 +41,7 @@ test("pressing a key does not trigger sustained playback highlight", async () =>
   expect(c4Key).not.toHaveClass("bg-sky-400");
 
   act(() => {
-    fireEvent.pointerDown(c4Key);
+    fireEvent.click(c4Key);
   });
 
   expect(playNoteMock).toHaveBeenCalledWith("C4", 0.8, {emitHighlight: false});

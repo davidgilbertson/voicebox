@@ -6,7 +6,6 @@ import AppShell from "../../src/AppShell.jsx";
 import {
   readAutoPauseOnSilence,
   readHalfResolutionCanvas,
-  readPitchDetectionOnSpectrogram,
   readRunAt30Fps,
   readShowStats,
   readSpectrogramMaxHz,
@@ -44,10 +43,8 @@ test("settings defaults and persistence work via localStorage", async () => {
 });
 
 test("spectrogram frequency settings are editable and persisted", async () => {
-  const user = userEvent.setup();
   render(<AppShell/>);
-
-  await user.click(screen.getByLabelText("Open settings"));
+  fireEvent.click(screen.getByLabelText("Open settings"));
   const minInput = screen.getByLabelText("Spectrogram minimum frequency (Hz)");
   const maxInput = screen.getByLabelText("Spectrogram maximum frequency (Hz)");
 
@@ -96,24 +93,6 @@ test("enabling show stats displays stats panel", async () => {
   await user.click(screen.getByRole("checkbox", {name: /Show stats/i}));
 
   expect(await screen.findByText(/Data:/)).toBeInTheDocument();
-});
-
-test("disabling pitch detection on spectrogram stores faster mode", async () => {
-  const user = userEvent.setup();
-  render(<AppShell/>);
-
-  await user.click(screen.getByLabelText("Open settings"));
-  const disablePitchDetectionCheckbox = screen.getByRole("checkbox", {
-    name: /Disable pitch detection while on spectrogram page/i,
-  });
-
-  expect(disablePitchDetectionCheckbox).not.toBeChecked();
-  await user.click(disablePitchDetectionCheckbox);
-  expect(disablePitchDetectionCheckbox).toBeChecked();
-
-  await waitFor(() => {
-    expect(readPitchDetectionOnSpectrogram()).toBe(false);
-  });
 });
 
 test("temporary pitch detector overlay buttons are removed", async () => {

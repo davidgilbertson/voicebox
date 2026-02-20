@@ -69,5 +69,4 @@ The Spectrogram, Pitch, and Vibrato pages are all linked, so you can switch betw
 - **Show stats**: shows analysis + draw timing, RMS, and detected Hz.
 - **Run at 30 FPS**: lowers frame rate to reduce battery use. This makes quite a big difference to battery use and is barely noticable.
 - **Half-resolution canvas**: lowers chart render resolution for lower CPU/GPU use.
-- **Disable pitch detection while on spectrogram page**: reduces battery use, but pauses pitch/vibrato updates while Spectrogram is open.
 - **Battery use**: estimated battery drain rate (`%/min`). This reading only makes sense if Voicebox is the only app you're using and it stays active. It updates once per minute.

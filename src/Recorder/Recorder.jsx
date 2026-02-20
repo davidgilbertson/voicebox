@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {clamp, lerp} from "../tools.js";
 import {
   analyzeAudioWindowFftPitch,
@@ -61,7 +61,6 @@ export default function Recorder({
   keepRunningInBackground,
   autoPauseOnSilence,
   showStats,
-  pitchDetectionOnSpectrogram,
   runAt30Fps,
   halfResolutionCanvas,
   pitchMinNote,
@@ -280,7 +279,7 @@ export default function Recorder({
     forceRedrawRef.current = true;
   }, []);
 
-  const captureSpectrogramBins = ({includeDetectorBins = true} = {}) => {
+  const captureSpectrogramBins = () => {
     const analyser = audioRef.current.analyser;
     if (!analyser) return null;
     const capture = spectrogramCaptureRef.current;
@@ -299,17 +298,15 @@ export default function Recorder({
     for (let i = 0; i < capture.dbBins.length; i += 1) {
       const dbValue = capture.dbBins[i];
       const finiteDb = Number.isFinite(dbValue) ? dbValue : minDb;
-      if (includeDetectorBins) {
-        const magnitude = 10 ** (finiteDb / 20);
-        capture.detectorBins[i] = magnitude;
-        if (magnitude > maxMagnitude) {
-          maxMagnitude = magnitude;
-        }
+      const magnitude = 10 ** (finiteDb / 20);
+      capture.detectorBins[i] = magnitude;
+      if (magnitude > maxMagnitude) {
+        maxMagnitude = magnitude;
       }
       const normalized = (finiteDb - minDb) * invDbRange;
       capture.normalizedBins[i] = clamp(normalized, 0, 1);
     }
-    if (includeDetectorBins && maxMagnitude > 0) {
+    if (maxMagnitude > 0) {
       const scale = 1 / maxMagnitude;
       for (let i = 0; i < capture.detectorBins.length; i += 1) {
         capture.detectorBins[i] *= scale;
@@ -317,20 +314,20 @@ export default function Recorder({
     }
     return {
       spectrogramBins: capture.normalizedBins,
-      detectorBins: includeDetectorBins ? capture.detectorBins : null,
+      detectorBins: capture.detectorBins,
     };
   };
 
-  const beginSpectrogramNoiseCalibration = () => {
+  const beginSpectrogramNoiseCalibration = useCallback(() => {
     const noiseState = spectrogramNoiseRef.current;
     const binCount = audioRef.current.analyser?.frequencyBinCount ?? spectrogramRef.current.binCount;
     noiseState.calibrating = true;
     noiseState.sumBins = new Float32Array(binCount);
     noiseState.sampleCount = 0;
     setSpectrogramNoiseCalibrating(true);
-  };
+  }, []);
 
-  const finishSpectrogramNoiseCalibration = (commitProfile) => {
+  const finishSpectrogramNoiseCalibration = useCallback((commitProfile) => {
     const noiseState = spectrogramNoiseRef.current;
     const hasSamples = noiseState.sampleCount > 0 && noiseState.sumBins;
     if (commitProfile && hasSamples) {
@@ -346,22 +343,22 @@ export default function Recorder({
     noiseState.sumBins = null;
     noiseState.sampleCount = 0;
     setSpectrogramNoiseCalibrating(false);
-  };
+  }, []);
 
-  const clearSpectrogramNoiseProfile = () => {
+  const clearSpectrogramNoiseProfile = useCallback(() => {
     const noiseState = spectrogramNoiseRef.current;
     noiseState.profile = null;
     writeSpectrogramNoiseProfile(null);
     setSpectrogramNoiseProfileReady(false);
-  };
+  }, []);
 
-  const onNoiseCalibratePointerDown = (event) => {
+  const onNoiseCalibratePointerDown = useCallback((event) => {
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     beginSpectrogramNoiseCalibration();
-  };
+  }, [beginSpectrogramNoiseCalibration]);
 
-  const onNoiseCalibratePointerUp = (event) => {
+  const onNoiseCalibratePointerUp = useCallback((event) => {
     event.preventDefault();
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -369,11 +366,11 @@ export default function Recorder({
     const noiseState = spectrogramNoiseRef.current;
     if (!noiseState.calibrating) return;
     finishSpectrogramNoiseCalibration(true);
-  };
+  }, [finishSpectrogramNoiseCalibration]);
 
-  const onNoiseCalibrateContextMenu = (event) => {
+  const onNoiseCalibrateContextMenu = useCallback((event) => {
     event.preventDefault();
-  };
+  }, []);
 
   const applyNoiseProfileToSpectrogramBins = (normalizedBins) => {
     const noiseState = spectrogramNoiseRef.current;
@@ -407,7 +404,6 @@ export default function Recorder({
     const raw = rawBufferRef.current;
     const analysis = analysisRef.current;
     const currentView = activeViewRef.current;
-    const shouldDetectPitch = currentView !== "spectrogram" || pitchDetectionOnSpectrogram;
     const minHz = currentView === "spectrogram" ? spectrogramMinHz : pitchRangeRef.current.minHz;
     const maxHz = currentView === "spectrogram" ? spectrogramMaxHz : pitchRangeRef.current.maxHz;
     let processedWindows = 0;
@@ -416,51 +412,10 @@ export default function Recorder({
     let didRunPitchAnalysis = false;
 
     drainRawBuffer(raw, analysis, (windowSamples, nowMs) => {
-      const analysisStart = shouldDetectPitch ? performance.now() : 0;
-      const capturedBins = captureSpectrogramBins({includeDetectorBins: shouldDetectPitch});
+      const analysisStart = performance.now();
+      const capturedBins = captureSpectrogramBins();
       const sharedSpectrumBins = capturedBins?.spectrogramBins ?? null;
       const detectorSpectrumBins = capturedBins?.detectorBins ?? null;
-      if (spectrogramClockRef.current.writeClockMs <= 0) {
-        spectrogramClockRef.current.writeClockMs = nowMs;
-      } else {
-        const elapsedMs = nowMs - spectrogramClockRef.current.writeClockMs;
-        spectrogramClockRef.current.writeClockMs = nowMs;
-        const spectrogramStep = consumeTimelineElapsed(
-            elapsedMs,
-            SAMPLES_PER_SECOND,
-            spectrogramClockRef.current.accumulator
-        );
-        spectrogramClockRef.current.accumulator = spectrogramStep.accumulator;
-        if (spectrogramStep.steps > 0 && sharedSpectrumBins) {
-          let shouldWriteSpectrogram = true;
-          if (spectrogramResumeNeedsSignalRef.current) {
-            let hasSignal = false;
-            for (let i = 0; i < sharedSpectrumBins.length; i += 1) {
-              if (sharedSpectrumBins[i] > 0) {
-                hasSignal = true;
-                break;
-              }
-            }
-            if (hasSignal) {
-              spectrogramResumeNeedsSignalRef.current = false;
-            } else {
-              shouldWriteSpectrogram = false;
-            }
-          }
-          if (shouldWriteSpectrogram) {
-            const filteredBins = applyNoiseProfileToSpectrogramBins(sharedSpectrumBins);
-            writeSpectrogramColumn(spectrogramRef.current, filteredBins, spectrogramStep.steps);
-            didTimelineChange = true;
-          }
-        }
-      }
-
-      if (!shouldDetectPitch) {
-        timelineRef.current.writeClockMs = nowMs;
-        timelineRef.current.accumulator = 0;
-        return;
-      }
-
       if (!detectorSpectrumBins) return;
       const result = analyzeAudioWindowFftPitch(
           audioRef.current,
@@ -472,22 +427,61 @@ export default function Recorder({
       analysisElapsedMs += performance.now() - analysisStart;
       processedWindows += 1;
       didRunPitchAnalysis = true;
-      if (!result) return;
+      let pitchWriteResult = null;
+      if (result) {
+        pitchWriteResult = writePitchTimeline(timelineRef.current, {
+          nowMs,
+          hasVoice: result.hasVoice,
+          cents: result.cents,
+        });
+        if (pitchWriteResult.steps > 0) {
+          didTimelineChange = true;
+        }
+        metricsRef.current = {
+          level: {rms: result.rms},
+          rawHz: result.hz,
+          hasVoice: result.hasVoice,
+          hasDataTiming: true,
+        };
+      }
 
-      const writeResult = writePitchTimeline(timelineRef.current, {
-        nowMs,
-        hasVoice: result.hasVoice,
-        cents: result.cents,
-      });
-      if (writeResult.steps > 0) {
+      const spectrogramSilencePaused = pitchWriteResult?.paused ?? timelineRef.current.silencePaused;
+
+      if (spectrogramClockRef.current.writeClockMs <= 0) {
+        spectrogramClockRef.current.writeClockMs = nowMs;
+        return;
+      }
+
+      const elapsedMs = nowMs - spectrogramClockRef.current.writeClockMs;
+      spectrogramClockRef.current.writeClockMs = nowMs;
+      const spectrogramStep = consumeTimelineElapsed(
+          elapsedMs,
+          SAMPLES_PER_SECOND,
+          spectrogramClockRef.current.accumulator
+      );
+      spectrogramClockRef.current.accumulator = spectrogramStep.accumulator;
+      if (spectrogramStep.steps <= 0 || !sharedSpectrumBins || spectrogramSilencePaused) return;
+
+      let shouldWriteSpectrogram = true;
+      if (spectrogramResumeNeedsSignalRef.current) {
+        let hasSignal = false;
+        for (let i = 0; i < sharedSpectrumBins.length; i += 1) {
+          if (sharedSpectrumBins[i] > 0) {
+            hasSignal = true;
+            break;
+          }
+        }
+        if (hasSignal) {
+          spectrogramResumeNeedsSignalRef.current = false;
+        } else {
+          shouldWriteSpectrogram = false;
+        }
+      }
+      if (shouldWriteSpectrogram) {
+        const filteredBins = applyNoiseProfileToSpectrogramBins(sharedSpectrumBins);
+        writeSpectrogramColumn(spectrogramRef.current, filteredBins, spectrogramStep.steps);
         didTimelineChange = true;
       }
-      metricsRef.current = {
-        level: {rms: result.rms},
-        rawHz: result.hz,
-        hasVoice: result.hasVoice,
-        hasDataTiming: true,
-      };
     });
 
     if (processedWindows > 0) {
@@ -839,6 +833,7 @@ export default function Recorder({
     });
   }, [
     batteryUsagePerMinute,
+    clearSpectrogramNoiseProfile,
     onNoiseCalibrateContextMenu,
     onNoiseCalibratePointerDown,
     onNoiseCalibratePointerUp,

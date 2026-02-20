@@ -15,7 +15,6 @@ import {
   readAutoPauseOnSilence,
   readHalfResolutionCanvas,
   readKeepRunningInBackground,
-  readPitchDetectionOnSpectrogram,
   readPitchMaxNote,
   readPitchMinNote,
   readRunAt30Fps,
@@ -25,7 +24,6 @@ import {
   writeAutoPauseOnSilence,
   writeHalfResolutionCanvas,
   writeKeepRunningInBackground,
-  writePitchDetectionOnSpectrogram,
   writePitchMaxNote,
   writePitchMinNote,
   writeRunAt30Fps,
@@ -42,7 +40,6 @@ export default function AppShell() {
   const [keepRunningInBackground, setKeepRunningInBackground] = useState(() => readKeepRunningInBackground());
   const [autoPauseOnSilence, setAutoPauseOnSilence] = useState(() => readAutoPauseOnSilence());
   const [showStats, setShowStats] = useState(() => readShowStats());
-  const [pitchDetectionOnSpectrogram, setPitchDetectionOnSpectrogram] = useState(() => readPitchDetectionOnSpectrogram());
   const [runAt30Fps, setRunAt30Fps] = useState(() => readRunAt30Fps());
   const [halfResolutionCanvas, setHalfResolutionCanvas] = useState(() => readHalfResolutionCanvas());
   const [pitchMinNote, setPitchMinNote] = useState(() => readPitchMinNote());
@@ -84,10 +81,6 @@ export default function AppShell() {
   useEffect(() => {
     writeShowStats(showStats);
   }, [showStats]);
-
-  useEffect(() => {
-    writePitchDetectionOnSpectrogram(pitchDetectionOnSpectrogram);
-  }, [pitchDetectionOnSpectrogram]);
 
   useEffect(() => {
     writeRunAt30Fps(runAt30Fps);
@@ -207,7 +200,6 @@ export default function AppShell() {
                     keepRunningInBackground={keepRunningInBackground}
                     autoPauseOnSilence={autoPauseOnSilence}
                     showStats={showStats}
-                    pitchDetectionOnSpectrogram={pitchDetectionOnSpectrogram}
                     runAt30Fps={runAt30Fps}
                     halfResolutionCanvas={halfResolutionCanvas}
                     pitchMinNote={pitchMinNote}
@@ -307,8 +299,6 @@ export default function AppShell() {
                   onAutoPauseOnSilenceChange={setAutoPauseOnSilence}
                   showStats={showStats}
                   onShowStatsChange={setShowStats}
-                  pitchDetectionOnSpectrogram={pitchDetectionOnSpectrogram}
-                  onPitchDetectionOnSpectrogramChange={setPitchDetectionOnSpectrogram}
                   runAt30Fps={runAt30Fps}
                   onRunAt30FpsChange={setRunAt30Fps}
                   halfResolutionCanvas={halfResolutionCanvas}
