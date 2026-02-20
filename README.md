@@ -24,6 +24,7 @@ There are four pages + settings
 - Shows a live frequency heatmap of your voice.
 - Useful for seeing harmonics, noise, and overall tone energy over time.
 - You can limit the displayed frequency range and apply background-noise subtraction in settings.
+- If you have a constant background noise (e.g. air conditioner) you can record a noise profile in settings which will be subtracted from your voice.
 - Tap the screen to pause/resume.
 
 ## Pitch
@@ -66,7 +67,6 @@ The Spectrogram, Pitch, and Vibrato pages are all linked, so you can switch betw
 
 ### Performance
 
-- **Show stats**: shows analysis + draw timing, RMS, and detected Hz.
 - **Run at 30 FPS**: lowers frame rate to reduce battery use. This makes quite a big difference to battery use and is barely noticable.
 - **Half-resolution canvas**: lowers chart render resolution for lower CPU/GPU use.
 - **Battery use**: estimated battery drain rate (`%/min`). This reading only makes sense if Voicebox is the only app you're using and it stays active. It updates once per minute.

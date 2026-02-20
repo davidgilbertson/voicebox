@@ -4,7 +4,6 @@ import {clamp, ls} from "../tools.js";
 // User-changeable preferences persisted in localStorage.
 const KEEP_RUNNING_IN_BACKGROUND_STORAGE_KEY = "voicebox.keepRunningInBackground";
 const AUTO_PAUSE_ON_SILENCE_STORAGE_KEY = "voicebox.autoPauseOnSilence";
-const SHOW_STATS_STORAGE_KEY = "voicebox.showStats";
 const RUN_AT_30_FPS_STORAGE_KEY = "voicebox.runAt30Fps";
 const HALF_RESOLUTION_CANVAS_STORAGE_KEY = "voicebox.halfResolutionCanvas";
 const PITCH_MIN_NOTE_STORAGE_KEY = "voicebox.pitchMinNote";
@@ -34,7 +33,6 @@ export const PITCH_MAX_NOTE_DEFAULT = "F6";
 const SPECTROGRAM_MIN_HZ_DEFAULT = 30;
 const SPECTROGRAM_MAX_HZ_DEFAULT = 11_000;
 const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
-const SHOW_STATS_DEFAULT = false;
 const RUN_AT_30_FPS_DEFAULT = false;
 const HALF_RESOLUTION_CANVAS_DEFAULT = false;
 
@@ -64,14 +62,6 @@ export function readAutoPauseOnSilence() {
 
 export function writeAutoPauseOnSilence(value) {
   ls.set(AUTO_PAUSE_ON_SILENCE_STORAGE_KEY, value);
-}
-
-export function readShowStats() {
-  return ls.get(SHOW_STATS_STORAGE_KEY, SHOW_STATS_DEFAULT) === true;
-}
-
-export function writeShowStats(value) {
-  ls.set(SHOW_STATS_STORAGE_KEY, value);
 }
 
 export function readRunAt30Fps() {

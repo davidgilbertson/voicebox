@@ -16,8 +16,6 @@ export default function SettingsPanel({
                                         onKeepRunningInBackgroundChange,
                                         autoPauseOnSilence,
                                         onAutoPauseOnSilenceChange,
-                                        showStats,
-                                        onShowStatsChange,
                                         runAt30Fps,
                                         onRunAt30FpsChange,
                                         halfResolutionCanvas,
@@ -320,20 +318,6 @@ export default function SettingsPanel({
               />
             </label>
 
-            <label className="flex items-start justify-between gap-4 text-sm">
-              <div className="flex flex-col gap-1">
-                <span>Show stats</span>
-                <span className="text-xs text-slate-400">
-                  Show stats for nerds under the charts.
-                </span>
-              </div>
-              <input
-                  type="checkbox"
-                  checked={showStats}
-                  onChange={(event) => onShowStatsChange(event.target.checked)}
-                  className={SETTINGS_CHECKBOX_CLASS}
-              />
-            </label>
             {batteryUsageDisplay ? (
                 <div className="flex items-center justify-between gap-4 text-sm">
                   <span>Battery use</span>

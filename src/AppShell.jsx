@@ -18,7 +18,6 @@ import {
   readPitchMaxNote,
   readPitchMinNote,
   readRunAt30Fps,
-  readShowStats,
   readSpectrogramMaxHz,
   readSpectrogramMinHz,
   writeAutoPauseOnSilence,
@@ -27,7 +26,6 @@ import {
   writePitchMaxNote,
   writePitchMinNote,
   writeRunAt30Fps,
-  writeShowStats,
   writeSpectrogramMaxHz,
   writeSpectrogramMinHz,
 } from "./Recorder/config.js";
@@ -39,7 +37,6 @@ export default function AppShell() {
   const [scaleMaxNote, setScaleMaxNote] = useState(() => readScaleMaxNote());
   const [keepRunningInBackground, setKeepRunningInBackground] = useState(() => readKeepRunningInBackground());
   const [autoPauseOnSilence, setAutoPauseOnSilence] = useState(() => readAutoPauseOnSilence());
-  const [showStats, setShowStats] = useState(() => readShowStats());
   const [runAt30Fps, setRunAt30Fps] = useState(() => readRunAt30Fps());
   const [halfResolutionCanvas, setHalfResolutionCanvas] = useState(() => readHalfResolutionCanvas());
   const [pitchMinNote, setPitchMinNote] = useState(() => readPitchMinNote());
@@ -77,10 +74,6 @@ export default function AppShell() {
   useEffect(() => {
     writeAutoPauseOnSilence(autoPauseOnSilence);
   }, [autoPauseOnSilence]);
-
-  useEffect(() => {
-    writeShowStats(showStats);
-  }, [showStats]);
 
   useEffect(() => {
     writeRunAt30Fps(runAt30Fps);
@@ -199,7 +192,6 @@ export default function AppShell() {
                     settingsOpen={settingsOpen}
                     keepRunningInBackground={keepRunningInBackground}
                     autoPauseOnSilence={autoPauseOnSilence}
-                    showStats={showStats}
                     runAt30Fps={runAt30Fps}
                     halfResolutionCanvas={halfResolutionCanvas}
                     pitchMinNote={pitchMinNote}
@@ -297,8 +289,6 @@ export default function AppShell() {
                   onKeepRunningInBackgroundChange={setKeepRunningInBackground}
                   autoPauseOnSilence={autoPauseOnSilence}
                   onAutoPauseOnSilenceChange={setAutoPauseOnSilence}
-                  showStats={showStats}
-                  onShowStatsChange={setShowStats}
                   runAt30Fps={runAt30Fps}
                   onRunAt30FpsChange={setRunAt30Fps}
                   halfResolutionCanvas={halfResolutionCanvas}

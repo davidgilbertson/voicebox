@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {clamp, lerp} from "../tools.js";
+import {clamp} from "../tools.js";
 import {
   analyzeAudioWindowFftPitch,
   createAudioState,
@@ -60,7 +60,6 @@ export default function Recorder({
   settingsOpen,
   keepRunningInBackground,
   autoPauseOnSilence,
-  showStats,
   runAt30Fps,
   halfResolutionCanvas,
   pitchMinNote,
@@ -117,16 +116,8 @@ export default function Recorder({
   const animationRef = useRef({
     rafId: 0,
     lastFrameMs: 0,
-    drawAvg: 0,
-    dataAvg: 0,
     displayedVibratoRateHz: null,
     lastValidVibratoRateMs: null,
-  });
-  const metricsRef = useRef({
-    level: {rms: 0},
-    rawHz: 0,
-    hasVoice: false,
-    hasDataTiming: false,
   });
   const forceRedrawRef = useRef(false);
   const activeViewRef = useRef(activeView);
@@ -143,11 +134,6 @@ export default function Recorder({
     vibratoRateHz: null,
   });
   const [hasEverRun, setHasEverRun] = useState(false);
-  const [stats, setStats] = useState({
-    timings: {data: null, draw: 0},
-    level: {rms: 0},
-    rawHz: 0,
-  });
   const [wantsToRun, setWantsToRun] = useState(true);
   const [isForeground, setIsForeground] = useState(() => computeIsForeground());
   const [spectrogramNoiseCalibrating, setSpectrogramNoiseCalibrating] = useState(false);
@@ -406,13 +392,9 @@ export default function Recorder({
     const currentView = activeViewRef.current;
     const minHz = currentView === "spectrogram" ? spectrogramMinHz : pitchRangeRef.current.minHz;
     const maxHz = currentView === "spectrogram" ? spectrogramMaxHz : pitchRangeRef.current.maxHz;
-    let processedWindows = 0;
-    let analysisElapsedMs = 0;
     let didTimelineChange = false;
-    let didRunPitchAnalysis = false;
 
     drainRawBuffer(raw, analysis, (windowSamples, nowMs) => {
-      const analysisStart = performance.now();
       const capturedBins = captureSpectrogramBins();
       const sharedSpectrumBins = capturedBins?.spectrogramBins ?? null;
       const detectorSpectrumBins = capturedBins?.detectorBins ?? null;
@@ -424,9 +406,6 @@ export default function Recorder({
           minHz,
           maxHz
       );
-      analysisElapsedMs += performance.now() - analysisStart;
-      processedWindows += 1;
-      didRunPitchAnalysis = true;
       let pitchWriteResult = null;
       if (result) {
         pitchWriteResult = writePitchTimeline(timelineRef.current, {
@@ -437,12 +416,6 @@ export default function Recorder({
         if (pitchWriteResult.steps > 0) {
           didTimelineChange = true;
         }
-        metricsRef.current = {
-          level: {rms: result.rms},
-          rawHz: result.hz,
-          hasVoice: result.hasVoice,
-          hasDataTiming: true,
-        };
       }
 
       const spectrogramSilencePaused = pitchWriteResult?.paused ?? timelineRef.current.silencePaused;
@@ -484,11 +457,6 @@ export default function Recorder({
       }
     });
 
-    if (processedWindows > 0) {
-      const avgPerWindowMs = analysisElapsedMs / processedWindows;
-      animationRef.current.dataAvg = lerp(animationRef.current.dataAvg, avgPerWindowMs, 0.2);
-    }
-    metricsRef.current.hasDataTiming = didRunPitchAnalysis;
     return didTimelineChange;
   };
 
@@ -580,8 +548,6 @@ export default function Recorder({
 
       setUi((prev) => ({...prev, isRunning: true}));
       setHasEverRun(true);
-      animationRef.current.drawAvg = 0;
-      animationRef.current.dataAvg = 0;
       if (!animationRef.current.rafId) {
         animationRef.current.rafId = requestAnimationFrame(renderLoop);
       }
@@ -751,22 +717,7 @@ export default function Recorder({
     const shouldDrawNow = forceRedrawRef.current || didTimelineChange;
     if (shouldDrawNow) {
       forceRedrawRef.current = false;
-      const drawStart = performance.now();
       drawActiveChart();
-      const drawElapsed = performance.now() - drawStart;
-      animationRef.current.drawAvg = lerp(animationRef.current.drawAvg, drawElapsed, 0.2);
-    }
-
-    if (showStats && (didTimelineChange || didDisplayRateChange)) {
-      const latestMetrics = metricsRef.current;
-      setStats({
-        timings: {
-          data: latestMetrics.hasDataTiming ? animationRef.current.dataAvg : null,
-          draw: animationRef.current.drawAvg,
-        },
-        level: latestMetrics.level,
-        rawHz: latestMetrics.rawHz,
-      });
     }
     if (didDisplayRateChange) {
       setUi((prev) => ({...prev, vibratoRateHz: displayedRateHz}));
@@ -904,14 +855,6 @@ export default function Recorder({
         {ui.error && !showStartOverlay ? (
             <div className="absolute inset-x-3 top-14 rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-200">
               {ui.error}
-            </div>
-        ) : null}
-        {showStats ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-4 py-2 text-xs text-slate-300">
-              <div>Data: {stats.timings.data === null ? "--" : `${stats.timings.data.toFixed(2)} ms`}</div>
-              <div>Draw: {stats.timings.draw.toFixed(2)} ms</div>
-              <div>RMS: {stats.level.rms?.toFixed(3) ?? "--"}</div>
-              <div>Hz: {stats.rawHz ? stats.rawHz.toFixed(1) : "0"}</div>
             </div>
         ) : null}
       </>

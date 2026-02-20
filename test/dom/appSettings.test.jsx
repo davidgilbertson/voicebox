@@ -7,7 +7,6 @@ import {
   readAutoPauseOnSilence,
   readHalfResolutionCanvas,
   readRunAt30Fps,
-  readShowStats,
   readSpectrogramMaxHz,
   readSpectrogramMinHz,
 } from "../../src/Recorder/config.js";
@@ -18,24 +17,19 @@ test("settings defaults and persistence work via localStorage", async () => {
 
   await user.click(screen.getByLabelText("Open settings"));
   const autoPauseCheckbox = screen.getByRole("checkbox", {name: /Auto pause on silence/i});
-  const showStatsCheckbox = screen.getByRole("checkbox", {name: /Show stats/i});
   const runAt30FpsCheckbox = screen.getByRole("checkbox", {name: /Run at 30 FPS/i});
   const halfResolutionCanvasCheckbox = screen.getByRole("checkbox", {name: /Half-resolution canvas/i});
 
   expect(autoPauseCheckbox).toBeChecked();
-  expect(showStatsCheckbox).not.toBeChecked();
   expect(runAt30FpsCheckbox).not.toBeChecked();
   expect(halfResolutionCanvasCheckbox).not.toBeChecked();
 
-  await user.click(showStatsCheckbox);
-  expect(showStatsCheckbox).toBeChecked();
   await user.click(runAt30FpsCheckbox);
   expect(runAt30FpsCheckbox).toBeChecked();
   await user.click(halfResolutionCanvasCheckbox);
   expect(halfResolutionCanvasCheckbox).toBeChecked();
 
   await waitFor(() => {
-    expect(readShowStats()).toBe(true);
     expect(readAutoPauseOnSilence()).toBe(true);
     expect(readRunAt30Fps()).toBe(true);
     expect(readHalfResolutionCanvas()).toBe(true);
@@ -82,17 +76,6 @@ test("spectrogram frequency inputs can be cleared while editing and commit on bl
   await waitFor(() => {
     expect(readSpectrogramMinHz()).toBe(65);
   });
-});
-
-test("enabling show stats displays stats panel", async () => {
-  const user = userEvent.setup();
-  render(<AppShell/>);
-
-  expect(screen.queryByText(/Data:/)).toBeNull();
-  await user.click(screen.getByLabelText("Open settings"));
-  await user.click(screen.getByRole("checkbox", {name: /Show stats/i}));
-
-  expect(await screen.findByText(/Data:/)).toBeInTheDocument();
 });
 
 test("temporary pitch detector overlay buttons are removed", async () => {
