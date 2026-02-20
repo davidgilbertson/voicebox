@@ -170,7 +170,7 @@ export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX
                       }`}
                   >
                     {key.note.startsWith("C") && (
-                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xl font-light text-slate-500/60">
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xl font-light text-slate-400">
                         {key.note}
                       </span>
                     )}

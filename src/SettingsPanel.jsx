@@ -40,7 +40,7 @@ export default function SettingsPanel({
                                         onClearSpectrogramNoiseProfile,
                                         batteryUsagePerMinute,
                                         disableNoiseSampling = false,
-}) {
+                                      }) {
   const dialogRef = useRef(null);
   const [spectrogramMinHzDraft, setSpectrogramMinHzDraft] = useState(() => String(spectrogramMinHz));
   const [spectrogramMaxHzDraft, setSpectrogramMaxHzDraft] = useState(() => String(spectrogramMaxHz));
@@ -159,12 +159,6 @@ export default function SettingsPanel({
                   className={SETTINGS_CHECKBOX_CLASS}
               />
             </label>
-            {batteryUsageDisplay ? (
-                <div className="flex items-center justify-between gap-4 text-sm">
-                  <span>Battery use</span>
-                  <span>{batteryUsageDisplay}</span>
-                </div>
-            ) : null}
             <div className="border-t border-slate-700/80"/>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-500">Scales Page</div>
             <div className="grid grid-cols-2 gap-2">
@@ -354,6 +348,13 @@ export default function SettingsPanel({
                   className={SETTINGS_CHECKBOX_CLASS}
               />
             </label>
+
+            {batteryUsageDisplay ? (
+                <div className="flex items-center justify-between gap-4 text-sm">
+                  <span>Battery use</span>
+                  <span>{batteryUsageDisplay}</span>
+                </div>
+            ) : null}
             <div className="flex items-center justify-between gap-3 pt-3">
               <a
                   href="https://github.com/davidgilbertson/voicebox"

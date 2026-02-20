@@ -1,29 +1,73 @@
-# Voice Box
+# Voicebox
 
-A web app with a collection of vocal tools.
+Voicebox is a microphone-based voice training app for real-time pitch feedback and guided scale practice.
 
-Currently in Prototype stage.
+There are four pages + settings
 
-## Realtime Processing Architecture
+## Scales
 
-The app uses two timing domains:
+- Plays guided scale patterns.
+- Choose pattern and BPM.
+- By default, scales will start at the bottom of your range (as defined in settings) and increment up one semitone each repeat.
+- When the scale repeats reach the top of your range they will start descending again.
+- Gesture area controls repeat direction:
+  - Swipe up: shift up a semitone on repeat
+  - Swipe down: shift down a semitone on repeat
+  - Swipe right: repeat at same pitch
+- Swipe repeatedly if you feel like it.
+- Tap the gesture area to play/pause.
+- There's also a piano to play arbitrary notes.
+- In the settings you can define your vocal range. That affects the visible piano keys and the limits for the scales.
 
-1. Audio ingest clock: audio arrives continuously and is written to a ring buffer.
-2. Render clock: `requestAnimationFrame` drains available buffered audio, advances analysis hops, updates the time series, and renders.
+## Spectrogram
 
-Rationale:
+- Shows a live frequency heatmap of your voice.
+- Useful for seeing harmonics, noise, and overall tone energy over time.
+- You can limit the displayed frequency range and apply background-noise subtraction in settings.
+- Tap the screen to pause/resume.
 
-1. Avoids tying data correctness to frame cadence while still rendering at display rate.
-2. Avoids introducing a third app-level timer loop (`setInterval`) that duplicates scheduling concerns.
-3. Keeps processing deterministic by advancing via sample counts/hop sizes, not wall-clock guesses.
+## Pitch
 
-Implementation requirements:
-
-1. Consume buffered audio by sample-count catch-up logic.
-2. Keep bounded ring buffers with explicit overflow policy.
-3. Optionally cap per-frame work and carry remainder forward to avoid frame spikes.
-4. Keep render concerns separate from signal ingestion concerns.
+- Shows your detected pitch trace over time.
+- You can define the visible pitch range in settings.
+- Tap the screen to pause/resume.
 
 ## Vibrato
 
-A shameless copy of the 'Vibrato Monitor' Android app
+- Shows pitch movement plus live vibrato-rate readout (Hz).
+- Follows your vibrato, zoomed right in so you can see the shape clearly.
+- Includes a target zone on the rate bar to help you stay in a desired vibrato range.
+- Tap the screen to pause/resume.
+
+---
+
+The Spectrogram, Pitch, and Vibrato pages are all linked, so you can switch between them to see different views of your voice, while playing or while paused.
+
+## Settings
+
+### General
+
+- **Keep running in background**: continue recording when app loses focus.
+- **Auto pause on silence**: pauses timeline writes during silence.
+
+### Scales Page
+
+- **Min / Max**: note range used for scale playback.
+
+### Spectrogram Page
+
+- **Min / Max**: frequency range shown on the spectrogram (Hz).
+- **Hold to sample**: captures background noise profile.
+- **Clear**: removes saved noise profile.
+
+### Pitch Page
+
+- **Min / Max**: note range shown on the pitch chart.
+
+### Performance
+
+- **Show stats**: shows analysis + draw timing, RMS, and detected Hz.
+- **Run at 30 FPS**: lowers frame rate to reduce battery use. This makes quite a big difference to battery use and is barely noticable.
+- **Half-resolution canvas**: lowers chart render resolution for lower CPU/GPU use.
+- **Disable pitch detection while on spectrogram page**: reduces battery use, but pauses pitch/vibrato updates while Spectrogram is open.
+- **Battery use**: estimated battery drain rate (`%/min`). This reading only makes sense if Voicebox is the only app you're using and it stays active. It updates once per minute.
