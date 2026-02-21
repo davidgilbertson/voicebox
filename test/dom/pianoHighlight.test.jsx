@@ -38,35 +38,35 @@ test("pressing a key does not trigger sustained playback highlight", async () =>
   render(<Piano/>);
   const c4Key = screen.getByRole("button", {name: "C4"});
 
-  expect(c4Key).not.toHaveClass("bg-sky-400");
+  expect(c4Key).not.toHaveClass("bg-blue-400");
 
   act(() => {
     fireEvent.click(c4Key);
   });
 
   expect(playNoteMock).toHaveBeenCalledWith("C4", 0.8, {emitHighlight: false});
-  expect(c4Key).not.toHaveClass("bg-sky-400");
+  expect(c4Key).not.toHaveClass("bg-blue-400");
 
   act(() => {
     vi.advanceTimersByTime(1200);
   });
-  expect(c4Key).not.toHaveClass("bg-sky-400");
+  expect(c4Key).not.toHaveClass("bg-blue-400");
 });
 
 test("programmatic played MIDI notes highlight matching piano keys", async () => {
   render(<Piano/>);
   const d2Key = screen.getByRole("button", {name: "D2"});
 
-  expect(d2Key).not.toHaveClass("bg-sky-400");
+  expect(d2Key).not.toHaveClass("bg-blue-400");
 
   await act(async () => {
     await playNote(38, 0.25);
   });
 
-  expect(d2Key).toHaveClass("bg-sky-400");
+  expect(d2Key).toHaveClass("bg-blue-400");
 
   act(() => {
     vi.advanceTimersByTime(300);
   });
-  expect(d2Key).not.toHaveClass("bg-sky-400");
+  expect(d2Key).not.toHaveClass("bg-blue-400");
 });

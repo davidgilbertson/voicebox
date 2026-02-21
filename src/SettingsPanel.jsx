@@ -1,8 +1,19 @@
 import {useEffect, useRef, useState} from "react";
 import StepperControl from "./components/StepperControl.jsx";
+import {PITCH_LINE_COLOR_MODES} from "./Recorder/waveformColor.js";
 
 const SETTINGS_CHECKBOX_CLASS = "settings-checkbox h-5 w-5";
-const SETTINGS_SECTION_HEADING_CLASS = "text-sm font-semibold uppercase tracking-[0.18em] text-sky-500";
+const SETTINGS_SECTION_HEADING_CLASS = "font-semibold uppercase tracking-[0.18em] text-blue-400";
+const PITCH_LINE_MODE_PREVIEW_CLASS_BY_MODE = {
+  blue: "pitch-line-mode-preview pitch-line-mode-blue",
+  orange: "pitch-line-mode-preview pitch-line-mode-orange",
+  green: "pitch-line-mode-preview pitch-line-mode-green",
+  cool: "pitch-line-mode-preview pitch-line-mode-cool",
+  autumn: "pitch-line-mode-preview pitch-line-mode-autumn",
+  terrain: "pitch-line-mode-preview pitch-line-mode-terrain",
+  inferno: "pitch-line-mode-preview pitch-line-mode-inferno",
+  gist_rainbow: "pitch-line-mode-preview pitch-line-mode-gist-rainbow",
+};
 
 export default function SettingsPanel({
                                         open,
@@ -22,6 +33,8 @@ export default function SettingsPanel({
                                         onHalfResolutionCanvasChange,
                                         pitchMinNote,
                                         pitchMaxNote,
+                                        pitchLineColorMode,
+                                        onPitchLineColorModeChange,
                                         pitchNoteOptions,
                                         onPitchMinNoteChange,
                                         onPitchMaxNoteChange,
@@ -127,7 +140,7 @@ export default function SettingsPanel({
             </button>
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto px-4 pt-2 pb-4">
-            <div className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-500">General</div>
+            <div className="font-semibold uppercase tracking-[0.18em] text-blue-400">General</div>
             <label className="flex items-start justify-between gap-4 text-sm">
               <div className="flex flex-col gap-1">
                 <span>Keep running in background</span>
@@ -186,7 +199,6 @@ export default function SettingsPanel({
                 />
               </div>
             </div>
-            <div className="h-2 border-t border-slate-700/80"/>
             <div className={SETTINGS_SECTION_HEADING_CLASS}>Spectrogram Page</div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
@@ -287,6 +299,38 @@ export default function SettingsPanel({
                 />
               </div>
             </div>
+            <div className="h-2 border-t border-slate-700/80"/>
+            <div className={SETTINGS_SECTION_HEADING_CLASS}>Pitch + Vibrato Pages</div>
+            <fieldset className="space-y-2">
+              <legend className="block text-xs uppercase tracking-wide text-slate-400">
+                Pitch line color
+              </legend>
+              <div className="rounded-md border border-slate-800 bg-black p-2">
+                <div className="space-y-2">
+                  {PITCH_LINE_COLOR_MODES.map((mode) => (
+                      <label key={mode.value} className="pitch-line-mode-option">
+                        <input
+                            type="radio"
+                            name="pitch-line-color-mode"
+                            value={mode.value}
+                            checked={pitchLineColorMode === mode.value}
+                            onChange={(event) => onPitchLineColorModeChange(event.target.value)}
+                            className="h-4 w-4 accent-blue-400"
+                        />
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
+                          <span className="text-sm font-medium text-slate-200">
+                            {mode.label}
+                          </span>
+                          <span className={PITCH_LINE_MODE_PREVIEW_CLASS_BY_MODE[mode.value]}/>
+                        </div>
+                      </label>
+                  ))}
+                </div>
+              </div>
+              <div className="text-xs text-slate-400">
+                The gradient options respond to volume in real time.
+              </div>
+            </fieldset>
             <div className="h-2 border-t border-slate-700/80"/>
             <div className={SETTINGS_SECTION_HEADING_CLASS}>Performance</div>
             <label className="flex items-start justify-between gap-4 text-sm">

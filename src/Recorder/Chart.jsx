@@ -4,14 +4,15 @@ import {smoothDisplayTimeline} from "./displaySmoothing.js";
 import {clamp} from "../tools.js";
 
 const Chart = forwardRef(function Chart({
-  className = "",
-  renderScale = 1,
-}, ref) {
+                                          className = "",
+                                          renderScale = 1,
+                                        }, ref) {
   const canvasRef = useRef(null);
   const smoothedValuesRef = useRef(null);
 
   const draw = ({
                   values,
+                  colorValues = null,
                   writeIndex,
                   count,
                   yOffset = 0,
@@ -21,7 +22,8 @@ const Chart = forwardRef(function Chart({
                   xInsetRight = 0,
                   yInsetTop = 0,
                   yInsetBottom = 0,
-                  lineColor = colors.sky[400],
+                  lineColor = colors.blue[400],
+                  mapColorValueToStroke = null,
                   lineWidth = 1,
                   gapThreshold = Number.POSITIVE_INFINITY,
                   drawBackground,
@@ -77,11 +79,16 @@ const Chart = forwardRef(function Chart({
     ctx.lineWidth = lineWidth;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.strokeStyle = lineColor;
-    ctx.beginPath();
+
+    const usePerSegmentColor = colorValues && mapColorValueToStroke;
+    if (!usePerSegmentColor) {
+      ctx.strokeStyle = lineColor;
+      ctx.beginPath();
+    }
     let hasActivePath = false;
     let lastValue = null;
     let lastY = null;
+    let lastX = null;
     const totalSlots = drawValues.length;
     const firstIndex = count === totalSlots ? writeIndex : 0;
     const startSlot = count < totalSlots ? totalSlots - count : 0;
@@ -101,19 +108,32 @@ const Chart = forwardRef(function Chart({
           ? mapValueToY(value, cssHeight, plotTop, plotHeight)
           : midY - (value - yOffset) * scaleY;
       if (lastValue === null || Math.abs(value - lastValue) > gapThreshold || lastY === null) {
-        if (hasActivePath) {
+        if (!usePerSegmentColor && hasActivePath) {
           ctx.stroke();
         }
-        ctx.beginPath();
-        ctx.moveTo(x, y);
+        if (!usePerSegmentColor) {
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+        }
         hasActivePath = true;
       } else {
-        ctx.lineTo(x, y);
+        if (usePerSegmentColor && lastX !== null) {
+          const colorValue = colorValues[bufferIndex];
+          const strokeColor = mapColorValueToStroke(colorValue);
+          ctx.strokeStyle = strokeColor;
+          ctx.beginPath();
+          ctx.moveTo(lastX, lastY);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+        } else {
+          ctx.lineTo(x, y);
+        }
       }
       lastValue = value;
       lastY = y;
+      lastX = x;
     }
-    if (hasActivePath) {
+    if (!usePerSegmentColor && hasActivePath) {
       ctx.stroke();
     }
 

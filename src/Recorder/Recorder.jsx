@@ -56,18 +56,19 @@ function computeIsForeground() {
 }
 
 export default function Recorder({
-  activeView,
-  settingsOpen,
-  keepRunningInBackground,
-  autoPauseOnSilence,
-  runAt30Fps,
-  halfResolutionCanvas,
-  pitchMinNote,
-  pitchMaxNote,
-  spectrogramMinHz,
-  spectrogramMaxHz,
-  onSettingsRuntimeChange,
-}) {
+                                   activeView,
+                                   settingsOpen,
+                                   keepRunningInBackground,
+                                   autoPauseOnSilence,
+                                   runAt30Fps,
+                                   halfResolutionCanvas,
+                                   pitchMinNote,
+                                   pitchMaxNote,
+                                   pitchLineColorMode,
+                                   spectrogramMinHz,
+                                   spectrogramMaxHz,
+                                   onSettingsRuntimeChange,
+                                 }) {
   const initialNoiseProfile = useMemo(() => readSpectrogramNoiseProfile(), []);
   const vibratoChartRef = useRef(null);
   const pitchChartRef = useRef(null);
@@ -412,6 +413,7 @@ export default function Recorder({
           nowMs,
           hasVoice: result.hasVoice,
           cents: result.cents,
+          level: result.rms,
         });
         if (pitchWriteResult.steps > 0) {
           didTimelineChange = true;
@@ -623,6 +625,7 @@ export default function Recorder({
     if (currentView === "vibrato") {
       vibratoChartRef.current?.draw({
         values: timeline.values,
+        levels: timeline.levels,
         writeIndex: timeline.writeIndex,
         count: timeline.count,
         yOffset: audioRef.current.centerCents,
@@ -641,6 +644,7 @@ export default function Recorder({
     }
     pitchChartRef.current?.draw({
       values: timeline.values,
+      levels: timeline.levels,
       writeIndex: timeline.writeIndex,
       count: timeline.count,
     });
@@ -720,7 +724,10 @@ export default function Recorder({
       drawActiveChart();
     }
     if (didDisplayRateChange) {
-      setUi((prev) => ({...prev, vibratoRateHz: displayedRateHz}));
+      setUi((prev) => ({
+        ...prev,
+        vibratoRateHz: displayedRateHz,
+      }));
     }
     animationRef.current.rafId = requestAnimationFrame(renderLoop);
   };
@@ -812,6 +819,7 @@ export default function Recorder({
                   vibratoSweetMinHz={VIBRATO_SWEET_MIN_HZ}
                   vibratoSweetMaxHz={VIBRATO_SWEET_MAX_HZ}
                   renderScale={halfResolutionCanvas ? 0.5 : 1}
+                  lineColorMode={pitchLineColorMode}
               />
           ) : activeView === "spectrogram" ? (
               <SpectrogramChart
@@ -828,6 +836,7 @@ export default function Recorder({
                   maxCents={pitchMaxCents}
                   maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
                   renderScale={halfResolutionCanvas ? 0.5 : 1}
+                  lineColorMode={pitchLineColorMode}
               />
           )}
           {showStartOverlay ? (
@@ -838,7 +847,7 @@ export default function Recorder({
                 <button
                     type="button"
                     onClick={onStartButtonClick}
-                    className="rounded-full bg-sky-400 px-6 py-3 text-base font-semibold text-slate-950 shadow-lg shadow-sky-400/30"
+                    className="rounded-full bg-blue-400 px-6 py-3 text-base font-semibold text-slate-950 shadow-lg shadow-blue-400/30"
                 >
                   Start
                 </button>

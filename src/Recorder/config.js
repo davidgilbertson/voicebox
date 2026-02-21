@@ -1,5 +1,6 @@
 import {PITCH_NOTE_OPTIONS} from "../pitchScale.js";
 import {clamp, ls} from "../tools.js";
+import {PITCH_LINE_COLOR_MODES} from "./waveformColor.js";
 
 // User-changeable preferences persisted in localStorage.
 const KEEP_RUNNING_IN_BACKGROUND_STORAGE_KEY = "voicebox.keepRunningInBackground";
@@ -8,6 +9,7 @@ const RUN_AT_30_FPS_STORAGE_KEY = "voicebox.runAt30Fps";
 const HALF_RESOLUTION_CANVAS_STORAGE_KEY = "voicebox.halfResolutionCanvas";
 const PITCH_MIN_NOTE_STORAGE_KEY = "voicebox.pitchMinNote";
 const PITCH_MAX_NOTE_STORAGE_KEY = "voicebox.pitchMaxNote";
+const PITCH_LINE_COLOR_MODE_STORAGE_KEY = "voicebox.pitchLineColorMode";
 const SPECTROGRAM_MIN_HZ_STORAGE_KEY = "voicebox.spectrogramMinHz";
 const SPECTROGRAM_MAX_HZ_STORAGE_KEY = "voicebox.spectrogramMaxHz";
 const SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY = "voicebox.spectrogramNoiseProfile";
@@ -35,6 +37,8 @@ const SPECTROGRAM_MAX_HZ_DEFAULT = 11_000;
 const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
 const RUN_AT_30_FPS_DEFAULT = false;
 const HALF_RESOLUTION_CANVAS_DEFAULT = false;
+const PITCH_LINE_COLOR_MODE_DEFAULT = "terrain";
+const PITCH_LINE_COLOR_MODE_SET = new Set(PITCH_LINE_COLOR_MODES.map((item) => item.value));
 
 function safeReadPitchNote(storageKey, fallback) {
   const stored = ls.get(storageKey, fallback);
@@ -94,6 +98,16 @@ export function writePitchMinNote(value) {
 
 export function writePitchMaxNote(value) {
   ls.set(PITCH_MAX_NOTE_STORAGE_KEY, value);
+}
+
+export function readPitchLineColorMode() {
+  const stored = ls.get(PITCH_LINE_COLOR_MODE_STORAGE_KEY, PITCH_LINE_COLOR_MODE_DEFAULT);
+  return PITCH_LINE_COLOR_MODE_SET.has(stored) ? stored : PITCH_LINE_COLOR_MODE_DEFAULT;
+}
+
+export function writePitchLineColorMode(value) {
+  if (!PITCH_LINE_COLOR_MODE_SET.has(value)) return;
+  ls.set(PITCH_LINE_COLOR_MODE_STORAGE_KEY, value);
 }
 
 export function readSpectrogramMinHz() {

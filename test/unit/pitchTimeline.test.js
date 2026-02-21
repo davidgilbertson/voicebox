@@ -11,6 +11,15 @@ function orderedValues(state) {
   return values;
 }
 
+function orderedLevels(state) {
+  const levels = [];
+  const firstIndex = state.count === state.levels.length ? state.writeIndex : 0;
+  for (let i = 0; i < state.count; i += 1) {
+    levels.push(state.levels[(firstIndex + i) % state.levels.length]);
+  }
+  return levels;
+}
+
 test("timeline keeps SPS * seconds points and 60 points per 5Hz oscillation at 300 SPS", () => {
   const samplesPerSecond = 300;
   const seconds = 5;
@@ -30,6 +39,7 @@ test("timeline keeps SPS * seconds points and 60 points per 5Hz oscillation at 3
       nowMs: i * stepMs,
       hasVoice: true,
       cents,
+      level: 0.5,
     });
   }
 
@@ -38,6 +48,8 @@ test("timeline keeps SPS * seconds points and 60 points per 5Hz oscillation at 3
   const firstOscillation = values.slice(0, samplesPerSecond / vibratoRateHz);
   assert.equal(firstOscillation.length, 60);
   assert.ok(firstOscillation.every(Number.isFinite));
+  const levels = orderedLevels(state);
+  assert.ok(levels.every((value) => value === 0.5));
 });
 
 test("very high SPS with slow analysis cadence produces heavy backfill", () => {
@@ -59,6 +71,7 @@ test("very high SPS with slow analysis cadence produces heavy backfill", () => {
       nowMs: i * frameMs,
       hasVoice: true,
       cents,
+      level: 0.8,
     });
   }
 
@@ -83,6 +96,7 @@ test("silence auto-pause can be disabled so timeline keeps advancing with NaN va
       nowMs: i * stepMs,
       hasVoice: false,
       cents: Number.NaN,
+      level: Number.NaN,
     });
   }
 
@@ -90,6 +104,8 @@ test("silence auto-pause can be disabled so timeline keeps advancing with NaN va
   assert.equal(state.count, samplesPerSecond);
   const values = orderedValues(state);
   assert.ok(values.every(Number.isNaN));
+  const levels = orderedLevels(state);
+  assert.ok(levels.every(Number.isNaN));
 });
 
 test("silence auto-pause enabled stops writes after threshold", () => {
@@ -109,10 +125,38 @@ test("silence auto-pause enabled stops writes after threshold", () => {
       nowMs: i * stepMs,
       hasVoice: false,
       cents: Number.NaN,
+      level: Number.NaN,
     });
     if (result.paused) pausedWrites += 1;
   }
 
   assert.ok(pausedWrites > 0);
   assert.equal(state.silencePaused, true);
+});
+
+test("backfilled writes keep level samples aligned with pitch samples", () => {
+  const state = createPitchTimeline({
+    samplesPerSecond: 10,
+    seconds: 1,
+    silencePauseThresholdMs: 300,
+    nowMs: 0,
+  });
+
+  writePitchTimeline(state, {
+    nowMs: 100,
+    hasVoice: true,
+    cents: 100,
+    level: 0.2,
+  });
+  writePitchTimeline(state, {
+    nowMs: 400,
+    hasVoice: true,
+    cents: 200,
+    level: 0.8,
+  });
+
+  const levels = orderedLevels(state);
+  assert.equal(levels.length, state.count);
+  assert.equal(levels.length, 4);
+  assert.deepEqual(levels.map((value) => Number(value.toFixed(3))), [0.2, 0.4, 0.6, 0.8]);
 });

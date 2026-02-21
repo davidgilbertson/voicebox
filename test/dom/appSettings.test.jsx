@@ -6,6 +6,7 @@ import AppShell from "../../src/AppShell.jsx";
 import {
   readAutoPauseOnSilence,
   readHalfResolutionCanvas,
+  readPitchLineColorMode,
   readRunAt30Fps,
   readSpectrogramMaxHz,
   readSpectrogramMinHz,
@@ -141,4 +142,28 @@ test("battery use shows NA when battery level is unavailable", async () => {
     expect(screen.getByText("Battery use")).toBeInTheDocument();
     expect(screen.getByText("NA")).toBeInTheDocument();
   });
+});
+
+test("pitch line color mode persists from settings", async () => {
+  const user = userEvent.setup();
+  render(<AppShell/>);
+
+  await user.click(screen.getByLabelText("Open settings"));
+  const orangeRadio = screen.getByRole("radio", {name: "Orange"});
+  await user.click(orangeRadio);
+
+  await waitFor(() => {
+    expect(readPitchLineColorMode()).toBe("orange");
+  });
+});
+
+test("invalid persisted pitch line color mode falls back to terrain", async () => {
+  localStorage.setItem("voicebox.pitchLineColorMode", "red");
+  const user = userEvent.setup();
+  render(<AppShell/>);
+
+  await user.click(screen.getByLabelText("Open settings"));
+  const terrainRadio = screen.getByRole("radio", {name: "Terrain"});
+  expect(terrainRadio).toBeChecked();
+  expect(readPitchLineColorMode()).toBe("terrain");
 });

@@ -79,8 +79,8 @@ export default function GestureArea({
     const gesture = gestureRef.current;
     if (gesture.handled) return true;
     if (
-      Math.abs(deltaX) < SWIPE_GESTURE_THRESHOLD_PX &&
-      Math.abs(deltaY) < SWIPE_GESTURE_THRESHOLD_PX
+        Math.abs(deltaX) < SWIPE_GESTURE_THRESHOLD_PX &&
+        Math.abs(deltaY) < SWIPE_GESTURE_THRESHOLD_PX
     ) {
       return false;
     }
@@ -133,28 +133,28 @@ export default function GestureArea({
   };
 
   const swipeFlashIcon = swipeFlash?.direction === "up" ? ArrowUp
-    : swipeFlash?.direction === "down" ? ArrowDown
-      : swipeFlash?.direction === "right" ? ArrowRight
-        : null;
+      : swipeFlash?.direction === "down" ? ArrowDown
+          : swipeFlash?.direction === "right" ? ArrowRight
+              : null;
   const SwipeFlashIcon = swipeFlashIcon;
 
   return (
-    <div
-      data-testid={testId}
-      className={className}
-      onPointerDownCapture={onPointerDownCapture}
-      onPointerMoveCapture={onPointerMoveCapture}
-      onPointerUpCapture={onPointerUpCapture}
-      onPointerCancelCapture={onPointerCancelCapture}
-    >
-      {showHelp ? helpContent : SwipeFlashIcon ? (
-        <SwipeFlashIcon
-          key={swipeFlash.id}
-          className={`h-24 w-24 text-sky-300 transition-opacity duration-500 ${
-            swipeFlashFading ? "opacity-0" : "opacity-100"
-          }`}
-        />
-      ) : null}
-    </div>
+      <div
+          data-testid={testId}
+          className={className}
+          onPointerDownCapture={onPointerDownCapture}
+          onPointerMoveCapture={onPointerMoveCapture}
+          onPointerUpCapture={onPointerUpCapture}
+          onPointerCancelCapture={onPointerCancelCapture}
+      >
+        {showHelp ? helpContent : SwipeFlashIcon ? (
+            <SwipeFlashIcon
+                key={swipeFlash.id}
+                className={`h-24 w-24 text-blue-300 transition-opacity duration-500 ${
+                    swipeFlashFading ? "opacity-0" : "opacity-100"
+                }`}
+            />
+        ) : null}
+      </div>
   );
 }

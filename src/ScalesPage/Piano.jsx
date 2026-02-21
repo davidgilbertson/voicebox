@@ -166,7 +166,7 @@ export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX
                       onClick={useClickActivation ? () => handleKeyPress(key.note) : undefined}
                       onPointerDown={!useClickActivation ? () => handleKeyPress(key.note) : undefined}
                       className={`relative w-full flex-1 border-b border-slate-800 transition-colors duration-50 ${
-                          isActive ? "bg-sky-400" : "bg-slate-100 active:bg-sky-300"
+                          isActive ? "bg-blue-400" : "bg-slate-100 active:bg-blue-300"
                       }`}
                   >
                     {key.note.startsWith("C") && (
@@ -189,7 +189,7 @@ export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX
                     onClick={useClickActivation ? () => handleKeyPress(key.note) : undefined}
                     onPointerDown={!useClickActivation ? () => handleKeyPress(key.note) : undefined}
                     className={`absolute left-0 z-10 w-3/5 rounded-r-sm border border-slate-900 transition-colors duration-50 ${
-                        isActive ? "bg-sky-600" : "bg-slate-900 active:bg-sky-700"
+                        isActive ? "bg-blue-600" : "bg-slate-900 active:bg-blue-700"
                     }`}
                     style={{
                       top: `${key.topPercent}%`,

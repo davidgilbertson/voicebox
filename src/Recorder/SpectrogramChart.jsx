@@ -1,6 +1,6 @@
-import {forwardRef, useImperativeHandle, useMemo, useRef} from "react";
+import {forwardRef, useImperativeHandle, useRef} from "react";
 import colors from "tailwindcss/colors";
-import {clamp} from "../tools.js";
+import {clamp, getColorPalette} from "../tools.js";
 
 const LABEL_X = 4;
 const PLOT_LEFT = 0;
@@ -21,32 +21,6 @@ function drawLabelWithOutline(ctx, label, x, y) {
   ctx.strokeText(label, x, y);
   ctx.fillStyle = colors.white;
   ctx.fillText(label, x, y);
-}
-
-function createPalette() {
-  const palette = new Uint8ClampedArray(256 * 3);
-  const infernoStops = [
-    [0, 0, 0],
-    [0.095, 0.043, 0.265],
-    [0.341, 0.062, 0.429],
-    [0.63, 0.17, 0.388],
-    [0.895, 0.392, 0.204],
-    [0.988, 0.998, 0.645],
-  ];
-  for (let i = 0; i < 256; i += 1) {
-    const t = i / 255;
-    const scaled = t * (infernoStops.length - 1);
-    const leftIndex = Math.floor(scaled);
-    const rightIndex = Math.min(infernoStops.length - 1, leftIndex + 1);
-    const mix = scaled - leftIndex;
-    const left = infernoStops[leftIndex];
-    const right = infernoStops[rightIndex];
-    const base = i * 3;
-    palette[base] = Math.round((left[0] + (right[0] - left[0]) * mix) * 255);
-    palette[base + 1] = Math.round((left[1] + (right[1] - left[1]) * mix) * 255);
-    palette[base + 2] = Math.round((left[2] + (right[2] - left[2]) * mix) * 255);
-  }
-  return palette;
 }
 
 function fillSpectrogramColumns({
@@ -94,7 +68,7 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
   renderScale = 1,
 }, ref) {
   const canvasRef = useRef(null);
-  const palette = useMemo(() => createPalette(), []);
+  const palette = getColorPalette();
   const renderCanvasRef = useRef(null);
   const labelCanvasRef = useRef(null);
   const yBinCacheRef = useRef(null);

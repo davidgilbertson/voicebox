@@ -10,9 +10,12 @@ export function createPitchTimeline({
 }) {
   const length = Math.max(1, Math.floor(samplesPerSecond * seconds));
   const values = new Float32Array(length);
+  const levels = new Float32Array(length);
   values.fill(Number.NaN);
+  levels.fill(Number.NaN);
   return {
     values,
+    levels,
     writeIndex: 0,
     count: 0,
     samplesPerSecond,
@@ -20,6 +23,7 @@ export function createPitchTimeline({
     silencePauseThresholdMs,
     autoPauseOnSilence,
     lastWrittenValue: Number.NaN,
+    lastWrittenLevel: Number.NaN,
     silenceSinceMs: null,
     silencePaused: false,
     writeClockMs: nowMs,
@@ -33,15 +37,16 @@ export function createPitchTimeline({
   };
 }
 
-function pushValue(state, value) {
+function pushValue(state, value, level) {
   state.values[state.writeIndex] = value;
+  state.levels[state.writeIndex] = level;
   state.writeIndex = (state.writeIndex + 1) % state.values.length;
   if (state.count < state.values.length) {
     state.count += 1;
   }
 }
 
-export function writePitchTimeline(state, {nowMs, hasVoice, cents}) {
+export function writePitchTimeline(state, {nowMs, hasVoice, cents, level = Number.NaN}) {
   const autoPauseOnSilence = state.autoPauseOnSilence !== false;
   if (autoPauseOnSilence) {
     if (hasVoice) {
@@ -63,6 +68,7 @@ export function writePitchTimeline(state, {nowMs, hasVoice, cents}) {
     state.writeClockMs = nowMs;
     state.accumulator = 0;
     state.lastWrittenValue = Number.NaN;
+    state.lastWrittenLevel = Number.NaN;
     state.diagnostics.lastFillSteps = 0;
     return {steps: 0, paused: true};
   }
@@ -88,10 +94,13 @@ export function writePitchTimeline(state, {nowMs, hasVoice, cents}) {
   }
 
   const value = hasVoice ? cents : Number.NaN;
+  const nextLevel = hasVoice ? level : Number.NaN;
   const fillValues = interpolateFillValues(state.lastWrittenValue, value, steps);
-  for (const fillValue of fillValues) {
-    pushValue(state, fillValue);
+  const fillLevels = interpolateFillValues(state.lastWrittenLevel, nextLevel, steps);
+  for (let i = 0; i < fillValues.length; i += 1) {
+    pushValue(state, fillValues[i], fillLevels[i]);
   }
   state.lastWrittenValue = value;
+  state.lastWrittenLevel = nextLevel;
   return {steps, paused: false};
 }

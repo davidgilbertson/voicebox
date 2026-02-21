@@ -18,6 +18,7 @@ import {
   readKeepRunningInBackground,
   readPitchMaxNote,
   readPitchMinNote,
+  readPitchLineColorMode,
   readRunAt30Fps,
   readSpectrogramMaxHz,
   readSpectrogramMinHz,
@@ -26,6 +27,7 @@ import {
   writeKeepRunningInBackground,
   writePitchMaxNote,
   writePitchMinNote,
+  writePitchLineColorMode,
   writeRunAt30Fps,
   writeSpectrogramMaxHz,
   writeSpectrogramMinHz,
@@ -42,6 +44,7 @@ export default function AppShell() {
   const [halfResolutionCanvas, setHalfResolutionCanvas] = useState(() => readHalfResolutionCanvas());
   const [pitchMinNote, setPitchMinNote] = useState(() => readPitchMinNote());
   const [pitchMaxNote, setPitchMaxNote] = useState(() => readPitchMaxNote());
+  const [pitchLineColorMode, setPitchLineColorMode] = useState(() => readPitchLineColorMode());
   const [spectrogramMinHz, setSpectrogramMinHz] = useState(() => readSpectrogramMinHz());
   const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => readSpectrogramMaxHz());
   const [runtimeSettings, setRuntimeSettings] = useState({
@@ -94,6 +97,10 @@ export default function AppShell() {
     writePitchMinNote(pitchMinNote);
     writePitchMaxNote(pitchMaxNote);
   }, [pitchMaxNote, pitchMinNote]);
+
+  useEffect(() => {
+    writePitchLineColorMode(pitchLineColorMode);
+  }, [pitchLineColorMode]);
 
   useEffect(() => {
     writeSpectrogramMinHz(spectrogramMinHz);
@@ -203,6 +210,7 @@ export default function AppShell() {
                     halfResolutionCanvas={halfResolutionCanvas}
                     pitchMinNote={pitchMinNote}
                     pitchMaxNote={pitchMaxNote}
+                    pitchLineColorMode={pitchLineColorMode}
                     spectrogramMinHz={spectrogramMinHz}
                     spectrogramMaxHz={spectrogramMaxHz}
                     onSettingsRuntimeChange={setRuntimeSettings}
@@ -216,13 +224,13 @@ export default function AppShell() {
                     aria-pressed={activeView === "scales"}
                     className={`relative h-full flex-1 rounded-none px-1 text-[15px] font-semibold transition-colors ${
                         activeView === "scales"
-                            ? "text-sky-400"
+                            ? "text-blue-400"
                             : "text-slate-300 hover:text-slate-100 active:text-slate-200"
                     }`}
                 >
                   Scales
                   {activeView === "scales" ? (
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-sky-400"/>
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-blue-400"/>
                   ) : null}
                 </button>
                 <button
@@ -231,13 +239,13 @@ export default function AppShell() {
                     aria-pressed={activeView === "spectrogram"}
                     className={`relative h-full flex-[1.25] rounded-none px-1 text-[15px] font-semibold transition-colors ${
                         activeView === "spectrogram"
-                            ? "text-sky-400"
+                            ? "text-blue-400"
                             : "text-slate-300 hover:text-slate-100 active:text-slate-200"
                     }`}
                 >
                   Spectrogram
                   {activeView === "spectrogram" ? (
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-sky-400"/>
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-blue-400"/>
                   ) : null}
                 </button>
                 <button
@@ -246,13 +254,13 @@ export default function AppShell() {
                     aria-pressed={activeView === "pitch"}
                     className={`relative h-full flex-1 rounded-none px-1 text-[15px] font-semibold transition-colors ${
                         activeView === "pitch"
-                            ? "text-sky-400"
+                            ? "text-blue-400"
                             : "text-slate-300 hover:text-slate-100 active:text-slate-200"
                     }`}
                 >
                   Pitch
                   {activeView === "pitch" ? (
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-sky-400"/>
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-blue-400"/>
                   ) : null}
                 </button>
                 <button
@@ -261,13 +269,13 @@ export default function AppShell() {
                     aria-pressed={activeView === "vibrato"}
                     className={`relative h-full flex-1 rounded-none px-1 text-[15px] font-semibold transition-colors ${
                         activeView === "vibrato"
-                            ? "text-sky-400"
+                            ? "text-blue-400"
                             : "text-slate-300 hover:text-slate-100 active:text-slate-200"
                     }`}
                 >
                   Vibrato
                   {activeView === "vibrato" ? (
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-sky-400"/>
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-blue-400"/>
                   ) : null}
                 </button>
               </div>
@@ -302,6 +310,8 @@ export default function AppShell() {
                   onHalfResolutionCanvasChange={setHalfResolutionCanvas}
                   pitchMinNote={pitchMinNote}
                   pitchMaxNote={pitchMaxNote}
+                  pitchLineColorMode={pitchLineColorMode}
+                  onPitchLineColorModeChange={setPitchLineColorMode}
                   pitchNoteOptions={PITCH_NOTE_OPTIONS}
                   onPitchMinNoteChange={onPitchMinNoteChange}
                   onPitchMaxNoteChange={onPitchMaxNoteChange}

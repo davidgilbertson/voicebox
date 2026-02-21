@@ -2,30 +2,33 @@ import {forwardRef, useImperativeHandle, useRef} from "react";
 import colors from "tailwindcss/colors";
 import Chart from "./Chart.jsx";
 import {clamp, drawGrid, drawSemitoneLabels} from "../tools.js";
+import {mapWaveformLevelToStrokeColor} from "./waveformColor.js";
 
-const WAVEFORM_LINE_COLOR = colors.sky[400];
+const WAVEFORM_LINE_COLOR = colors.blue[400];
 const LABEL_X = 4;
 const PLOT_LEFT = 21;
 const PLOT_Y_INSET = 5;
 
 const VibratoChart = forwardRef(function VibratoChart({
-  yRange,
-  maxDrawJumpCents,
-  vibratoRateHz,
-  vibratoRateMinHz,
-  vibratoRateMaxHz,
-  vibratoSweetMinHz,
-  vibratoSweetMaxHz,
-  renderScale = 1,
-}, ref) {
+                                                        yRange,
+                                                        maxDrawJumpCents,
+                                                        lineColorMode = "terrain",
+                                                        vibratoRateHz,
+                                                        vibratoRateMinHz,
+                                                        vibratoRateMaxHz,
+                                                        vibratoSweetMinHz,
+                                                        vibratoSweetMaxHz,
+                                                        renderScale = 1,
+                                                      }, ref) {
   const chartRef = useRef(null);
   const barRef = useRef(null);
   const backgroundCacheRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
-    draw({values, writeIndex, count, yOffset}) {
+    draw({values, levels, writeIndex, count, yOffset}) {
       chartRef.current?.draw({
         values,
+        colorValues: levels,
         writeIndex,
         count,
         yOffset,
@@ -34,6 +37,7 @@ const VibratoChart = forwardRef(function VibratoChart({
         yInsetTop: PLOT_Y_INSET,
         yInsetBottom: PLOT_Y_INSET,
         lineColor: WAVEFORM_LINE_COLOR,
+        mapColorValueToStroke: (level) => mapWaveformLevelToStrokeColor(level, WAVEFORM_LINE_COLOR, lineColorMode),
         lineWidth: 1.5,
         gapThreshold: maxDrawJumpCents,
         drawBackground: (ctx, width, height) => {
@@ -82,7 +86,7 @@ const VibratoChart = forwardRef(function VibratoChart({
     getRateBarWidth() {
       return Math.max(1, barRef.current?.clientWidth ?? 1);
     },
-  }), [maxDrawJumpCents, yRange]);
+  }), [lineColorMode, maxDrawJumpCents, yRange]);
 
   const vibratoRatePositionPct = vibratoRateHz === null
       ? null

@@ -2,6 +2,7 @@ import {forwardRef, useImperativeHandle, useRef} from "react";
 import colors from "tailwindcss/colors";
 import Chart from "./Chart.jsx";
 import {createPitchGridLines} from "../pitchScale.js";
+import {mapWaveformLevelToStrokeColor} from "./waveformColor.js";
 
 const GRID_COLORS = {
   octave: colors.slate[300],
@@ -9,7 +10,7 @@ const GRID_COLORS = {
   accidental: colors.slate[800],
 };
 
-const WAVEFORM_LINE_COLOR = colors.sky[400];
+const WAVEFORM_LINE_COLOR = colors.blue[400];
 const LABEL_X = 4;
 const PLOT_LEFT = 21;
 const PLOT_Y_INSET = 5;
@@ -18,23 +19,26 @@ const PitchChart = forwardRef(function PitchChart({
                                                     minCents,
                                                     maxCents,
                                                     maxDrawJumpCents,
+                                                    lineColorMode = "terrain",
                                                     renderScale = 1,
                                                   }, ref) {
   const chartRef = useRef(null);
   const backgroundCacheRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
-    draw({values, writeIndex, count}) {
+    draw({values, levels, writeIndex, count}) {
       const centsSpan = maxCents - minCents;
       if (centsSpan <= 0) return;
       chartRef.current?.draw({
         values,
+        colorValues: levels,
         writeIndex,
         count,
         xInsetLeft: PLOT_LEFT,
         yInsetTop: PLOT_Y_INSET,
         yInsetBottom: PLOT_Y_INSET,
         lineColor: WAVEFORM_LINE_COLOR,
+        mapColorValueToStroke: (level) => mapWaveformLevelToStrokeColor(level, WAVEFORM_LINE_COLOR, lineColorMode),
         lineWidth: 1.5,
         gapThreshold: maxDrawJumpCents,
         mapValueToY: (value, _height, plotTop, plotHeight) => {
@@ -99,7 +103,7 @@ const PitchChart = forwardRef(function PitchChart({
         },
       });
     },
-  }), [maxCents, maxDrawJumpCents, minCents]);
+  }), [lineColorMode, maxCents, maxDrawJumpCents, minCents]);
 
   return (
       <div className="relative min-h-0 flex-[2] p-0">

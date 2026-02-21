@@ -380,7 +380,7 @@ export default function ScalesPage({
               onClick={() => setIsPlaying((prev) => !prev)}
               disabled={!isPianoReady}
               className={`mt-2 rounded-md px-4 py-3 text-base font-semibold ${
-                  isPlaying ? "bg-amber-400 text-amber-950" : "bg-sky-400 text-slate-950"
+                  isPlaying ? "bg-amber-400 text-amber-950" : "bg-blue-400 text-slate-950"
               } disabled:opacity-50`}
           >
             {isPlaying ? "Pause" : "Play"}
@@ -411,7 +411,7 @@ export default function ScalesPage({
                   <button
                       type="button"
                       onClick={onDismissGestureHelp}
-                      className="mt-2 rounded-md bg-sky-400 px-3 py-1.5 text-xs font-semibold text-slate-950"
+                      className="mt-2 rounded-md bg-blue-400 px-3 py-1.5 text-xs font-semibold text-slate-950"
                       data-no-gesture-tap
                   >
                     Got it
