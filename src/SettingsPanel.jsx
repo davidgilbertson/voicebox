@@ -102,17 +102,6 @@ export default function SettingsPanel({
           : batteryUsagePerMinute === "--"
               ? "-- %/min"
               : `${batteryUsagePerMinute.toFixed(2)} %/min`;
-  const buildTimeIso = typeof __BUILD_TIME_ISO__ === "string"
-      ? __BUILD_TIME_ISO__
-      : "1970-01-01T00:00:00.000Z";
-  const buildTimeDisplay = new Date(buildTimeIso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
 
   return (
       <dialog
@@ -375,7 +364,7 @@ export default function SettingsPanel({
               >
                 About
               </a>
-              <div className="text-right text-xs text-slate-500">Build: {buildTimeDisplay}</div>
+              <div className="text-right text-xs text-slate-500">Build: {__BUILD_TIME_SYDNEY__}</div>
             </div>
           </div>
         </section>

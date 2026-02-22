@@ -8,14 +8,23 @@ import {VitePWA} from "vite-plugin-pwa";
 const APP_DISPLAY_NAME = "Voicebox";
 
 export default defineConfig(({mode}) => {
-  const buildTimeIso = new Date().toISOString();
+  const buildTime = new Date();
+  const buildTimeSydneyDisplay = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Australia/Sydney",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(buildTime);
   // We need https to test the mic on mobile during development
   // But we don't want https in preview because
   //  we want to test the service worker installing correctly
   const useHttps = mode === "development";
   return {
     define: {
-      __BUILD_TIME_ISO__: JSON.stringify(buildTimeIso),
+      __BUILD_TIME_SYDNEY__: JSON.stringify(buildTimeSydneyDisplay),
     },
     plugins: [
       react(),

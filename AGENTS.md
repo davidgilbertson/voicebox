@@ -12,6 +12,8 @@
 - Don't do checks for `window` being undefined in the app code.
 - Don't create variables for the sake of variables, if you can inline a value then do so. Only create variables if it will be used in many places, or naming it is important for understanding.
 - Don't make things 'configurable' if you weren't asked to do that. E.g. if a function has a variable in it, don't make it a parameter 'just in case' the user one day wants to pass it in. Write simple code first, complex code if requested.
+- Simplicity is valuable. Do not write clever cheks for extremely unlikely edge cases that add cognitive load when reading the code. Before coding, state 1 sentence: what checks you will intentionally omit.
+- Write the smallest diff that satisfies the request, but by all means tell the user other ideas you have for hardening, bonus features, etc.
 
 # Notes to self
 
