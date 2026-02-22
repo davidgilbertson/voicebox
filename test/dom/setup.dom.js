@@ -2,6 +2,19 @@ import "@testing-library/jest-dom/vitest";
 import {afterEach, beforeEach, vi} from "vitest";
 import {cleanup} from "@testing-library/react";
 
+vi.mock("soundfont-player", () => ({
+  default: {
+    instrument: vi.fn(async () => ({
+      play: () => ({
+        stop: () => {
+        },
+      }),
+      buffers: {},
+    })),
+    nameToUrl: () => "",
+  },
+}));
+
 let visibilityState = "hidden";
 let hasFocus = false;
 

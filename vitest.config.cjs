@@ -15,7 +15,7 @@ module.exports = {
         },
         test: {
           name: "dom",
-          environment: "jsdom",
+          environment: "happy-dom",
           setupFiles: ["test/dom/setup.dom.js"],
           include: ["test/dom/**/*.test.{js,jsx}"],
           clearMocks: true,
