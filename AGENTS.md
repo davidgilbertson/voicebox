@@ -10,7 +10,6 @@
   4. If the issue is not realistically testable in automation (for example, requires real phone/device interaction), call that out explicitly and rely on manual verification.
 - For colors, use Tailwind. For colors in JS, `import colors from "tailwindcss/colors";`
 - Don't do checks for `window` being undefined in the app code.
-- In app code and user-facing labels, do not use the term `FFT size`. Use explicit names like `windowSize`, `binCount`, or `transformLength` instead.
 
 # Notes to self
 

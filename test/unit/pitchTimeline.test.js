@@ -2,6 +2,10 @@ import {test} from "vitest";
 import assert from "node:assert/strict";
 import {createPitchTimeline, writePitchTimeline} from "../../src/Recorder/pitchTimeline.js";
 
+function silencePauseStepThreshold(columnRateHz, silencePauseThresholdMs) {
+  return Math.max(1, Math.round((silencePauseThresholdMs / 1000) * columnRateHz));
+}
+
 function orderedValues(state) {
   const values = [];
   const firstIndex = state.count === state.values.length ? state.writeIndex : 0;
@@ -11,34 +15,31 @@ function orderedValues(state) {
   return values;
 }
 
-function orderedLevels(state) {
-  const levels = [];
-  const firstIndex = state.count === state.levels.length ? state.writeIndex : 0;
+function orderedIntensities(state) {
+  const intensities = [];
+  const firstIndex = state.count === state.intensities.length ? state.writeIndex : 0;
   for (let i = 0; i < state.count; i += 1) {
-    levels.push(state.levels[(firstIndex + i) % state.levels.length]);
+    intensities.push(state.intensities[(firstIndex + i) % state.intensities.length]);
   }
-  return levels;
+  return intensities;
 }
 
 test("timeline keeps SPS * seconds points and 60 points per 5Hz oscillation at 300 SPS", () => {
   const samplesPerSecond = 300;
   const seconds = 5;
   const state = createPitchTimeline({
-    samplesPerSecond,
+    columnRateHz: samplesPerSecond,
     seconds,
-    silencePauseThresholdMs: 300,
-    nowMs: 0,
+    silencePauseStepThreshold: silencePauseStepThreshold(samplesPerSecond, 300),
   });
-  const stepMs = 1000 / samplesPerSecond;
   const vibratoRateHz = 5;
   const totalTicks = samplesPerSecond * seconds;
   for (let i = 1; i <= totalTicks; i += 1) {
     const t = i / samplesPerSecond;
     const cents = Math.sin(2 * Math.PI * vibratoRateHz * t) * 50;
     writePitchTimeline(state, {
-      nowMs: i * stepMs,
       cents,
-      level: 0.5,
+      intensity: 0.5,
     });
   }
 
@@ -47,8 +48,8 @@ test("timeline keeps SPS * seconds points and 60 points per 5Hz oscillation at 3
   const firstOscillation = values.slice(0, samplesPerSecond / vibratoRateHz);
   assert.equal(firstOscillation.length, 60);
   assert.ok(firstOscillation.every(Number.isFinite));
-  const levels = orderedLevels(state);
-  assert.ok(levels.every((value) => value === 0.5));
+  const intensities = orderedIntensities(state);
+  assert.ok(intensities.every((value) => value === 0.5));
 });
 
 test("columnRateHz defines timeline resolution when provided", () => {
@@ -57,9 +58,8 @@ test("columnRateHz defines timeline resolution when provided", () => {
   const seconds = 5;
   const state = createPitchTimeline({
     columnRateHz,
-    samplesPerSecond,
     seconds,
-    silencePauseThresholdMs: 300,
+    silencePauseStepThreshold: silencePauseStepThreshold(columnRateHz, 300),
   });
   const totalColumns = columnRateHz * seconds;
   for (let i = 1; i <= totalColumns; i += 1) {
@@ -67,7 +67,7 @@ test("columnRateHz defines timeline resolution when provided", () => {
     const cents = Math.sin(2 * Math.PI * 5 * t) * 50;
     writePitchTimeline(state, {
       cents,
-      level: 0.8,
+      intensity: 0.8,
     });
   }
 
@@ -79,19 +79,16 @@ test("columnRateHz defines timeline resolution when provided", () => {
 test("silence auto-pause can be disabled so timeline keeps advancing with NaN values", () => {
   const samplesPerSecond = 100;
   const state = createPitchTimeline({
-    samplesPerSecond,
+    columnRateHz: samplesPerSecond,
     seconds: 2,
-    silencePauseThresholdMs: 300,
-    autoPauseOnSilence: false,
-    nowMs: 0,
+    silencePauseStepThreshold: silencePauseStepThreshold(samplesPerSecond, 300),
   });
-  const stepMs = 1000 / samplesPerSecond;
 
   for (let i = 1; i <= samplesPerSecond; i += 1) {
     writePitchTimeline(state, {
-      nowMs: i * stepMs,
       cents: Number.NaN,
-      level: Number.NaN,
+      intensity: Number.NaN,
+      autoPauseOnSilence: false,
     });
   }
 
@@ -99,27 +96,23 @@ test("silence auto-pause can be disabled so timeline keeps advancing with NaN va
   assert.equal(state.count, samplesPerSecond);
   const values = orderedValues(state);
   assert.ok(values.every(Number.isNaN));
-  const levels = orderedLevels(state);
-  assert.ok(levels.every(Number.isNaN));
+  const intensities = orderedIntensities(state);
+  assert.ok(intensities.every(Number.isNaN));
 });
 
 test("silence auto-pause enabled stops writes after threshold", () => {
   const samplesPerSecond = 100;
   const state = createPitchTimeline({
-    samplesPerSecond,
+    columnRateHz: samplesPerSecond,
     seconds: 2,
-    silencePauseThresholdMs: 300,
-    autoPauseOnSilence: true,
-    nowMs: 0,
+    silencePauseStepThreshold: silencePauseStepThreshold(samplesPerSecond, 300),
   });
-  const stepMs = 1000 / samplesPerSecond;
   let pausedWrites = 0;
 
   for (let i = 1; i <= samplesPerSecond; i += 1) {
     const result = writePitchTimeline(state, {
-      nowMs: i * stepMs,
       cents: Number.NaN,
-      level: Number.NaN,
+      intensity: Number.NaN,
     });
     if (result.paused) pausedWrites += 1;
   }
@@ -128,24 +121,24 @@ test("silence auto-pause enabled stops writes after threshold", () => {
   assert.equal(state.silencePaused, true);
 });
 
-test("each write keeps level samples aligned with pitch samples", () => {
+test("each write keeps intensity samples aligned with pitch samples", () => {
   const state = createPitchTimeline({
-    samplesPerSecond: 10,
+    columnRateHz: 10,
     seconds: 1,
-    silencePauseThresholdMs: 300,
+    silencePauseStepThreshold: silencePauseStepThreshold(10, 300),
   });
 
   writePitchTimeline(state, {
     cents: 100,
-    level: 0.2,
+    intensity: 0.2,
   });
   writePitchTimeline(state, {
     cents: 200,
-    level: 0.8,
+    intensity: 0.8,
   });
 
-  const levels = orderedLevels(state);
-  assert.equal(levels.length, state.count);
-  assert.equal(levels.length, 2);
-  assert.deepEqual(levels.map((value) => Number(value.toFixed(3))), [0.2, 0.8]);
+  const intensities = orderedIntensities(state);
+  assert.equal(intensities.length, state.count);
+  assert.equal(intensities.length, 2);
+  assert.deepEqual(intensities.map((value) => Number(value.toFixed(3))), [0.2, 0.8]);
 });

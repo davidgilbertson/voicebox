@@ -1,36 +1,20 @@
 export function createPitchTimeline({
   columnRateHz,
-  samplesPerSecond,
   seconds,
   silencePauseStepThreshold,
-  silencePauseThresholdMs,
-  autoPauseOnSilence = true,
 }) {
-  const resolvedColumnRateHz = Number.isFinite(columnRateHz) && columnRateHz > 0
-      ? columnRateHz
-      : Number.isFinite(samplesPerSecond) && samplesPerSecond > 0
-          ? samplesPerSecond
-          : 1;
-  const resolvedSilencePauseStepThreshold = Number.isFinite(silencePauseStepThreshold) && silencePauseStepThreshold > 0
-      ? silencePauseStepThreshold
-      : Number.isFinite(silencePauseThresholdMs) && silencePauseThresholdMs > 0
-          ? Math.max(1, Math.round((silencePauseThresholdMs / 1000) * resolvedColumnRateHz))
-          : 1;
-  const length = Math.max(1, Math.floor(resolvedColumnRateHz * seconds));
+  const length = Math.max(1, Math.floor(columnRateHz * seconds));
   const values = new Float32Array(length);
-  const levels = new Float32Array(length);
+  const intensities = new Float32Array(length);
   values.fill(Number.NaN);
-  levels.fill(Number.NaN);
+  intensities.fill(Number.NaN);
   return {
     values,
-    levels,
+    intensities,
     writeIndex: 0,
     count: 0,
-    columnRateHz: resolvedColumnRateHz,
-    samplesPerSecond: resolvedColumnRateHz,
-    seconds,
-    silencePauseStepThreshold: Math.max(1, Math.floor(resolvedSilencePauseStepThreshold)),
-    autoPauseOnSilence,
+    columnRateHz,
+    silencePauseStepThreshold,
     silentStepCount: 0,
     silencePaused: false,
     diagnostics: {
@@ -39,9 +23,9 @@ export function createPitchTimeline({
   };
 }
 
-function pushValue(state, value, level) {
+function pushValue(state, value, intensity) {
   state.values[state.writeIndex] = value;
-  state.levels[state.writeIndex] = level;
+  state.intensities[state.writeIndex] = intensity;
   state.writeIndex = (state.writeIndex + 1) % state.values.length;
   if (state.count < state.values.length) {
     state.count += 1;
@@ -50,10 +34,10 @@ function pushValue(state, value, level) {
 
 export function writePitchTimeline(state, {
   cents,
-  level = Number.NaN,
+  intensity = Number.NaN,
   hasSignal = Number.isFinite(cents),
+  autoPauseOnSilence = true,
 }) {
-  const autoPauseOnSilence = state.autoPauseOnSilence !== false;
   if (autoPauseOnSilence) {
     if (hasSignal) {
       state.silencePaused = false;
@@ -77,8 +61,8 @@ export function writePitchTimeline(state, {
 
   const hasPitch = Number.isFinite(cents);
   const value = hasPitch ? cents : Number.NaN;
-  const nextLevel = hasPitch ? level : Number.NaN;
-  pushValue(state, value, nextLevel);
+  const nextIntensity = hasPitch ? intensity : Number.NaN;
+  pushValue(state, value, nextIntensity);
   return {steps: 1, paused: false};
 }
 
@@ -100,17 +84,17 @@ export function resizePitchTimeline(state, nextLength) {
   if (targetLength === currentLength) return;
 
   const nextValues = new Float32Array(targetLength);
-  const nextLevels = new Float32Array(targetLength);
+  const nextIntensities = new Float32Array(targetLength);
   nextValues.fill(Number.NaN);
-  nextLevels.fill(Number.NaN);
+  nextIntensities.fill(Number.NaN);
 
   if (state.count > 0) {
     const orderedValues = extractOrderedValues(state.values, state.writeIndex, state.count);
-    const orderedLevels = extractOrderedValues(state.levels, state.writeIndex, state.count);
+    const orderedIntensities = extractOrderedValues(state.intensities, state.writeIndex, state.count);
     const nextCount = Math.min(targetLength, state.count);
     const start = orderedValues.length - nextCount;
     nextValues.set(orderedValues.subarray(start), 0);
-    nextLevels.set(orderedLevels.subarray(start), 0);
+    nextIntensities.set(orderedIntensities.subarray(start), 0);
     state.count = nextCount;
     state.writeIndex = nextCount === targetLength ? 0 : nextCount;
   } else {
@@ -119,6 +103,5 @@ export function resizePitchTimeline(state, nextLength) {
   }
 
   state.values = nextValues;
-  state.levels = nextLevels;
-  state.seconds = targetLength / state.columnRateHz;
+  state.intensities = nextIntensities;
 }

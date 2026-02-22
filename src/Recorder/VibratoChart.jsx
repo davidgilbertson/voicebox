@@ -2,7 +2,7 @@ import {forwardRef, useImperativeHandle, useRef} from "react";
 import colors from "tailwindcss/colors";
 import Chart from "./Chart.jsx";
 import {clamp, drawGrid, drawSemitoneLabels} from "../tools.js";
-import {mapWaveformLevelToStrokeColor} from "./waveformColor.js";
+import {mapWaveformIntensityToStrokeColor} from "./waveformColor.js";
 
 const WAVEFORM_LINE_COLOR = colors.blue[400];
 const LABEL_X = 4;
@@ -25,10 +25,10 @@ const VibratoChart = forwardRef(function VibratoChart({
   const backgroundCacheRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
-    draw({values, levels, writeIndex, count, yOffset}) {
+    draw({values, intensities, writeIndex, count, yOffset}) {
       chartRef.current?.draw({
         values,
-        colorValues: levels,
+        colorValues: intensities,
         writeIndex,
         count,
         yOffset,
@@ -37,7 +37,7 @@ const VibratoChart = forwardRef(function VibratoChart({
         yInsetTop: PLOT_Y_INSET,
         yInsetBottom: PLOT_Y_INSET,
         lineColor: WAVEFORM_LINE_COLOR,
-        mapColorValueToStroke: (level) => mapWaveformLevelToStrokeColor(level, WAVEFORM_LINE_COLOR, lineColorMode),
+        mapColorValueToStroke: (intensity) => mapWaveformIntensityToStrokeColor(intensity, WAVEFORM_LINE_COLOR, lineColorMode),
         lineWidth: 1.5,
         gapThreshold: maxDrawJumpCents,
         drawBackground: (ctx, width, height) => {

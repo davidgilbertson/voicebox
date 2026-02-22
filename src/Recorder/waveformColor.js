@@ -109,14 +109,14 @@ function getColorStringsForMode(mode) {
   return colors;
 }
 
-function mapWaveformLevelToNormalized(level) {
-  if (!Number.isFinite(level)) return Number.NaN;
-  return clamp(level, 0, 1);
+function mapWaveformIntensityToNormalized(intensity) {
+  if (!Number.isFinite(intensity)) return Number.NaN;
+  return clamp(intensity, 0, 1);
 }
 
-function mapWaveformLevelToPaletteIndex(level, mode = DEFAULT_PITCH_LINE_COLOR_MODE) {
+function mapWaveformIntensityToPaletteIndex(intensity, mode = DEFAULT_PITCH_LINE_COLOR_MODE) {
   if (isFixedColorMode(resolvePitchLineColorMode(mode))) return null;
-  const normalized = mapWaveformLevelToNormalized(level);
+  const normalized = mapWaveformIntensityToNormalized(intensity);
   if (!Number.isFinite(normalized)) return null;
   return clamp(
       Math.round(MIN_WAVEFORM_COLOR_INDEX + normalized * (255 - MIN_WAVEFORM_COLOR_INDEX)),
@@ -125,14 +125,14 @@ function mapWaveformLevelToPaletteIndex(level, mode = DEFAULT_PITCH_LINE_COLOR_M
   );
 }
 
-export function mapWaveformLevelToStrokeColor(
-    level,
+export function mapWaveformIntensityToStrokeColor(
+    intensity,
     fallbackColor,
     mode = DEFAULT_PITCH_LINE_COLOR_MODE
 ) {
   const resolved = resolvePitchLineColorMode(mode);
   if (isFixedColorMode(resolved)) return FIXED_COLOR_BY_MODE[resolved] ?? fallbackColor;
-  const colorIndex = mapWaveformLevelToPaletteIndex(level, resolved);
+  const colorIndex = mapWaveformIntensityToPaletteIndex(intensity, resolved);
   if (colorIndex === null) return fallbackColor;
   return getColorStringsForMode(resolved)[colorIndex];
 }

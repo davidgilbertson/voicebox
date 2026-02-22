@@ -33,7 +33,7 @@ function drawColumnImage({
   yBinLow,
   yBinMix,
   palette,
-  bins,
+  spectrumNormalized,
   binCount,
 }) {
   const pixels = imageData.data;
@@ -41,8 +41,8 @@ function drawColumnImage({
     const low = yBinLow[y];
     const high = Math.min(binCount - 1, low + 1);
     const mix = yBinMix[y];
-    const lowValue = bins[low] ?? 0;
-    const highValue = bins[high] ?? 0;
+    const lowValue = spectrumNormalized[low] ?? 0;
+    const highValue = spectrumNormalized[high] ?? 0;
     const value = lowValue + (highValue - lowValue) * mix;
     const valueIndex = clamp(Math.round(value * 255), 0, 255);
     const colorOffset = valueIndex * 3;
@@ -72,7 +72,6 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
     maxHz: 0,
   });
   const pendingColumnsRef = useRef([]);
-  const pendingColumnCountRef = useRef(0);
   const pendingColumnCapacityRef = useRef(DEFAULT_PENDING_COLUMN_CAPACITY);
   const frameStateRef = useRef({
     renderWidth: 0,
@@ -84,55 +83,34 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
   });
 
   const trimPendingColumnsToCapacity = () => {
-    let pendingCount = pendingColumnCountRef.current;
     const pending = pendingColumnsRef.current;
     const capacity = Math.max(1, Math.floor(pendingColumnCapacityRef.current));
-    while (pendingCount > capacity && pending.length > 0) {
-      const item = pending[0];
-      const overflow = pendingCount - capacity;
-      const dropped = Math.min(item.repeats, overflow);
-      item.repeats -= dropped;
-      pendingCount -= dropped;
-      if (item.repeats <= 0) {
-        pending.shift();
-      }
+    while (pending.length > capacity) {
+      pending.shift();
     }
-    pendingColumnCountRef.current = pendingCount;
   };
 
   const collectTailColumns = (columnCount) => {
     const pending = pendingColumnsRef.current;
     const tailColumns = new Array(columnCount);
     let writeIndex = columnCount - 1;
-    let remaining = columnCount;
-    for (let i = pending.length - 1; i >= 0 && remaining > 0; i -= 1) {
-      const item = pending[i];
-      const useCount = Math.min(remaining, item.repeats);
-      for (let j = 0; j < useCount; j += 1) {
-        tailColumns[writeIndex] = item.bins;
-        writeIndex -= 1;
-      }
-      remaining -= useCount;
+    for (let i = pending.length - 1; i >= 0 && writeIndex >= 0; i -= 1) {
+      tailColumns[writeIndex] = pending[i];
+      writeIndex -= 1;
     }
     return tailColumns;
   };
 
   useImperativeHandle(ref, () => ({
-    appendColumn(normalizedBins, repeats = 1) {
-      if (!normalizedBins?.length) return;
-      const count = Math.max(1, Math.floor(repeats));
-      const copy = new Float32Array(normalizedBins.length);
-      copy.set(normalizedBins);
-      pendingColumnsRef.current.push({
-        bins: copy,
-        repeats: count,
-      });
-      pendingColumnCountRef.current += count;
+    appendColumn(spectrumNormalized) {
+      if (!spectrumNormalized?.length) return;
+      const copy = new Float32Array(spectrumNormalized.length);
+      copy.set(spectrumNormalized);
+      pendingColumnsRef.current.push(copy);
       trimPendingColumnsToCapacity();
     },
     clear() {
       pendingColumnsRef.current = [];
-      pendingColumnCountRef.current = 0;
       if (renderCanvasRef.current) {
         const renderCtx = renderCanvasRef.current.getContext("2d");
         renderCtx?.clearRect(0, 0, renderCanvasRef.current.width, renderCanvasRef.current.height);
@@ -222,12 +200,11 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
         const filteredPending = [];
         let filteredPendingCount = 0;
         for (const item of pendingColumnsRef.current) {
-          if (item.bins?.length !== binCount) continue;
+          if (item?.length !== binCount) continue;
           filteredPending.push(item);
-          filteredPendingCount += item.repeats;
+          filteredPendingCount += 1;
         }
         pendingColumnsRef.current = filteredPending;
-        pendingColumnCountRef.current = filteredPendingCount;
       } else if (renderResized && frameState.renderWidth > 0 && frameState.renderHeight > 0) {
         const previousWidth = frameState.renderWidth;
         const previousHeight = frameState.renderHeight;
@@ -285,7 +262,7 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
       const yBinLow = yBinCacheRef.current.low;
       const yBinMix = yBinCacheRef.current.mix;
 
-      const pendingColumnCount = pendingColumnCountRef.current;
+      const pendingColumnCount = pendingColumnsRef.current.length;
       if (pendingColumnCount > 0) {
         const columnsToDraw = Math.min(renderWidth, pendingColumnCount);
         const tailColumns = collectTailColumns(columnsToDraw);
@@ -312,13 +289,12 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
             yBinLow,
             yBinMix,
             palette,
-            bins: tailColumns[x],
+            spectrumNormalized: tailColumns[x],
             binCount,
           });
         }
         renderCtx.putImageData(strip, renderWidth - columnsToDraw, 0);
         pendingColumnsRef.current = [];
-        pendingColumnCountRef.current = 0;
       }
 
       frameState.renderWidth = renderWidth;

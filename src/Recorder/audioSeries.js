@@ -1,63 +1,5 @@
 import {clamp, lerp} from "../tools.js";
 
-export function createAudioState(defaultSamplesPerSecond) {
-  return {
-    context: null,
-    analyser: null,
-    source: null,
-    stream: null,
-    captureNode: null,
-    sinkGain: null,
-    hzBuffer: null,
-    hzIndex: 0,
-    sampleRate: 48000,
-    analysisFps: defaultSamplesPerSecond,
-    centerHz: 220,
-    centerCents: 1200 * Math.log2(220),
-    levelEma: 0,
-  };
-}
-
-export function setupAudioState(prevState, {
-  context,
-  source,
-  stream,
-  captureNode,
-  analyser,
-  sinkGain,
-  analysisFps,
-  centerSeconds,
-  sampleRate,
-}) {
-  const hzLength = Math.floor(centerSeconds * analysisFps);
-
-  const existingHzBuffer = prevState.hzBuffer;
-  const hzBuffer = existingHzBuffer && existingHzBuffer.length === hzLength
-      ? existingHzBuffer
-      : (() => {
-        const buf = new Float32Array(hzLength);
-        buf.fill(Number.NaN);
-        return buf;
-      })();
-
-  return {
-    ...prevState,
-    context,
-    source,
-    stream,
-    captureNode,
-    analyser,
-    sinkGain,
-    hzBuffer,
-    hzIndex: prevState.hzIndex || 0,
-    sampleRate,
-    analysisFps,
-    centerHz: prevState.centerHz || 220,
-    centerCents: prevState.centerCents || 1200 * Math.log2(220),
-    levelEma: prevState.levelEma || 0,
-  };
-}
-
 function computeCenterHzMean(hzBuffer, minHz, maxHz) {
   let sum = 0;
   let count = 0;
@@ -82,25 +24,7 @@ export function updateCenterFromHzBuffer(state, minHz, maxHz) {
   }
 }
 
-function computeSpectrumLevel(state, spectrumBins) {
-  let peak = 0;
-  let sumSquares = 0;
-  for (let i = 0; i < spectrumBins.length; i += 1) {
-    const value = spectrumBins[i];
-    if (value > peak) peak = value;
-    sumSquares += value * value;
-  }
-  const rawRms = Math.sqrt(sumSquares / spectrumBins.length);
-  state.levelEma = lerp(state.levelEma, rawRms, 0.2);
-  return {
-    peak,
-    rawRms,
-    rms: state.levelEma,
-  };
-}
-
 function finalizeDetection(state, {
-  peak,
   hz,
   minHz,
   maxHz,
@@ -115,8 +39,6 @@ function finalizeDetection(state, {
   }
 
   return {
-    peak,
-    rms: state.levelEma,
     hz,
     cents: absCents,
   };
@@ -271,7 +193,6 @@ export function analyzeAudioWindowFftPitch(
 ) {
   const {hzBuffer} = state;
   if (!hzBuffer || !spectrumBins || !spectrumBins.length) return null;
-  const {peak} = computeSpectrumLevel(state, spectrumBins);
 
   const detection = fftBinsToPitchDetailed(
       spectrumBins,
@@ -281,7 +202,6 @@ export function analyzeAudioWindowFftPitch(
   );
 
   const result = finalizeDetection(state, {
-    peak,
     hz: detection.hz,
     minHz,
     maxHz,

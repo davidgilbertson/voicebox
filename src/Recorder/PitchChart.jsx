@@ -2,7 +2,7 @@ import {forwardRef, useImperativeHandle, useRef} from "react";
 import colors from "tailwindcss/colors";
 import Chart from "./Chart.jsx";
 import {createPitchGridLines} from "../pitchScale.js";
-import {mapWaveformLevelToStrokeColor} from "./waveformColor.js";
+import {mapWaveformIntensityToStrokeColor} from "./waveformColor.js";
 
 const GRID_COLORS = {
   octave: colors.slate[300],
@@ -26,19 +26,19 @@ const PitchChart = forwardRef(function PitchChart({
   const backgroundCacheRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
-    draw({values, levels, writeIndex, count}) {
+    draw({values, intensities, writeIndex, count}) {
       const centsSpan = maxCents - minCents;
       if (centsSpan <= 0) return;
       chartRef.current?.draw({
         values,
-        colorValues: levels,
+        colorValues: intensities,
         writeIndex,
         count,
         xInsetLeft: PLOT_LEFT,
         yInsetTop: PLOT_Y_INSET,
         yInsetBottom: PLOT_Y_INSET,
         lineColor: WAVEFORM_LINE_COLOR,
-        mapColorValueToStroke: (level) => mapWaveformLevelToStrokeColor(level, WAVEFORM_LINE_COLOR, lineColorMode),
+        mapColorValueToStroke: (intensity) => mapWaveformIntensityToStrokeColor(intensity, WAVEFORM_LINE_COLOR, lineColorMode),
         lineWidth: 1.5,
         gapThreshold: maxDrawJumpCents,
         mapValueToY: (value, _height, plotTop, plotHeight) => {
