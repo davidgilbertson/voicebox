@@ -125,7 +125,7 @@ export default function SettingsPanel({
           }}
           className="fixed inset-0 m-0 hidden h-[var(--app-height)] w-screen max-h-none max-w-none border-0 bg-transparent p-2 sm:p-3 backdrop:bg-slate-950/60 backdrop:backdrop-blur-sm open:grid open:place-items-center"
       >
-        <section className="relative flex h-[calc(var(--app-height)*0.98)] max-h-full w-full max-w-[440px] flex-col overflow-hidden rounded-lg border border-slate-400/70 bg-slate-900/90 text-slate-100 shadow-2xl">
+        <section className="relative flex h-full max-h-none w-full max-w-[600px] flex-col overflow-hidden rounded-lg border border-slate-400/70 bg-slate-900/90 text-slate-100 shadow-2xl">
           <div className="flex items-center justify-between px-4 pb-2 pt-4">
             <div className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-300">
               Settings

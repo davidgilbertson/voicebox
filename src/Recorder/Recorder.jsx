@@ -1,34 +1,22 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {clamp} from "../tools.js";
 import {
   analyzeAudioWindowFftPitch,
   createAudioState,
   setupAudioState,
   updateCenterFromHzBuffer,
 } from "./audioSeries.js";
-import {
-  createAnalysisState,
-  createRawAudioBuffer,
-  drainRawBuffer,
-  enqueueAudioSamples,
-} from "./audioPipeline.js";
-import {createPitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
+import {createPitchTimeline, resizePitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
 import {estimateTimelineVibratoRateHz} from "./vibratoRate.js";
-import {createSpectrogramTimeline, writeSpectrogramColumn} from "./spectrogramTimeline.js";
-import {consumeTimelineElapsed} from "./timelineSteps.js";
 import VibratoChart from "./VibratoChart.jsx";
 import PitchChart from "./PitchChart.jsx";
 import SpectrogramChart from "./SpectrogramChart.jsx";
 import {noteNameToCents, noteNameToHz} from "../pitchScale.js";
 import {BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor} from "./batteryUsage.js";
 import {
-  ANALYSIS_WINDOW_SIZE,
   CENTER_SECONDS,
+  DISPLAY_PIXELS_PER_SECOND,
   PITCH_MAX_NOTE_DEFAULT,
   PITCH_MIN_NOTE_DEFAULT,
-  PITCH_SECONDS,
-  RAW_BUFFER_SECONDS,
-  SAMPLES_PER_SECOND,
   SILENCE_PAUSE_THRESHOLD_MS,
   SPECTROGRAM_BIN_COUNT,
   VIBRATO_ANALYSIS_WINDOW_SECONDS,
@@ -46,6 +34,8 @@ import {
 const RUN_AT_30_FPS_DEFAULT = false;
 const WAVE_Y_RANGE = 305; // in cents
 const MAX_DRAW_JUMP_CENTS = 80;
+const SPECTRUM_PEAK_LEVEL_MAX = 0.07; // TODO (@davidgilbertson): maybe we make this dynamic (max over time) or user-settable
+const SPECTRUM_PEAK_PITCH_GATE_MIN = 0.0018;
 
 function computeIsForeground() {
   if (document.visibilityState === "hidden") return false;
@@ -73,33 +63,19 @@ export default function Recorder({
   const vibratoChartRef = useRef(null);
   const pitchChartRef = useRef(null);
   const spectrogramChartRef = useRef(null);
+  const chartContainerRef = useRef(null);
   const isStartingRef = useRef(false);
-  const spectrogramResumeNeedsSignalRef = useRef(false);
-  const audioRef = useRef(createAudioState(SAMPLES_PER_SECOND));
+  const chartWidthPx = Math.max(1, Math.floor(window.innerWidth));
+  const chartWidthPxRef = useRef(chartWidthPx);
+  const chartSeconds = chartWidthPx / DISPLAY_PIXELS_PER_SECOND;
+  const hopSizeRef = useRef(Math.max(1, Math.round(48_000 / DISPLAY_PIXELS_PER_SECOND)));
+  const audioRef = useRef(createAudioState(DISPLAY_PIXELS_PER_SECOND));
   // Single shared timeline feeds both pitch and vibrato views so switching preserves continuity.
   const timelineRef = useRef(createPitchTimeline({
-    samplesPerSecond: SAMPLES_PER_SECOND,
-    seconds: PITCH_SECONDS,
-    silencePauseThresholdMs: SILENCE_PAUSE_THRESHOLD_MS,
+    columnRateHz: DISPLAY_PIXELS_PER_SECOND,
+    seconds: chartSeconds,
+    silencePauseStepThreshold: Math.max(1, Math.round((SILENCE_PAUSE_THRESHOLD_MS / 1000) * DISPLAY_PIXELS_PER_SECOND)),
     autoPauseOnSilence: true,
-    nowMs: performance.now(),
-  }));
-  const rawBufferRef = useRef(createRawAudioBuffer(48_000, {
-    windowSize: ANALYSIS_WINDOW_SIZE,
-    rawBufferSeconds: RAW_BUFFER_SECONDS,
-  }));
-  const analysisRef = useRef(createAnalysisState(48_000, {
-    windowSize: ANALYSIS_WINDOW_SIZE,
-    samplesPerSecond: SAMPLES_PER_SECOND,
-  }));
-  const spectrogramClockRef = useRef({
-    writeClockMs: performance.now(),
-    accumulator: 0,
-  });
-  const spectrogramRef = useRef(createSpectrogramTimeline({
-    samplesPerSecond: SAMPLES_PER_SECOND,
-    seconds: PITCH_SECONDS,
-    binCount: SPECTROGRAM_BIN_COUNT,
   }));
   const spectrogramCaptureRef = useRef({
     normalizedBins: new Float32Array(SPECTROGRAM_BIN_COUNT),
@@ -114,11 +90,13 @@ export default function Recorder({
     sampleCount: 0,
   });
   const batteryUsageMonitorRef = useRef(createBatteryUsageMonitor());
+  const spectrumPeakLevelEmaRef = useRef(0);
   const animationRef = useRef({
     rafId: 0,
     lastFrameMs: 0,
     displayedVibratoRateHz: null,
-    lastValidVibratoRateMs: null,
+    lastValidVibratoTick: null,
+    timelineDirty: false, // TODO (@davidgilbertson): not convinced this is necessary
   });
   const forceRedrawRef = useRef(false);
   const activeViewRef = useRef(activeView);
@@ -128,6 +106,10 @@ export default function Recorder({
     maxHz: noteNameToHz(PITCH_MAX_NOTE_DEFAULT),
     minCents: noteNameToCents(PITCH_MIN_NOTE_DEFAULT),
     maxCents: noteNameToCents(PITCH_MAX_NOTE_DEFAULT),
+  });
+  const spectrogramRangeRef = useRef({
+    minHz: spectrogramMinHz,
+    maxHz: spectrogramMaxHz,
   });
   const [ui, setUi] = useState({
     isRunning: false,
@@ -162,6 +144,13 @@ export default function Recorder({
       maxCents: pitchMaxCents,
     };
   }, [pitchMaxCents, pitchMaxHz, pitchMinCents, pitchMinHz]);
+
+  useEffect(() => {
+    spectrogramRangeRef.current = {
+      minHz: spectrogramMinHz,
+      maxHz: spectrogramMaxHz,
+    };
+  }, [spectrogramMaxHz, spectrogramMinHz]);
 
   useEffect(() => {
     return () => {
@@ -217,18 +206,6 @@ export default function Recorder({
   }, [isForeground]);
 
   useEffect(() => {
-    const sampleRate = analysisRef.current.sampleRate;
-    rawBufferRef.current = createRawAudioBuffer(sampleRate, {
-      windowSize: ANALYSIS_WINDOW_SIZE,
-      rawBufferSeconds: RAW_BUFFER_SECONDS,
-    });
-    analysisRef.current = createAnalysisState(sampleRate, {
-      windowSize: ANALYSIS_WINDOW_SIZE,
-      samplesPerSecond: SAMPLES_PER_SECOND,
-    });
-  }, []);
-
-  useEffect(() => {
     const analyser = audioRef.current.analyser;
     const analyserFftSize = SPECTROGRAM_BIN_COUNT * 2;
     if (analyser && analyser.fftSize !== analyserFftSize) {
@@ -241,16 +218,7 @@ export default function Recorder({
       detectorBins: new Float32Array(binCount),
       filteredBins: new Float32Array(binCount),
     };
-    spectrogramRef.current = createSpectrogramTimeline({
-      samplesPerSecond: SAMPLES_PER_SECOND,
-      seconds: PITCH_SECONDS,
-      binCount,
-    });
-    spectrogramClockRef.current = {
-      writeClockMs: 0,
-      accumulator: 0,
-    };
-    spectrogramResumeNeedsSignalRef.current = false;
+    spectrogramChartRef.current?.clear();
     const noiseState = spectrogramNoiseRef.current;
     if (noiseState.calibrating) {
       noiseState.calibrating = false;
@@ -291,7 +259,7 @@ export default function Recorder({
         maxMagnitude = magnitude;
       }
       const normalized = (finiteDb - minDb) * invDbRange;
-      capture.normalizedBins[i] = clamp(normalized, 0, 1);
+      capture.normalizedBins[i] = Math.max(0, Math.min(1, normalized));
     }
     if (maxMagnitude > 0) {
       const scale = 1 / maxMagnitude;
@@ -302,12 +270,13 @@ export default function Recorder({
     return {
       spectrogramBins: capture.normalizedBins,
       detectorBins: capture.detectorBins,
+      peakMagnitude: maxMagnitude,
     };
   };
 
   const beginSpectrogramNoiseCalibration = useCallback(() => {
     const noiseState = spectrogramNoiseRef.current;
-    const binCount = audioRef.current.analyser?.frequencyBinCount ?? spectrogramRef.current.binCount;
+    const binCount = audioRef.current.analyser?.frequencyBinCount ?? spectrogramCaptureRef.current.normalizedBins.length;
     noiseState.calibrating = true;
     noiseState.sumBins = new Float32Array(binCount);
     noiseState.sampleCount = 0;
@@ -387,77 +356,52 @@ export default function Recorder({
     return filtered;
   };
 
-  const processBufferedAudio = () => {
-    const raw = rawBufferRef.current;
-    const analysis = analysisRef.current;
+  const processAudioHop = () => {
     const currentView = activeViewRef.current;
-    const minHz = currentView === "spectrogram" ? spectrogramMinHz : pitchRangeRef.current.minHz;
-    const maxHz = currentView === "spectrogram" ? spectrogramMaxHz : pitchRangeRef.current.maxHz;
+    const minHz = currentView === "spectrogram" ? spectrogramRangeRef.current.minHz : pitchRangeRef.current.minHz;
+    const maxHz = currentView === "spectrogram" ? spectrogramRangeRef.current.maxHz : pitchRangeRef.current.maxHz;
     let didTimelineChange = false;
-
-    drainRawBuffer(raw, analysis, (windowSamples, nowMs) => {
-      const capturedBins = captureSpectrogramBins();
-      const sharedSpectrumBins = capturedBins?.spectrogramBins ?? null;
-      const detectorSpectrumBins = capturedBins?.detectorBins ?? null;
-      if (!detectorSpectrumBins) return;
-      const result = analyzeAudioWindowFftPitch(
-          audioRef.current,
-          windowSamples,
-          detectorSpectrumBins,
-          minHz,
-          maxHz
+    const capturedBins = captureSpectrogramBins();
+    const sharedSpectrumBins = capturedBins?.spectrogramBins ?? null;
+    const detectorSpectrumBins = capturedBins?.detectorBins ?? null;
+    const peakMagnitude = capturedBins?.peakMagnitude ?? 0;
+    if (!detectorSpectrumBins) return false;
+    const isAboveSilenceThreshold = peakMagnitude >= SPECTRUM_PEAK_PITCH_GATE_MIN;
+    const result = isAboveSilenceThreshold
+        ? analyzeAudioWindowFftPitch(
+            audioRef.current,
+            null,
+            detectorSpectrumBins,
+            minHz,
+            maxHz
+        )
+        : {
+          cents: Number.NaN,
+        };
+    let pitchWriteResult = null;
+    if (result) {
+      const normalizedPeakLevel = Math.max(
+          0,
+          Math.min(1, peakMagnitude / SPECTRUM_PEAK_LEVEL_MAX)
       );
-      let pitchWriteResult = null;
-      if (result) {
-        pitchWriteResult = writePitchTimeline(timelineRef.current, {
-          nowMs,
-          hasVoice: result.hasVoice,
-          cents: result.cents,
-          level: result.rms,
-        });
-        if (pitchWriteResult.steps > 0) {
-          didTimelineChange = true;
-        }
-      }
-
-      const spectrogramSilencePaused = pitchWriteResult?.paused ?? timelineRef.current.silencePaused;
-
-      if (spectrogramClockRef.current.writeClockMs <= 0) {
-        spectrogramClockRef.current.writeClockMs = nowMs;
-        return;
-      }
-
-      const elapsedMs = nowMs - spectrogramClockRef.current.writeClockMs;
-      spectrogramClockRef.current.writeClockMs = nowMs;
-      const spectrogramStep = consumeTimelineElapsed(
-          elapsedMs,
-          SAMPLES_PER_SECOND,
-          spectrogramClockRef.current.accumulator
-      );
-      spectrogramClockRef.current.accumulator = spectrogramStep.accumulator;
-      if (spectrogramStep.steps <= 0 || !sharedSpectrumBins || spectrogramSilencePaused) return;
-
-      let shouldWriteSpectrogram = true;
-      if (spectrogramResumeNeedsSignalRef.current) {
-        let hasSignal = false;
-        for (let i = 0; i < sharedSpectrumBins.length; i += 1) {
-          if (sharedSpectrumBins[i] > 0) {
-            hasSignal = true;
-            break;
-          }
-        }
-        if (hasSignal) {
-          spectrogramResumeNeedsSignalRef.current = false;
-        } else {
-          shouldWriteSpectrogram = false;
-        }
-      }
-      if (shouldWriteSpectrogram) {
-        const filteredBins = applyNoiseProfileToSpectrogramBins(sharedSpectrumBins);
-        writeSpectrogramColumn(spectrogramRef.current, filteredBins, spectrogramStep.steps);
+      const previousPeakLevel = spectrumPeakLevelEmaRef.current;
+      const smoothedPeakLevel = previousPeakLevel + ((normalizedPeakLevel - previousPeakLevel) * 0.2);
+      spectrumPeakLevelEmaRef.current = smoothedPeakLevel;
+      pitchWriteResult = writePitchTimeline(timelineRef.current, {
+        hasSignal: isAboveSilenceThreshold,
+        cents: result.cents,
+        level: smoothedPeakLevel,
+      });
+      if (pitchWriteResult.steps > 0) {
         didTimelineChange = true;
       }
-    });
+    }
+
+    const spectrogramSilencePaused = pitchWriteResult?.paused ?? timelineRef.current.silencePaused;
+    if (!sharedSpectrumBins || spectrogramSilencePaused) return didTimelineChange;
+    const filteredBins = applyNoiseProfileToSpectrogramBins(sharedSpectrumBins);
+    spectrogramChartRef.current?.appendColumn(filteredBins);
+    didTimelineChange = true;
 
     return didTimelineChange;
   };
@@ -490,7 +434,19 @@ export default function Recorder({
       analyser.fftSize = SPECTROGRAM_BIN_COUNT * 2;
       analyser.smoothingTimeConstant = 0;
       captureNode.port.onmessage = (event) => {
-        enqueueAudioSamples(rawBufferRef.current, event.data);
+        const sampleCount = Number(event.data);
+        const expectedHopSize = hopSizeRef.current;
+        if (!Number.isFinite(sampleCount) || sampleCount !== expectedHopSize) {
+          console.log("something has gone very wrong this should not be possible", {
+            sampleCount,
+            expectedHopSize,
+          });
+        }
+        const didTimelineChange = processAudioHop();
+        if (didTimelineChange) {
+          animationRef.current.timelineDirty = true;
+          forceRedrawRef.current = true;
+        }
       };
       source.connect(captureNode);
       source.connect(analyser);
@@ -501,18 +457,12 @@ export default function Recorder({
       sinkGain.connect(context.destination);
 
       const sampleRate = context.sampleRate;
-      rawBufferRef.current = createRawAudioBuffer(sampleRate, {
-        windowSize: ANALYSIS_WINDOW_SIZE,
-        rawBufferSeconds: RAW_BUFFER_SECONDS,
+      const hopSize = Math.max(1, Math.round(sampleRate / DISPLAY_PIXELS_PER_SECOND));
+      hopSizeRef.current = hopSize;
+      captureNode.port.postMessage({
+        type: "set-batch-size",
+        batchSize: hopSize,
       });
-      analysisRef.current = createAnalysisState(sampleRate, {
-        windowSize: ANALYSIS_WINDOW_SIZE,
-        samplesPerSecond: SAMPLES_PER_SECOND,
-      });
-      spectrogramClockRef.current = {
-        writeClockMs: 0,
-        accumulator: 0,
-      };
       audioRef.current = setupAudioState(audioRef.current, {
         context,
         source,
@@ -520,7 +470,7 @@ export default function Recorder({
         captureNode,
         analyser,
         sinkGain,
-        analysisFps: SAMPLES_PER_SECOND,
+        analysisFps: DISPLAY_PIXELS_PER_SECOND,
         centerSeconds: CENTER_SECONDS,
         sampleRate,
       });
@@ -530,23 +480,6 @@ export default function Recorder({
         detectorBins: new Float32Array(analyser.frequencyBinCount),
         filteredBins: new Float32Array(analyser.frequencyBinCount),
       };
-      const existingSpectrogram = spectrogramRef.current;
-      const reuseSpectrogram =
-          hasEverRun &&
-          existingSpectrogram &&
-          existingSpectrogram.binCount === analyser.frequencyBinCount;
-      if (!reuseSpectrogram) {
-        spectrogramRef.current = createSpectrogramTimeline({
-          samplesPerSecond: SAMPLES_PER_SECOND,
-          seconds: PITCH_SECONDS,
-          binCount: analyser.frequencyBinCount,
-        });
-      }
-      spectrogramClockRef.current = {
-        writeClockMs: 0,
-        accumulator: 0,
-      };
-      spectrogramResumeNeedsSignalRef.current = reuseSpectrogram;
 
       setUi((prev) => ({...prev, isRunning: true}));
       setHasEverRun(true);
@@ -598,15 +531,8 @@ export default function Recorder({
     audioRef.current.captureNode = null;
     audioRef.current.analyser = null;
     audioRef.current.sinkGain = null;
-    rawBufferRef.current = createRawAudioBuffer(analysisRef.current.sampleRate, {
-      windowSize: ANALYSIS_WINDOW_SIZE,
-      rawBufferSeconds: RAW_BUFFER_SECONDS,
-    });
-    analysisRef.current = createAnalysisState(analysisRef.current.sampleRate, {
-      windowSize: ANALYSIS_WINDOW_SIZE,
-      samplesPerSecond: SAMPLES_PER_SECOND,
-    });
     setUi((prev) => ({...prev, isRunning: false}));
+    animationRef.current.timelineDirty = false;
   };
 
   const onStartButtonClick = () => {
@@ -634,11 +560,8 @@ export default function Recorder({
     }
     if (currentView === "spectrogram") {
       spectrogramChartRef.current?.draw({
-        values: spectrogramRef.current.values,
-        writeIndex: spectrogramRef.current.writeIndex,
-        count: spectrogramRef.current.count,
-        binCount: spectrogramRef.current.binCount,
-        sampleRate: analysisRef.current.sampleRate,
+        binCount: spectrogramCaptureRef.current.normalizedBins.length,
+        sampleRate: audioRef.current.sampleRate,
       });
       return;
     }
@@ -662,12 +585,18 @@ export default function Recorder({
       animationRef.current.lastFrameMs = 0;
     }
 
-    const didTimelineChange = processBufferedAudio();
+    const didTimelineChange = animationRef.current.timelineDirty;
+    animationRef.current.timelineDirty = false;
     const previousDisplayedRateHz = animationRef.current.displayedVibratoRateHz;
     let displayedRateHz = null;
     const currentView = activeViewRef.current;
 
     if (currentView === "vibrato") {
+      const timelineTickCount = timelineRef.current.diagnostics.totalTickCount;
+      const holdTickThreshold = Math.max(
+          1,
+          Math.round((VIBRATO_RATE_HOLD_MS / 1000) * timelineRef.current.samplesPerSecond)
+      );
       updateCenterFromHzBuffer(
           audioRef.current,
           pitchRangeRef.current.minHz,
@@ -688,7 +617,7 @@ export default function Recorder({
       }
 
       if (estimatedRateHz !== null) {
-        animationRef.current.lastValidVibratoRateMs = nowMs;
+        animationRef.current.lastValidVibratoTick = timelineTickCount;
         const previousRateHz = animationRef.current.displayedVibratoRateHz;
         if (previousRateHz === null) {
           displayedRateHz = estimatedRateHz;
@@ -706,13 +635,13 @@ export default function Recorder({
         }
       } else if (
           previousDisplayedRateHz !== null &&
-          animationRef.current.lastValidVibratoRateMs !== null &&
-          nowMs - animationRef.current.lastValidVibratoRateMs <= VIBRATO_RATE_HOLD_MS
+          animationRef.current.lastValidVibratoTick !== null &&
+          timelineTickCount - animationRef.current.lastValidVibratoTick <= holdTickThreshold
       ) {
         displayedRateHz = previousDisplayedRateHz;
       }
     } else {
-      animationRef.current.lastValidVibratoRateMs = null;
+      animationRef.current.lastValidVibratoTick = null;
     }
 
     const didDisplayRateChange = displayedRateHz !== previousDisplayedRateHz;
@@ -734,7 +663,13 @@ export default function Recorder({
 
   useEffect(() => {
     let rafId = 0;
-    const redrawIdleCanvas = () => {
+    let resizeObserver = null;
+    const onChartResize = () => {
+      const nextWidth = Math.max(1, Math.floor(chartContainerRef.current?.clientWidth ?? window.innerWidth));
+      if (nextWidth !== chartWidthPxRef.current) {
+        chartWidthPxRef.current = nextWidth;
+        resizePitchTimeline(timelineRef.current, nextWidth);
+      }
       if (ui.isRunning) return;
       if (rafId) {
         cancelAnimationFrame(rafId);
@@ -744,13 +679,16 @@ export default function Recorder({
       });
     };
 
-    redrawIdleCanvas();
-    window.addEventListener("resize", redrawIdleCanvas);
+    onChartResize();
+    if (typeof ResizeObserver === "function" && chartContainerRef.current) {
+      resizeObserver = new ResizeObserver(onChartResize);
+      resizeObserver.observe(chartContainerRef.current);
+    }
     return () => {
       if (rafId) {
         cancelAnimationFrame(rafId);
       }
-      window.removeEventListener("resize", redrawIdleCanvas);
+      resizeObserver?.disconnect();
     };
   }, [activeView, ui.isRunning]);
 
@@ -805,40 +743,43 @@ export default function Recorder({
   return (
       <>
         <div
+            ref={chartContainerRef}
             className="relative flex min-h-0 flex-1 flex-col"
             onClick={onChartTogglePause}
         >
-          {activeView === "vibrato" ? (
-              <VibratoChart
-                  ref={vibratoChartRef}
-                  yRange={WAVE_Y_RANGE}
-                  maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
-                  vibratoRateHz={ui.vibratoRateHz}
-                  vibratoRateMinHz={VIBRATO_RATE_MIN_HZ}
-                  vibratoRateMaxHz={VIBRATO_RATE_MAX_HZ}
-                  vibratoSweetMinHz={VIBRATO_SWEET_MIN_HZ}
-                  vibratoSweetMaxHz={VIBRATO_SWEET_MAX_HZ}
-                  renderScale={halfResolutionCanvas ? 0.5 : 1}
-                  lineColorMode={pitchLineColorMode}
-              />
-          ) : activeView === "spectrogram" ? (
-              <SpectrogramChart
-                  ref={spectrogramChartRef}
-                  className="h-full w-full"
-                  minHz={spectrogramMinHz}
-                  maxHz={spectrogramMaxHz}
-                  renderScale={halfResolutionCanvas ? 0.5 : 1}
-              />
-          ) : (
-              <PitchChart
-                  ref={pitchChartRef}
-                  minCents={pitchMinCents}
-                  maxCents={pitchMaxCents}
-                  maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
-                  renderScale={halfResolutionCanvas ? 0.5 : 1}
-                  lineColorMode={pitchLineColorMode}
-              />
-          )}
+          <div className={activeView === "vibrato" ? "flex min-h-0 flex-1 flex-col" : "hidden min-h-0 flex-1 flex-col"}>
+            <VibratoChart
+                ref={vibratoChartRef}
+                yRange={WAVE_Y_RANGE}
+                maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
+                vibratoRateHz={ui.vibratoRateHz}
+                vibratoRateMinHz={VIBRATO_RATE_MIN_HZ}
+                vibratoRateMaxHz={VIBRATO_RATE_MAX_HZ}
+                vibratoSweetMinHz={VIBRATO_SWEET_MIN_HZ}
+                vibratoSweetMaxHz={VIBRATO_SWEET_MAX_HZ}
+                renderScale={halfResolutionCanvas ? 0.5 : 1}
+                lineColorMode={pitchLineColorMode}
+            />
+          </div>
+          <div className={activeView === "spectrogram" ? "flex min-h-0 flex-1 flex-col" : "hidden min-h-0 flex-1 flex-col"}>
+            <SpectrogramChart
+                ref={spectrogramChartRef}
+                className="h-full w-full"
+                minHz={spectrogramMinHz}
+                maxHz={spectrogramMaxHz}
+                renderScale={halfResolutionCanvas ? 0.5 : 1}
+            />
+          </div>
+          <div className={activeView === "pitch" ? "flex min-h-0 flex-1 flex-col" : "hidden min-h-0 flex-1 flex-col"}>
+            <PitchChart
+                ref={pitchChartRef}
+                minCents={pitchMinCents}
+                maxCents={pitchMaxCents}
+                maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
+                renderScale={halfResolutionCanvas ? 0.5 : 1}
+                lineColorMode={pitchLineColorMode}
+            />
+          </div>
           {showStartOverlay ? (
               <div
                   className="absolute inset-0 z-10 flex items-center justify-center bg-black/60"

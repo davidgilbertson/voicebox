@@ -37,7 +37,6 @@ test("timeline keeps SPS * seconds points and 60 points per 5Hz oscillation at 3
     const cents = Math.sin(2 * Math.PI * vibratoRateHz * t) * 50;
     writePitchTimeline(state, {
       nowMs: i * stepMs,
-      hasVoice: true,
       cents,
       level: 0.5,
     });
@@ -52,32 +51,29 @@ test("timeline keeps SPS * seconds points and 60 points per 5Hz oscillation at 3
   assert.ok(levels.every((value) => value === 0.5));
 });
 
-test("very high SPS with slow analysis cadence produces heavy backfill", () => {
+test("columnRateHz defines timeline resolution when provided", () => {
   const samplesPerSecond = 1200;
+  const columnRateHz = 60;
   const seconds = 5;
   const state = createPitchTimeline({
+    columnRateHz,
     samplesPerSecond,
     seconds,
     silencePauseThresholdMs: 300,
-    nowMs: 0,
   });
-  const analysisHz = 60;
-  const frameMs = 1000 / analysisHz;
-  const totalFrames = seconds * analysisHz;
-  for (let i = 1; i <= totalFrames; i += 1) {
-    const t = i / analysisHz;
+  const totalColumns = columnRateHz * seconds;
+  for (let i = 1; i <= totalColumns; i += 1) {
+    const t = i / columnRateHz;
     const cents = Math.sin(2 * Math.PI * 5 * t) * 50;
     writePitchTimeline(state, {
-      nowMs: i * frameMs,
-      hasVoice: true,
       cents,
       level: 0.8,
     });
   }
 
-  assert.equal(state.count, samplesPerSecond * seconds);
-  assert.ok(state.diagnostics.backfillTickCount > 0);
-  assert.ok(state.diagnostics.maxFillSteps >= 10);
+  assert.equal(state.values.length, totalColumns);
+  assert.equal(state.count, totalColumns);
+  assert.equal(state.diagnostics.totalTickCount, totalColumns);
 });
 
 test("silence auto-pause can be disabled so timeline keeps advancing with NaN values", () => {
@@ -94,7 +90,6 @@ test("silence auto-pause can be disabled so timeline keeps advancing with NaN va
   for (let i = 1; i <= samplesPerSecond; i += 1) {
     writePitchTimeline(state, {
       nowMs: i * stepMs,
-      hasVoice: false,
       cents: Number.NaN,
       level: Number.NaN,
     });
@@ -123,7 +118,6 @@ test("silence auto-pause enabled stops writes after threshold", () => {
   for (let i = 1; i <= samplesPerSecond; i += 1) {
     const result = writePitchTimeline(state, {
       nowMs: i * stepMs,
-      hasVoice: false,
       cents: Number.NaN,
       level: Number.NaN,
     });
@@ -134,29 +128,24 @@ test("silence auto-pause enabled stops writes after threshold", () => {
   assert.equal(state.silencePaused, true);
 });
 
-test("backfilled writes keep level samples aligned with pitch samples", () => {
+test("each write keeps level samples aligned with pitch samples", () => {
   const state = createPitchTimeline({
     samplesPerSecond: 10,
     seconds: 1,
     silencePauseThresholdMs: 300,
-    nowMs: 0,
   });
 
   writePitchTimeline(state, {
-    nowMs: 100,
-    hasVoice: true,
     cents: 100,
     level: 0.2,
   });
   writePitchTimeline(state, {
-    nowMs: 400,
-    hasVoice: true,
     cents: 200,
     level: 0.8,
   });
 
   const levels = orderedLevels(state);
   assert.equal(levels.length, state.count);
-  assert.equal(levels.length, 4);
-  assert.deepEqual(levels.map((value) => Number(value.toFixed(3))), [0.2, 0.4, 0.6, 0.8]);
+  assert.equal(levels.length, 2);
+  assert.deepEqual(levels.map((value) => Number(value.toFixed(3))), [0.2, 0.8]);
 });

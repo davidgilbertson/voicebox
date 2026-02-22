@@ -193,8 +193,8 @@ export default function AppShell() {
 
   return (
       <div className="h-[var(--app-height)] w-full overflow-hidden bg-black text-slate-100 select-none">
-        <div className="mx-auto flex h-full w-full max-w-none items-stretch px-0 py-0 md:max-w-[450px] md:items-center md:justify-center md:px-2 md:py-2">
-          <main className="relative flex min-h-0 flex-1 flex-col bg-black md:h-full md:w-full md:max-h-[1000px] md:flex-none md:rounded-xl md:border md:border-slate-800 md:shadow-2xl">
+        <div className="flex h-full w-full items-stretch">
+          <main className="relative flex min-h-0 flex-1 flex-col bg-black md:h-full md:w-full md:flex-none">
             {showingScales ? (
                 <ScalesPage
                     scaleMinNote={scaleMinNote}

@@ -14,7 +14,6 @@ export const PITCH_LINE_COLOR_MODES = [
 
 const WAVEFORM_COLOR_MODE_SET = new Set(PITCH_LINE_COLOR_MODES.map((item) => item.value));
 const MIN_WAVEFORM_COLOR_INDEX = 36;
-const WAVEFORM_LEVEL_GAIN = 4;
 const DEFAULT_PITCH_LINE_COLOR_MODE = "terrain";
 const paletteByMode = new Map();
 const colorStringsByMode = new Map();
@@ -112,7 +111,7 @@ function getColorStringsForMode(mode) {
 
 function mapWaveformLevelToNormalized(level) {
   if (!Number.isFinite(level)) return Number.NaN;
-  return clamp(level * WAVEFORM_LEVEL_GAIN, 0, 1);
+  return clamp(level, 0, 1);
 }
 
 function mapWaveformLevelToPaletteIndex(level, mode = DEFAULT_PITCH_LINE_COLOR_MODE) {

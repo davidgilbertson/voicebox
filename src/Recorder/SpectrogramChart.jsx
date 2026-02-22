@@ -13,6 +13,8 @@ const EXTRA_HZ_LABELS = [
 ];
 const LABEL_FONT = "12px system-ui";
 const LABEL_STROKE_WIDTH = 3;
+const MIN_PENDING_COLUMN_CAPACITY = 1024;
+const DEFAULT_PENDING_COLUMN_CAPACITY = 8192;
 
 function drawLabelWithOutline(ctx, label, x, y) {
   ctx.lineWidth = LABEL_STROKE_WIDTH;
@@ -23,42 +25,33 @@ function drawLabelWithOutline(ctx, label, x, y) {
   ctx.fillText(label, x, y);
 }
 
-function fillSpectrogramColumns({
+function drawColumnImage({
   imageData,
-  imageStartX,
+  xOffset,
   imageWidth,
   renderHeight,
   yBinLow,
   yBinMix,
   palette,
-  values,
+  bins,
   binCount,
-  getColumnIndex,
 }) {
   const pixels = imageData.data;
   for (let y = 0; y < renderHeight; y += 1) {
     const low = yBinLow[y];
     const high = Math.min(binCount - 1, low + 1);
     const mix = yBinMix[y];
-    for (let x = 0; x < imageWidth; x += 1) {
-      const columnIndex = getColumnIndex(x);
-      let value = 0;
-      if (columnIndex >= 0) {
-        const base = columnIndex * binCount;
-        const lowValue = values[base + low];
-        const highValue = values[base + high];
-        value = lowValue + (highValue - lowValue) * mix;
-      }
-      const valueIndex = clamp(Math.round(value * 255), 0, 255);
-      const colorOffset = valueIndex * 3;
-      const pixelOffset = (y * imageWidth + x) * 4;
-      pixels[pixelOffset] = palette[colorOffset];
-      pixels[pixelOffset + 1] = palette[colorOffset + 1];
-      pixels[pixelOffset + 2] = palette[colorOffset + 2];
-      pixels[pixelOffset + 3] = 255;
-    }
+    const lowValue = bins[low] ?? 0;
+    const highValue = bins[high] ?? 0;
+    const value = lowValue + (highValue - lowValue) * mix;
+    const valueIndex = clamp(Math.round(value * 255), 0, 255);
+    const colorOffset = valueIndex * 3;
+    const pixelOffset = ((y * imageWidth) + xOffset) * 4;
+    pixels[pixelOffset] = palette[colorOffset];
+    pixels[pixelOffset + 1] = palette[colorOffset + 1];
+    pixels[pixelOffset + 2] = palette[colorOffset + 2];
+    pixels[pixelOffset + 3] = 255;
   }
-  return imageStartX;
 }
 
 const SpectrogramChart = forwardRef(function SpectrogramChart({
@@ -72,24 +65,91 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
   const renderCanvasRef = useRef(null);
   const labelCanvasRef = useRef(null);
   const yBinCacheRef = useRef(null);
-  const frameStateRef = useRef({
-    renderWidth: 0,
-    renderHeight: 0,
-    columnCount: 0,
-    lastWriteIndex: 0,
-    lastCount: 0,
-  });
   const labelStateRef = useRef({
     cssWidth: 0,
     cssHeight: 0,
     minHz: 0,
     maxHz: 0,
   });
+  const pendingColumnsRef = useRef([]);
+  const pendingColumnCountRef = useRef(0);
+  const pendingColumnCapacityRef = useRef(DEFAULT_PENDING_COLUMN_CAPACITY);
+  const frameStateRef = useRef({
+    renderWidth: 0,
+    renderHeight: 0,
+    binCount: 0,
+    minHz: 0,
+    maxHz: 0,
+    sampleRate: 0,
+  });
+
+  const trimPendingColumnsToCapacity = () => {
+    let pendingCount = pendingColumnCountRef.current;
+    const pending = pendingColumnsRef.current;
+    const capacity = Math.max(1, Math.floor(pendingColumnCapacityRef.current));
+    while (pendingCount > capacity && pending.length > 0) {
+      const item = pending[0];
+      const overflow = pendingCount - capacity;
+      const dropped = Math.min(item.repeats, overflow);
+      item.repeats -= dropped;
+      pendingCount -= dropped;
+      if (item.repeats <= 0) {
+        pending.shift();
+      }
+    }
+    pendingColumnCountRef.current = pendingCount;
+  };
+
+  const collectTailColumns = (columnCount) => {
+    const pending = pendingColumnsRef.current;
+    const tailColumns = new Array(columnCount);
+    let writeIndex = columnCount - 1;
+    let remaining = columnCount;
+    for (let i = pending.length - 1; i >= 0 && remaining > 0; i -= 1) {
+      const item = pending[i];
+      const useCount = Math.min(remaining, item.repeats);
+      for (let j = 0; j < useCount; j += 1) {
+        tailColumns[writeIndex] = item.bins;
+        writeIndex -= 1;
+      }
+      remaining -= useCount;
+    }
+    return tailColumns;
+  };
 
   useImperativeHandle(ref, () => ({
-    draw({values, writeIndex, count, binCount, sampleRate}) {
+    appendColumn(normalizedBins, repeats = 1) {
+      if (!normalizedBins?.length) return;
+      const count = Math.max(1, Math.floor(repeats));
+      const copy = new Float32Array(normalizedBins.length);
+      copy.set(normalizedBins);
+      pendingColumnsRef.current.push({
+        bins: copy,
+        repeats: count,
+      });
+      pendingColumnCountRef.current += count;
+      trimPendingColumnsToCapacity();
+    },
+    clear() {
+      pendingColumnsRef.current = [];
+      pendingColumnCountRef.current = 0;
+      if (renderCanvasRef.current) {
+        const renderCtx = renderCanvasRef.current.getContext("2d");
+        renderCtx?.clearRect(0, 0, renderCanvasRef.current.width, renderCanvasRef.current.height);
+      }
+      yBinCacheRef.current = null;
+      frameStateRef.current = {
+        renderWidth: 0,
+        renderHeight: 0,
+        binCount: 0,
+        minHz: 0,
+        maxHz: 0,
+        sampleRate: 0,
+      };
+    },
+    draw({binCount, sampleRate}) {
       const canvas = canvasRef.current;
-      if (!canvas || !values || !binCount || !sampleRate) return;
+      if (!canvas || !binCount || !sampleRate) return;
 
       const {clientWidth, clientHeight} = canvas;
       const cssWidth = Math.max(1, Math.floor(clientWidth));
@@ -117,19 +177,24 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
       const plotBottom = Math.max(plotTop + 1, cssHeight - PLOT_Y_INSET);
       const plotWidth = Math.max(1, cssWidth - plotLeft);
       const plotHeight = Math.max(1, plotBottom - plotTop);
-
-      const columnCount = values.length / binCount;
-      if (!columnCount || count <= 0) return;
-      const startSlot = count < columnCount ? columnCount - count : 0;
-      const firstIndex = count === columnCount ? writeIndex : 0;
-
-      const renderWidth = columnCount;
+      const renderWidth = Math.max(1, Math.round(plotWidth));
       const renderHeight = Math.max(1, Math.round(plotHeight * dpr));
+
       if (!renderCanvasRef.current) {
         renderCanvasRef.current = document.createElement("canvas");
       }
       const renderCanvas = renderCanvasRef.current;
       const renderResized = renderCanvas.width !== renderWidth || renderCanvas.height !== renderHeight;
+      let previousCanvas = null;
+      if (renderResized && renderCanvas.width > 0 && renderCanvas.height > 0) {
+        previousCanvas = document.createElement("canvas");
+        previousCanvas.width = renderCanvas.width;
+        previousCanvas.height = renderCanvas.height;
+        const previousCtx = previousCanvas.getContext("2d");
+        if (previousCtx) {
+          previousCtx.drawImage(renderCanvas, 0, 0, renderCanvas.width, renderCanvas.height);
+        }
+      }
       if (renderResized) {
         renderCanvas.width = renderWidth;
         renderCanvas.height = renderHeight;
@@ -137,9 +202,55 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
       const renderCtx = renderCanvas.getContext("2d");
       if (!renderCtx) return;
 
+      const pendingCapacity = Math.max(MIN_PENDING_COLUMN_CAPACITY, renderWidth * 2);
+      if (pendingColumnCapacityRef.current !== pendingCapacity) {
+        pendingColumnCapacityRef.current = pendingCapacity;
+        trimPendingColumnsToCapacity();
+      }
+
       const clampedMinHz = clamp(minHz, 1e-3, maxHz);
       const clampedMaxHz = Math.max(clampedMinHz + 1e-3, Math.max(minHz, maxHz));
       const hzPerBin = (sampleRate / 2) / Math.max(1, binCount - 1);
+      const frameState = frameStateRef.current;
+      const mappingChanged =
+          frameState.binCount !== binCount ||
+          frameState.minHz !== clampedMinHz ||
+          frameState.maxHz !== clampedMaxHz ||
+          frameState.sampleRate !== sampleRate;
+      if (mappingChanged) {
+        renderCtx.clearRect(0, 0, renderWidth, renderHeight);
+        const filteredPending = [];
+        let filteredPendingCount = 0;
+        for (const item of pendingColumnsRef.current) {
+          if (item.bins?.length !== binCount) continue;
+          filteredPending.push(item);
+          filteredPendingCount += item.repeats;
+        }
+        pendingColumnsRef.current = filteredPending;
+        pendingColumnCountRef.current = filteredPendingCount;
+      } else if (renderResized && frameState.renderWidth > 0 && frameState.renderHeight > 0) {
+        const previousWidth = frameState.renderWidth;
+        const previousHeight = frameState.renderHeight;
+        if (previousCanvas) {
+          renderCtx.clearRect(0, 0, renderWidth, renderHeight);
+          const sourceWidth = Math.min(previousWidth, renderWidth);
+          const sourceX = previousWidth - sourceWidth;
+          const targetX = renderWidth - sourceWidth;
+          renderCtx.drawImage(
+              previousCanvas,
+              sourceX,
+              0,
+              sourceWidth,
+              previousHeight,
+              targetX,
+              0,
+              sourceWidth,
+              renderHeight
+          );
+        } else {
+          renderCtx.clearRect(0, 0, renderWidth, renderHeight);
+        }
+      }
 
       const yCache = yBinCacheRef.current;
       const needsYCache =
@@ -174,73 +285,48 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
       const yBinLow = yBinCacheRef.current.low;
       const yBinMix = yBinCacheRef.current.mix;
 
-      const frameState = frameStateRef.current;
-      const needsFullRedraw =
-          renderResized ||
-          frameState.renderWidth !== renderWidth ||
-          frameState.renderHeight !== renderHeight ||
-          frameState.columnCount !== columnCount ||
-          frameState.lastCount === 0 ||
-          count < columnCount;
-
-      if (needsFullRedraw) {
-        const image = renderCtx.createImageData(renderWidth, renderHeight);
-        fillSpectrogramColumns({
-          imageData: image,
-          imageStartX: 0,
-          imageWidth: renderWidth,
-          renderHeight,
-          yBinLow,
-          yBinMix,
-          palette,
-          values,
-          binCount,
-          getColumnIndex: (x) => {
-            if (x < startSlot) return -1;
-            const slotFromStart = x - startSlot;
-            return (firstIndex + slotFromStart) % columnCount;
-          },
-        });
-        renderCtx.putImageData(image, 0, 0);
-      } else {
-        const rawDelta = (writeIndex - frameState.lastWriteIndex + columnCount) % columnCount;
-        const delta = Math.min(columnCount, rawDelta);
-        if (delta > 0) {
-          if (delta < renderWidth) {
-            renderCtx.drawImage(
-                renderCanvas,
-                delta,
-                0,
-                renderWidth - delta,
-                renderHeight,
-                0,
-                0,
-                renderWidth - delta,
-                renderHeight
-            );
-          }
-          const strip = renderCtx.createImageData(delta, renderHeight);
-          fillSpectrogramColumns({
+      const pendingColumnCount = pendingColumnCountRef.current;
+      if (pendingColumnCount > 0) {
+        const columnsToDraw = Math.min(renderWidth, pendingColumnCount);
+        const tailColumns = collectTailColumns(columnsToDraw);
+        if (columnsToDraw < renderWidth) {
+          renderCtx.drawImage(
+              renderCanvas,
+              columnsToDraw,
+              0,
+              renderWidth - columnsToDraw,
+              renderHeight,
+              0,
+              0,
+              renderWidth - columnsToDraw,
+              renderHeight
+          );
+        }
+        const strip = renderCtx.createImageData(columnsToDraw, renderHeight);
+        for (let x = 0; x < columnsToDraw; x += 1) {
+          drawColumnImage({
             imageData: strip,
-            imageStartX: renderWidth - delta,
-            imageWidth: delta,
+            xOffset: x,
+            imageWidth: columnsToDraw,
             renderHeight,
             yBinLow,
             yBinMix,
             palette,
-            values,
+            bins: tailColumns[x],
             binCount,
-            getColumnIndex: (x) => (writeIndex - delta + x + columnCount) % columnCount,
           });
-          renderCtx.putImageData(strip, renderWidth - delta, 0);
         }
+        renderCtx.putImageData(strip, renderWidth - columnsToDraw, 0);
+        pendingColumnsRef.current = [];
+        pendingColumnCountRef.current = 0;
       }
 
       frameState.renderWidth = renderWidth;
       frameState.renderHeight = renderHeight;
-      frameState.columnCount = columnCount;
-      frameState.lastWriteIndex = writeIndex;
-      frameState.lastCount = count;
+      frameState.binCount = binCount;
+      frameState.minHz = clampedMinHz;
+      frameState.maxHz = clampedMaxHz;
+      frameState.sampleRate = sampleRate;
 
       ctx.imageSmoothingEnabled = true;
       ctx.drawImage(renderCanvas, plotLeft, plotTop, plotWidth, plotHeight);
@@ -298,7 +384,6 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(labelCanvas, 0, 0, width, height);
-
     },
   }), [maxHz, minHz, palette, renderScale]);
 

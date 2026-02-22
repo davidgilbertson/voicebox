@@ -1,14 +1,22 @@
-import {interpolateFillValues} from "./seriesFill.js";
-import {consumeTimelineElapsed} from "./timelineSteps.js";
-
 export function createPitchTimeline({
+  columnRateHz,
   samplesPerSecond,
   seconds,
+  silencePauseStepThreshold,
   silencePauseThresholdMs,
   autoPauseOnSilence = true,
-  nowMs,
 }) {
-  const length = Math.max(1, Math.floor(samplesPerSecond * seconds));
+  const resolvedColumnRateHz = Number.isFinite(columnRateHz) && columnRateHz > 0
+      ? columnRateHz
+      : Number.isFinite(samplesPerSecond) && samplesPerSecond > 0
+          ? samplesPerSecond
+          : 1;
+  const resolvedSilencePauseStepThreshold = Number.isFinite(silencePauseStepThreshold) && silencePauseStepThreshold > 0
+      ? silencePauseStepThreshold
+      : Number.isFinite(silencePauseThresholdMs) && silencePauseThresholdMs > 0
+          ? Math.max(1, Math.round((silencePauseThresholdMs / 1000) * resolvedColumnRateHz))
+          : 1;
+  const length = Math.max(1, Math.floor(resolvedColumnRateHz * seconds));
   const values = new Float32Array(length);
   const levels = new Float32Array(length);
   values.fill(Number.NaN);
@@ -18,20 +26,14 @@ export function createPitchTimeline({
     levels,
     writeIndex: 0,
     count: 0,
-    samplesPerSecond,
+    columnRateHz: resolvedColumnRateHz,
+    samplesPerSecond: resolvedColumnRateHz,
     seconds,
-    silencePauseThresholdMs,
+    silencePauseStepThreshold: Math.max(1, Math.floor(resolvedSilencePauseStepThreshold)),
     autoPauseOnSilence,
-    lastWrittenValue: Number.NaN,
-    lastWrittenLevel: Number.NaN,
-    silenceSinceMs: null,
+    silentStepCount: 0,
     silencePaused: false,
-    writeClockMs: nowMs,
-    accumulator: 0,
     diagnostics: {
-      lastFillSteps: 0,
-      maxFillSteps: 0,
-      backfillTickCount: 0,
       totalTickCount: 0,
     },
   };
@@ -46,61 +48,77 @@ function pushValue(state, value, level) {
   }
 }
 
-export function writePitchTimeline(state, {nowMs, hasVoice, cents, level = Number.NaN}) {
+export function writePitchTimeline(state, {
+  cents,
+  level = Number.NaN,
+  hasSignal = Number.isFinite(cents),
+}) {
   const autoPauseOnSilence = state.autoPauseOnSilence !== false;
   if (autoPauseOnSilence) {
-    if (hasVoice) {
+    if (hasSignal) {
       state.silencePaused = false;
-      state.silenceSinceMs = null;
-    } else if (state.silenceSinceMs === null) {
-      state.silenceSinceMs = nowMs;
-    } else if (nowMs - state.silenceSinceMs >= state.silencePauseThresholdMs) {
+      state.silentStepCount = 0;
+    } else {
+      state.silentStepCount += 1;
+    }
+    if (state.silentStepCount >= state.silencePauseStepThreshold) {
       state.silencePaused = true;
     }
   } else {
     state.silencePaused = false;
-    state.silenceSinceMs = null;
+    state.silentStepCount = 0;
   }
 
   state.diagnostics.totalTickCount += 1;
 
   if (state.silencePaused) {
-    state.writeClockMs = nowMs;
-    state.accumulator = 0;
-    state.lastWrittenValue = Number.NaN;
-    state.lastWrittenLevel = Number.NaN;
-    state.diagnostics.lastFillSteps = 0;
     return {steps: 0, paused: true};
   }
 
-  const elapsedMs = nowMs - state.writeClockMs;
-  state.writeClockMs = nowMs;
-  const stepResult = consumeTimelineElapsed(
-      elapsedMs,
-      state.samplesPerSecond,
-      state.accumulator
-  );
-  state.accumulator = stepResult.accumulator;
-  const steps = stepResult.steps;
-  state.diagnostics.lastFillSteps = steps;
-  if (steps > state.diagnostics.maxFillSteps) {
-    state.diagnostics.maxFillSteps = steps;
+  const hasPitch = Number.isFinite(cents);
+  const value = hasPitch ? cents : Number.NaN;
+  const nextLevel = hasPitch ? level : Number.NaN;
+  pushValue(state, value, nextLevel);
+  return {steps: 1, paused: false};
+}
+
+function extractOrderedValues(buffer, writeIndex, count) {
+  if (count <= 0) return new Float32Array(0);
+  const totalLength = buffer.length;
+  const firstIndex = count === totalLength ? writeIndex : 0;
+  const ordered = new Float32Array(count);
+  for (let i = 0; i < count; i += 1) {
+    ordered[i] = buffer[(firstIndex + i) % totalLength];
   }
-  if (steps > 1) {
-    state.diagnostics.backfillTickCount += 1;
-  }
-  if (steps <= 0) {
-    return {steps: 0, paused: false};
+  return ordered;
+}
+
+export function resizePitchTimeline(state, nextLength) {
+  if (!state) return;
+  const targetLength = Math.max(1, Math.floor(nextLength));
+  const currentLength = state.values.length;
+  if (targetLength === currentLength) return;
+
+  const nextValues = new Float32Array(targetLength);
+  const nextLevels = new Float32Array(targetLength);
+  nextValues.fill(Number.NaN);
+  nextLevels.fill(Number.NaN);
+
+  if (state.count > 0) {
+    const orderedValues = extractOrderedValues(state.values, state.writeIndex, state.count);
+    const orderedLevels = extractOrderedValues(state.levels, state.writeIndex, state.count);
+    const nextCount = Math.min(targetLength, state.count);
+    const start = orderedValues.length - nextCount;
+    nextValues.set(orderedValues.subarray(start), 0);
+    nextLevels.set(orderedLevels.subarray(start), 0);
+    state.count = nextCount;
+    state.writeIndex = nextCount === targetLength ? 0 : nextCount;
+  } else {
+    state.count = 0;
+    state.writeIndex = 0;
   }
 
-  const value = hasVoice ? cents : Number.NaN;
-  const nextLevel = hasVoice ? level : Number.NaN;
-  const fillValues = interpolateFillValues(state.lastWrittenValue, value, steps);
-  const fillLevels = interpolateFillValues(state.lastWrittenLevel, nextLevel, steps);
-  for (let i = 0; i < fillValues.length; i += 1) {
-    pushValue(state, fillValues[i], fillLevels[i]);
-  }
-  state.lastWrittenValue = value;
-  state.lastWrittenLevel = nextLevel;
-  return {steps, paused: false};
+  state.values = nextValues;
+  state.levels = nextLevels;
+  state.seconds = targetLength / state.columnRateHz;
 }

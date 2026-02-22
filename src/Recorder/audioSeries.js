@@ -1,7 +1,5 @@
 import {clamp, lerp} from "../tools.js";
 
-const FFT_PITCH_MIN_RMS = 0.01;
-
 export function createAudioState(defaultSamplesPerSecond) {
   return {
     context: null,
@@ -84,16 +82,15 @@ export function updateCenterFromHzBuffer(state, minHz, maxHz) {
   }
 }
 
-function computeWindowLevel(state, timeData) {
+function computeSpectrumLevel(state, spectrumBins) {
   let peak = 0;
   let sumSquares = 0;
-  for (let i = 0; i < timeData.length; i += 1) {
-    const value = timeData[i];
-    const absValue = Math.abs(value);
-    if (absValue > peak) peak = absValue;
+  for (let i = 0; i < spectrumBins.length; i += 1) {
+    const value = spectrumBins[i];
+    if (value > peak) peak = value;
     sumSquares += value * value;
   }
-  const rawRms = Math.sqrt(sumSquares / timeData.length);
+  const rawRms = Math.sqrt(sumSquares / spectrumBins.length);
   state.levelEma = lerp(state.levelEma, rawRms, 0.2);
   return {
     peak,
@@ -110,10 +107,9 @@ function finalizeDetection(state, {
 }) {
   const {hzBuffer} = state;
   const inHzRange = hz >= minHz && hz <= maxHz;
-  const hasVoice = inHzRange;
   const absCents = inHzRange ? 1200 * Math.log2(hz) : Number.NaN;
 
-  if (hasVoice) {
+  if (inHzRange) {
     hzBuffer[state.hzIndex] = hz;
     state.hzIndex = (state.hzIndex + 1) % hzBuffer.length;
   }
@@ -122,7 +118,6 @@ function finalizeDetection(state, {
     peak,
     rms: state.levelEma,
     hz,
-    hasVoice,
     cents: absCents,
   };
 }
@@ -269,27 +264,14 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
 
 export function analyzeAudioWindowFftPitch(
     state,
-    timeData,
+    _timeData,
     spectrumBins,
     minHz,
     maxHz
 ) {
   const {hzBuffer} = state;
-  if (!hzBuffer || !timeData || !timeData.length || !spectrumBins || !spectrumBins.length) return null;
-  const {peak, rawRms} = computeWindowLevel(state, timeData);
-
-  if (rawRms < FFT_PITCH_MIN_RMS) {
-    const result = finalizeDetection(state, {
-      peak,
-      hz: 0,
-      minHz,
-      maxHz,
-    });
-    return {
-      ...result,
-      confidence: 0,
-    };
-  }
+  if (!hzBuffer || !spectrumBins || !spectrumBins.length) return null;
+  const {peak} = computeSpectrumLevel(state, spectrumBins);
 
   const detection = fftBinsToPitchDetailed(
       spectrumBins,

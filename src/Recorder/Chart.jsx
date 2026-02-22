@@ -119,8 +119,7 @@ const Chart = forwardRef(function Chart({
       } else {
         if (usePerSegmentColor && lastX !== null) {
           const colorValue = colorValues[bufferIndex];
-          const strokeColor = mapColorValueToStroke(colorValue);
-          ctx.strokeStyle = strokeColor;
+          ctx.strokeStyle = mapColorValueToStroke(colorValue);
           ctx.beginPath();
           ctx.moveTo(lastX, lastY);
           ctx.lineTo(x, y);

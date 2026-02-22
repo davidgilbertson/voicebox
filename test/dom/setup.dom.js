@@ -94,6 +94,8 @@ const canvasCtx = {
   },
   stroke: () => {
   },
+  strokeText: () => {
+  },
   fillText: () => {
   },
   drawImage: () => {
@@ -169,6 +171,9 @@ class FakeAudioContext {
       // TODO (@davidgilbertson): never used now?
       getByteFrequencyData: (array) => {
         array.fill(0);
+      },
+      getFloatFrequencyData: (array) => {
+        array.fill(-120);
       },
       connect: () => {
       },

@@ -1,17 +1,25 @@
-const BATCH_SIZE = 256;
-
+// This worklet is our clock.
+// It posts a message every `batchSize` samples (e.g. 600)
+// The app receives the message and calls an analyser node, hence no data being returned from the worklet.
 class AudioCaptureProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.buffer = new Float32Array(BATCH_SIZE);
-    this.offset = 0;
+    this.batchSize = 0;
+    this.pendingSampleCount = 0;
+    this.port.onmessage = (event) => {
+      if (event?.data?.type !== "set-batch-size") return;
+      const nextBatchSize = Math.floor(event.data.batchSize);
+      if (!Number.isFinite(nextBatchSize) || nextBatchSize <= 0 || nextBatchSize === this.batchSize) return;
+      this.batchSize = nextBatchSize;
+      this.pendingSampleCount = 0;
+    };
   }
 
-  flushBuffer() {
-    if (this.offset <= 0) return;
-    const chunk = this.buffer.slice(0, this.offset);
-    this.port.postMessage(chunk, [chunk.buffer]);
-    this.offset = 0;
+  emitReadyBatches() {
+    while (this.pendingSampleCount >= this.batchSize) {
+      this.port.postMessage(this.batchSize);
+      this.pendingSampleCount -= this.batchSize;
+    }
   }
 
   process(inputs, outputs) {
@@ -27,19 +35,12 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
     if (!channel || channel.length === 0) {
       return true;
     }
-
-    let readIndex = 0;
-    while (readIndex < channel.length) {
-      const remaining = channel.length - readIndex;
-      const available = BATCH_SIZE - this.offset;
-      const count = Math.min(remaining, available);
-      this.buffer.set(channel.subarray(readIndex, readIndex + count), this.offset);
-      this.offset += count;
-      readIndex += count;
-      if (this.offset >= BATCH_SIZE) {
-        this.flushBuffer();
-      }
+    if (this.batchSize <= 0) {
+      return true;
     }
+
+    this.pendingSampleCount += channel.length;
+    this.emitReadyBatches();
 
     return true;
   }

@@ -132,11 +132,10 @@ export default function GestureArea({
     gestureRef.current.handled = false;
   };
 
-  const swipeFlashIcon = swipeFlash?.direction === "up" ? ArrowUp
+  const SwipeFlashIcon = swipeFlash?.direction === "up" ? ArrowUp
       : swipeFlash?.direction === "down" ? ArrowDown
           : swipeFlash?.direction === "right" ? ArrowRight
               : null;
-  const SwipeFlashIcon = swipeFlashIcon;
 
   return (
       <div

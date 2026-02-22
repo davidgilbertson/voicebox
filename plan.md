@@ -1,66 +1,36 @@
-# Plan: Vibrato Monitor (Web, Android Chrome PWA)
+# Plan
 
-## Tasks
+## Audio-Clock Simplification (phased)
 
-- [x] Confirm scope + constraints
-  - [x] Chrome Android PWA target (offline via service worker) and portrait-only UI.
-  - [x] Desktop mode uses a phone-sized panel (~450x800).
-  - [x] Voice-only range C2–C6 (+margin if helpful).
+1. Derive level from spectrum bins instead of raw `windowSamples`.
+1. Decide whether we need both `peak` and `rms`; prefer one metric unless both are proven useful.
+1. Tune silence/voice threshold(s) to match current behavior as closely as possible.
 
-- [x] Feasibility spike (do early)
-  - [x] Prototype mic capture + permission flow with explicit user action; observe what survives between sessions.
-  - [x] Measure mobile Web Audio latency/jitter; confirm 30 FPS loop is sustainable.
-  - [ ] Verify pitch detection on vowel “ee” with real voice samples (no synth).
+1. Keep worklet output unchanged for now, but remove dead main-thread variables/paths that were only for raw-window level calculation.
+1. Confirm no regressions in pitch/vibrato/silence pause behavior before changing cadence plumbing.
 
-- [x] Analysis approach selection (prototype-friendly)
-  - [x] Evaluate pitch detection options: autocorrelation vs YIN vs FFT peak.
-  - [x] If using libs, pick 2–3 likely candidates (e.g., aubio.js, pitchy) and wire a UI toggle to compare outputs side-by-side or switchable.
-  - [x] Decide FFT source: Web Audio AnalyserNode vs custom FFT (bundle size + control).
+1. Stop using `rawBuffer`/`drainRawBuffer` as the scheduler on main thread.
+1. Treat each worklet `onmessage` batch as one hop step (batch size already set to hop size).
+1. On each batch: read analyser spectrum once, derive pitch/vibrato/spectrogram/level from that spectrum, commit one chart step.
 
-- [x] UI skeleton (chart-first)
-  - [x] Build full-height panel layout with maximal chart area; no heavy headers.
-  - [x] Add a floating start/stop control over the chart (for mic access).
-  - [x] Constrain desktop to ~450x800 with centered panel.
+1. Cleanup pass:
+1. simplify/remove `rawBuffer` and `analysisState` plumbing if no longer needed,
+1. simplify worklet messaging to minimal payload/cadence contract,
+1. update architecture docs and variable naming references.
 
-- [x] Main waveform chart MVP (Canvas or uPlot)
-  - [x] Implement a 5-second x-axis timeline.
-  - [x] Render main waveform centered around a current ~0.5s window.
-  - [x] Y-axis fixed to -200..200 cents.
-  - [x] No pitch labels.
+## Guardrails
 
-- [x] Audio pipeline + draw loop
-  - [x] Wire mic stream into AudioContext.
-  - [x] Use rAF-driven drawing at ~30 FPS; throttle if needed.
-  - [x] If rAF decouples from analysis, assume 10ms/update budget and show running mean of analysis + render step times (ms) on screen.
+1. Keep chart speed sample-driven (no wall-clock scheduler).
+1. Preserve pause semantics (manual pause, silence pause, background policy).
+1. Validate tab-switch and background/foreground behavior after each phase.
 
-- [ ] Vibrato metrics v1
-  - [ ] Track pitch over time and compute rate (Hz) and depth (cents).
-  - [ ] Display Hz and BPM (BPM = Hz * 60).
-  - [ ] Choose a reasonable “good” range for rate/depth and visualize it on the charts.
+## Naming Consistency Pass
 
-- [ ] Secondary charts (rate + depth)
-  - [ ] Add two mini charts (5s x-axis) for rate and depth.
-  - [ ] Do not include the redundant bar indicators from Android app.
+1. Add one short glossary for signal strength terms and apply it consistently in code/docs.
+1. Use `magnitude` only for per-bin spectral magnitudes.
+1. Use `peakMagnitude` for per-hop max spectral magnitude.
+1. Use `level` for normalized `[0..1]` chart/UI intensity values only.
+1. Avoid mixed synonyms for the same concept (`peak` vs `max`, `volume` vs `level`) unless they mean different things.
+1. Rename variables opportunistically during touched-file edits to avoid a big-bang rename.
 
-- [x] Prototyping controls + experiments
-  - [ ] Add temporary UI toggles for buffer sizes, hop sizes, FFT sizes.
-  - [x] If multiple libs are used, allow selection or side-by-side display.
-  - [x] Log sparingly; leave key debug values visible in UI.
-
-- [ ] Human vibrato samples (non-synth)
-  - [ ] Find or record a small set of real voice vibrato samples for testing.
-  - [ ] If external samples are used, confirm licensing and store locally.
-
-- [ ] PWA + offline
-  - [ ] Add service worker + manifest; ensure offline load works.
-  - [ ] Verify mic permission + offline behavior on Android Chrome.
-
-- [x] QA on device
-  - [x] Test on Android Chrome installed as app.
-  - [ ] Tune buffers + smoothing for best “ee” vowel tracking.
-  - [x] Validate 30 FPS target and CPU usage.
-
-## Open questions
-- [x] Should we use uPlot for charts or a bespoke canvas renderer?
-- [x] Any preferred pitch detection method or library to prioritize first?
-- [x] Is a single toggle to switch algorithms enough, or do you want side-by-side outputs?
+I think we can probably clean up the volume logic in general (normalizing in particular and the min/max settings).
