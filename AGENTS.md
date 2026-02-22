@@ -10,6 +10,8 @@
   4. If the issue is not realistically testable in automation (for example, requires real phone/device interaction), call that out explicitly and rely on manual verification.
 - For colors, use Tailwind. For colors in JS, `import colors from "tailwindcss/colors";`
 - Don't do checks for `window` being undefined in the app code.
+- Don't create variables for the sake of variables, if you can inline a value then do so. Only create variables if it will be used in many places, or naming it is important for understanding.
+- Don't make things 'configurable' if you weren't asked to do that. E.g. if a function has a variable in it, don't make it a parameter 'just in case' the user one day wants to pass it in. Write simple code first, complex code if requested.
 
 # Notes to self
 

@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {Pause} from "lucide-react";
 import {
   analyzeAudioWindowFftPitch,
   updateCenterFromHzBuffer,
@@ -42,6 +43,16 @@ function computeIsForeground() {
     return document.hasFocus();
   }
   return true;
+}
+
+function setStreamListeningEnabled(stream, enabled) {
+  if (!stream) return;
+  const tracks = typeof stream.getAudioTracks === "function"
+      ? stream.getAudioTracks()
+      : (typeof stream.getTracks === "function" ? stream.getTracks() : []);
+  for (const track of tracks) {
+    track.enabled = enabled;
+  }
 }
 
 export default function Recorder({
@@ -109,6 +120,9 @@ export default function Recorder({
   });
   const forceRedrawRef = useRef(false);
   const activeViewRef = useRef(activeView);
+  const wantsToRunRef = useRef(true);
+  const manualPauseRef = useRef(false);
+  const skipNextSpectrumFrameRef = useRef(false);
   const autoPauseOnSilenceRef = useRef(autoPauseOnSilence);
   const runAt30FpsRef = useRef(RUN_AT_30_FPS_DEFAULT);
   const pitchRangeRef = useRef({
@@ -145,6 +159,10 @@ export default function Recorder({
   useEffect(() => {
     runAt30FpsRef.current = runAt30Fps;
   }, [runAt30Fps]);
+
+  useEffect(() => {
+    wantsToRunRef.current = wantsToRun;
+  }, [wantsToRun]);
 
   useEffect(() => {
     pitchRangeRef.current = {
@@ -254,10 +272,13 @@ export default function Recorder({
     const maxDb = analyser.maxDecibels;
     const dbRange = maxDb - minDb;
     const invDbRange = dbRange > 0 ? 1 / dbRange : 0;
-
+    let allNegativeInfinity = true;
     let maxMagnitude = 0;
     for (let i = 0; i < capture.spectrumDb.length; i += 1) {
       const dbValue = capture.spectrumDb[i];
+      if (dbValue !== Number.NEGATIVE_INFINITY) {
+        allNegativeInfinity = false;
+      }
       const finiteDb = Number.isFinite(dbValue) ? dbValue : minDb;
       const magnitude = 10 ** (finiteDb / 20);
       capture.spectrumForPitchDetection[i] = magnitude;
@@ -272,6 +293,15 @@ export default function Recorder({
       for (let i = 0; i < capture.spectrumForPitchDetection.length; i += 1) {
         capture.spectrumForPitchDetection[i] *= scale;
       }
+    }
+    // After unpausing, some devices can output all -Infinity frames briefly; ignore that frame and one follow-up frame.
+    if (allNegativeInfinity) {
+      skipNextSpectrumFrameRef.current = true;
+      return null;
+    }
+    if (skipNextSpectrumFrameRef.current) {
+      skipNextSpectrumFrameRef.current = false;
+      return null;
     }
     return {
       spectrumNormalized: capture.spectrumNormalized,
@@ -364,6 +394,7 @@ export default function Recorder({
   };
 
   const processAudioHop = () => {
+    if (manualPauseRef.current) return false;
     const currentView = activeViewRef.current;
     const minHz = currentView === "spectrogram" ? spectrogramRangeRef.current.minHz : pitchRangeRef.current.minHz;
     const maxHz = currentView === "spectrogram" ? spectrogramRangeRef.current.maxHz : pitchRangeRef.current.maxHz;
@@ -493,6 +524,9 @@ export default function Recorder({
         centerHz: previousAudioState.centerHz || 220,
         centerCents: previousAudioState.centerCents || 1200 * Math.log2(220),
       };
+      const shouldListen = wantsToRunRef.current;
+      manualPauseRef.current = !shouldListen;
+      setStreamListeningEnabled(stream, shouldListen);
       spectrogramCaptureRef.current = {
         spectrumNormalized: new Float32Array(analyser.frequencyBinCount),
         spectrumDb: new Float32Array(analyser.frequencyBinCount),
@@ -550,6 +584,7 @@ export default function Recorder({
     audioRef.current.captureNode = null;
     audioRef.current.analyser = null;
     audioRef.current.sinkGain = null;
+    manualPauseRef.current = false;
     setUi((prev) => ({...prev, isRunning: false}));
     animationRef.current.timelineDirty = false;
   };
@@ -559,7 +594,8 @@ export default function Recorder({
     startAudio();
   };
 
-  const onChartTogglePause = () => {
+  const onChartPointerDown = (event) => {
+    if (event.button !== 0 || event.isPrimary === false) return;
     if (settingsOpen || !hasEverRun || isStartingRef.current) return;
     setWantsToRun((prev) => !prev);
   };
@@ -722,19 +758,22 @@ export default function Recorder({
     };
   }, [activeView, pitchMaxCents, pitchMinCents, settingsOpen, spectrogramMaxHz, spectrogramMinHz]);
 
-  const shouldRun =
-      wantsToRun &&
-      (keepRunningInBackground || isForeground);
-
   useEffect(() => {
-    if (shouldRun && !ui.isRunning) {
-      startAudio();
-      return;
-    }
-    if (!shouldRun && ui.isRunning) {
+    if (!(keepRunningInBackground || isForeground) && ui.isRunning) {
       stopAudio();
     }
-  }, [shouldRun, ui.isRunning]);
+    if ((keepRunningInBackground || isForeground) && wantsToRun && !ui.isRunning) {
+      startAudio();
+    }
+  }, [isForeground, keepRunningInBackground, ui.isRunning, wantsToRun]);
+
+  useEffect(() => {
+    if (!ui.isRunning) return;
+    const shouldListen = wantsToRun;
+    manualPauseRef.current = !shouldListen;
+    const stream = audioRef.current.stream;
+    setStreamListeningEnabled(stream, shouldListen);
+  }, [ui.isRunning, wantsToRun]);
 
   useEffect(() => {
     onSettingsRuntimeChange({
@@ -758,13 +797,14 @@ export default function Recorder({
   ]);
 
   const showStartOverlay = !ui.isRunning && !wantsToRun && (ui.error || !hasEverRun);
-  const showPausedOverlay = !ui.isRunning && !wantsToRun && hasEverRun && !ui.error;
+  const showPausedOverlay = !wantsToRun && hasEverRun && !ui.error;
   return (
       <>
         <div
             ref={chartContainerRef}
             className="relative flex min-h-0 flex-1 flex-col"
-            onClick={onChartTogglePause}
+            onPointerDown={onChartPointerDown}
+            data-testid="recorder-chart-area"
         >
           <div className={activeView === "vibrato" ? "flex min-h-0 flex-1 flex-col" : "hidden min-h-0 flex-1 flex-col"}>
             <VibratoChart
@@ -802,6 +842,7 @@ export default function Recorder({
           {showStartOverlay ? (
               <div
                   className="absolute inset-0 z-10 flex items-center justify-center bg-black/60"
+                  onPointerDown={(event) => event.stopPropagation()}
                   onClick={(event) => event.stopPropagation()}
               >
                 <button
@@ -815,8 +856,12 @@ export default function Recorder({
           ) : null}
           {showPausedOverlay ? (
               <div className="pointer-events-none absolute inset-0 z-10">
-                <div className="pause-pill-fade absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-800/80 px-9 py-3 text-xl font-semibold uppercase tracking-[0.2em] text-slate-100">
-                  Paused
+                <div
+                    role="status"
+                    className="pause-pill bg-slate-800/80 text-base font-semibold uppercase tracking-wide text-slate-100 shadow-lg"
+                >
+                  <Pause aria-hidden="true" className="pause-pill-icon h-5 w-5"/>
+                  <span className="pause-pill-label">Paused</span>
                 </div>
               </div>
           ) : null}

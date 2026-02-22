@@ -281,6 +281,7 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
         }
         const strip = renderCtx.createImageData(columnsToDraw, renderHeight);
         for (let x = 0; x < columnsToDraw; x += 1) {
+          const spectrumColumn = tailColumns[x];
           drawColumnImage({
             imageData: strip,
             xOffset: x,
@@ -289,7 +290,7 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
             yBinLow,
             yBinMix,
             palette,
-            spectrumNormalized: tailColumns[x],
+            spectrumNormalized: spectrumColumn,
             binCount,
           });
         }
