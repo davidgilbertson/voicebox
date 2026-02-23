@@ -10,6 +10,7 @@ import VibratoChart from "./VibratoChart.jsx";
 import PitchChart from "./PitchChart.jsx";
 import SpectrogramChart from "./SpectrogramChart.jsx";
 import {noteNameToCents, noteNameToHz} from "../pitchScale.js";
+import {clamp} from "../tools.js";
 import {BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor} from "./batteryUsage.js";
 import {
   CENTER_SECONDS,
@@ -34,8 +35,9 @@ import {
 const RUN_AT_30_FPS_DEFAULT = false;
 const WAVE_Y_RANGE = 305; // in cents
 const MAX_DRAW_JUMP_CENTS = 80;
-const PEAK_MAGNITUDE_FOR_FULL_INTENSITY = 0.07; // TODO (@davidgilbertson): maybe we make this dynamic (max over time) or user-settable
-const MIN_PEAK_MAGNITUDE_FOR_SIGNAL = 0.0018;
+const MIN_LOUDNESS = 8; // Initial session floor before adaptive tracking takes over
+const MAX_LOUDNESS = 1500; // Initial session ceiling before adaptive tracking takes over
+const LOUDNESS_TRACKING_WARMUP_HOPS = Math.round(DISPLAY_PIXELS_PER_SECOND);
 
 function computeIsForeground() {
   if (document.visibilityState === "hidden") return false;
@@ -53,6 +55,60 @@ function setStreamListeningEnabled(stream, enabled) {
   for (const track of tracks) {
     track.enabled = enabled;
   }
+}
+
+function buildPerceptualWeightProfile(binCount, sampleRate) {
+  const weights = new Float32Array(binCount);
+  let weightSum = 0;
+  const fftSize = binCount * 2;
+  for (let i = 1; i < binCount; i += 1) {
+    const frequencyHz = (i * sampleRate) / fftSize;
+    const f2 = frequencyHz * frequencyHz;
+    const numerator = (12194 ** 2) * (f2 ** 2);
+    const denominator = (f2 + 20.6 ** 2) * (f2 + 12194 ** 2) * Math.sqrt((f2 + 107.7 ** 2) * (f2 + 737.9 ** 2));
+    const aWeightDb = 2 + (20 * Math.log10(numerator / denominator));
+    const powerWeight = 10 ** (aWeightDb / 10);
+    weights[i] = powerWeight;
+    weightSum += powerWeight;
+  }
+  return {
+    weights,
+    weightSum: weightSum > 0 ? weightSum : 1,
+  };
+}
+
+function analyzeSpectrumFrame({
+                                spectrumDb,
+                                spectrumForPitchDetection,
+                                spectrumNormalized,
+                                minDb,
+                                invDbRange,
+                                weights,
+                                weightSum,
+                              }) {
+  let allNegativeInfinity = true;
+  let maxMagnitude = 0;
+  let weightedPower = 0;
+  for (let i = 0; i < spectrumDb.length; i += 1) {
+    const dbValue = spectrumDb[i];
+    if (dbValue !== Number.NEGATIVE_INFINITY) {
+      allNegativeInfinity = false;
+    }
+    const finiteDb = Number.isFinite(dbValue) ? dbValue : minDb;
+    const magnitude = 10 ** (finiteDb / 20);
+    spectrumForPitchDetection[i] = magnitude;
+    if (magnitude > maxMagnitude) {
+      maxMagnitude = magnitude;
+    }
+    const normalized = (finiteDb - minDb) * invDbRange;
+    spectrumNormalized[i] = clamp(normalized, 0, 1);
+    weightedPower += (magnitude * magnitude) * weights[i];
+  }
+  return {
+    allNegativeInfinity,
+    maxMagnitude,
+    loudness: Math.sqrt(weightedPower / weightSum) * 1_000_000,
+  };
 }
 
 export default function Recorder({
@@ -77,7 +133,7 @@ export default function Recorder({
   const isStartingRef = useRef(false);
   const chartWidthPx = Math.max(1, Math.floor(window.innerWidth));
   const chartWidthPxRef = useRef(chartWidthPx);
-  const hopSizeRef = useRef(Math.max(1, Math.round(48_000 / DISPLAY_PIXELS_PER_SECOND)));
+  const hopSizeRef = useRef(Math.round(48_000 / DISPLAY_PIXELS_PER_SECOND));
   const audioRef = useRef({
     context: null,
     analyser: null,
@@ -95,7 +151,7 @@ export default function Recorder({
   const timelineRef = useRef(createPitchTimeline({
     columnRateHz: DISPLAY_PIXELS_PER_SECOND,
     seconds: chartWidthPx / DISPLAY_PIXELS_PER_SECOND,
-    silencePauseStepThreshold: Math.max(1, Math.round((SILENCE_PAUSE_THRESHOLD_MS / 1000) * DISPLAY_PIXELS_PER_SECOND)),
+    silencePauseStepThreshold: Math.round((SILENCE_PAUSE_THRESHOLD_MS / 1000) * DISPLAY_PIXELS_PER_SECOND),
   }));
   const spectrogramCaptureRef = useRef({
     spectrumNormalized: new Float32Array(SPECTROGRAM_BIN_COUNT),
@@ -110,6 +166,15 @@ export default function Recorder({
     sampleCount: 0,
   });
   const batteryUsageMonitorRef = useRef(createBatteryUsageMonitor());
+  const loudnessWeightProfileRef = useRef({
+    weights: new Float32Array(0),
+    weightSum: 1,
+  });
+  const loudnessTrackingRef = useRef({
+    minHeardLoudness: MIN_LOUDNESS,
+    maxHeardLoudness: MAX_LOUDNESS,
+    warmupHopsRemaining: LOUDNESS_TRACKING_WARMUP_HOPS,
+  });
   const spectrumIntensityEmaRef = useRef(0);
   const animationRef = useRef({
     rafId: 0,
@@ -146,7 +211,6 @@ export default function Recorder({
   const [spectrogramNoiseCalibrating, setSpectrogramNoiseCalibrating] = useState(false);
   const [spectrogramNoiseProfileReady, setSpectrogramNoiseProfileReady] = useState(() => initialNoiseProfile !== null);
   const [batteryUsagePerMinute, setBatteryUsagePerMinute] = useState(null);
-
   const pitchMinHz = noteNameToHz(pitchMinNote);
   const pitchMaxHz = noteNameToHz(pitchMaxNote);
   const pitchMinCents = noteNameToCents(pitchMinNote);
@@ -267,27 +331,23 @@ export default function Recorder({
       capture.spectrumDb = new Float32Array(analyser.frequencyBinCount);
       capture.spectrumForPitchDetection = new Float32Array(analyser.frequencyBinCount);
     }
+    // getFloatFrequencyData gives us decibels
     analyser.getFloatFrequencyData(capture.spectrumDb);
     const minDb = analyser.minDecibels;
     const maxDb = analyser.maxDecibels;
     const dbRange = maxDb - minDb;
     const invDbRange = dbRange > 0 ? 1 / dbRange : 0;
-    let allNegativeInfinity = true;
-    let maxMagnitude = 0;
-    for (let i = 0; i < capture.spectrumDb.length; i += 1) {
-      const dbValue = capture.spectrumDb[i];
-      if (dbValue !== Number.NEGATIVE_INFINITY) {
-        allNegativeInfinity = false;
-      }
-      const finiteDb = Number.isFinite(dbValue) ? dbValue : minDb;
-      const magnitude = 10 ** (finiteDb / 20);
-      capture.spectrumForPitchDetection[i] = magnitude;
-      if (magnitude > maxMagnitude) {
-        maxMagnitude = magnitude;
-      }
-      const normalized = (finiteDb - minDb) * invDbRange;
-      capture.spectrumNormalized[i] = Math.max(0, Math.min(1, normalized));
-    }
+    const analysis = analyzeSpectrumFrame({
+      spectrumDb: capture.spectrumDb,
+      spectrumForPitchDetection: capture.spectrumForPitchDetection,
+      spectrumNormalized: capture.spectrumNormalized,
+      minDb,
+      invDbRange,
+      weights: loudnessWeightProfileRef.current.weights,
+      weightSum: loudnessWeightProfileRef.current.weightSum,
+    });
+    const {allNegativeInfinity, maxMagnitude} = analysis;
+    const loudness = analysis.loudness;
     if (maxMagnitude > 0) {
       const scale = 1 / maxMagnitude;
       for (let i = 0; i < capture.spectrumForPitchDetection.length; i += 1) {
@@ -303,10 +363,36 @@ export default function Recorder({
       skipNextSpectrumFrameRef.current = false;
       return null;
     }
+    if (loudness <= 0) {
+      return {
+        spectrumNormalized: capture.spectrumNormalized,
+        spectrumForPitchDetection: capture.spectrumForPitchDetection,
+        loudness,
+      };
+    }
+    const tracking = loudnessTrackingRef.current;
+    if (tracking.warmupHopsRemaining > 0) {
+      tracking.warmupHopsRemaining -= 1;
+    } else if (tracking.warmupHopsRemaining === 0) {
+      tracking.warmupHopsRemaining -= 1;
+      // This is the first step after warmup. Could be page load or pause resume
+      // For page load only we init the min/max to the current volume
+      if (tracking.minHeardLoudness === MIN_LOUDNESS && tracking.maxHeardLoudness === MAX_LOUDNESS) {
+        tracking.minHeardLoudness = loudness;
+        tracking.maxHeardLoudness = loudness;
+      }
+    } else {
+      if (loudness < tracking.minHeardLoudness) {
+        tracking.minHeardLoudness = loudness;
+      }
+      if (loudness > tracking.maxHeardLoudness) {
+        tracking.maxHeardLoudness = loudness;
+      }
+    }
     return {
       spectrumNormalized: capture.spectrumNormalized,
       spectrumForPitchDetection: capture.spectrumForPitchDetection,
-      spectrumPeakMagnitude: maxMagnitude,
+      loudness,
     };
   };
 
@@ -342,6 +428,9 @@ export default function Recorder({
     noiseState.profile = null;
     writeSpectrogramNoiseProfile(null);
     setSpectrogramNoiseProfileReady(false);
+  }, []);
+  const restartLoudnessTrackingWarmup = useCallback(() => {
+    loudnessTrackingRef.current.warmupHopsRemaining = LOUDNESS_TRACKING_WARMUP_HOPS;
   }, []);
 
   const onNoiseCalibratePointerDown = useCallback((event) => {
@@ -402,9 +491,11 @@ export default function Recorder({
     const capturedSpectrum = captureSpectrogramBins();
     const spectrumNormalized = capturedSpectrum?.spectrumNormalized ?? null;
     const spectrumForPitchDetection = capturedSpectrum?.spectrumForPitchDetection ?? null;
-    const spectrumPeakMagnitude = capturedSpectrum?.spectrumPeakMagnitude ?? 0;
+    const loudness = capturedSpectrum?.loudness ?? 0;
     if (!spectrumForPitchDetection) return false;
-    const isAboveSilenceThreshold = spectrumPeakMagnitude >= MIN_PEAK_MAGNITUDE_FOR_SIGNAL;
+    const minHeardLoudness = loudnessTrackingRef.current.minHeardLoudness;
+    const maxHeardLoudness = loudnessTrackingRef.current.maxHeardLoudness;
+    const isAboveSilenceThreshold = loudness > minHeardLoudness * 2;
     const result = isAboveSilenceThreshold
         ? analyzeAudioWindowFftPitch(
             audioRef.current,
@@ -418,9 +509,11 @@ export default function Recorder({
         };
     let pitchWriteResult = null;
     if (result) {
-      const spectrumIntensity = Math.max(
+      const loudnessSpan = maxHeardLoudness - minHeardLoudness;
+      const spectrumIntensity = clamp(
+          loudnessSpan > 0 ? ((loudness - minHeardLoudness) / loudnessSpan) : 0,
           0,
-          Math.min(1, spectrumPeakMagnitude / PEAK_MAGNITUDE_FOR_FULL_INTENSITY)
+          1
       );
       const previousSpectrumIntensity = spectrumIntensityEmaRef.current;
       const smoothedSpectrumIntensity = previousSpectrumIntensity + ((spectrumIntensity - previousSpectrumIntensity) * 0.2);
@@ -472,6 +565,8 @@ export default function Recorder({
       const analyser = context.createAnalyser();
       analyser.fftSize = FFT_SIZE;
       analyser.smoothingTimeConstant = 0;
+      loudnessWeightProfileRef.current = buildPerceptualWeightProfile(analyser.frequencyBinCount, context.sampleRate);
+      restartLoudnessTrackingWarmup();
       captureNode.port.onmessage = (event) => {
         const sampleCount = Number(event.data);
         const expectedHopSize = hopSizeRef.current;
@@ -496,7 +591,7 @@ export default function Recorder({
       sinkGain.connect(context.destination);
 
       const sampleRate = context.sampleRate;
-      const hopSize = Math.max(1, Math.round(sampleRate / DISPLAY_PIXELS_PER_SECOND));
+      const hopSize = Math.round(sampleRate / DISPLAY_PIXELS_PER_SECOND);
       hopSizeRef.current = hopSize;
       captureNode.port.postMessage({
         type: "set-batch-size",
@@ -648,10 +743,7 @@ export default function Recorder({
 
     if (currentView === "vibrato") {
       const timelineTickCount = timelineRef.current.diagnostics.totalTickCount;
-      const holdTickThreshold = Math.max(
-          1,
-          Math.round((VIBRATO_RATE_HOLD_MS / 1000) * timelineRef.current.columnRateHz)
-      );
+      const holdTickThreshold = Math.round((VIBRATO_RATE_HOLD_MS / 1000) * timelineRef.current.columnRateHz);
       updateCenterFromHzBuffer(
           audioRef.current,
           pitchRangeRef.current.minHz,
@@ -770,10 +862,14 @@ export default function Recorder({
   useEffect(() => {
     if (!ui.isRunning) return;
     const shouldListen = wantsToRun;
+    const wasPaused = manualPauseRef.current;
     manualPauseRef.current = !shouldListen;
+    if (shouldListen && wasPaused) {
+      restartLoudnessTrackingWarmup();
+    }
     const stream = audioRef.current.stream;
     setStreamListeningEnabled(stream, shouldListen);
-  }, [ui.isRunning, wantsToRun]);
+  }, [restartLoudnessTrackingWarmup, ui.isRunning, wantsToRun]);
 
   useEffect(() => {
     onSettingsRuntimeChange({

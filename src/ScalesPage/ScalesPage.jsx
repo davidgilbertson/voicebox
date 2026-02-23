@@ -1,11 +1,12 @@
 import {useCallback, useEffect, useRef, useState} from "react";
+import {Metronome} from "lucide-react";
 import StepperControl from "../components/StepperControl.jsx";
 import Piano from "./Piano.jsx";
 import GestureArea from "./GestureArea.jsx";
 import {readScaleBpm, readScaleGestureHelpDismissed, readScaleMaxNote, readScaleMinNote, readScaleSelectedName, SCALE_BPM_MAX, SCALE_BPM_MIN, writeScaleBpm, writeScaleGestureHelpDismissed, writeScaleSelectedName,} from "./config.js";
 import {clamp} from "../tools.js";
 import {noteNameToMidi} from "../pitchScale.js";
-import {ensurePianoLoaded, ensurePianoReadyForPlayback, playNote} from "./piano.js";
+import {ensurePianoLoaded, ensurePianoReadyForPlayback, playMetronomeTick, playNote} from "./piano.js";
 
 /**
  * Terminology
@@ -47,9 +48,11 @@ export default function ScalesPage({
   const [selectedScaleName, setSelectedScaleName] = useState(() => readScaleSelectedName());
   const [repeatDirection, setRepeatDirection] = useState("up");
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isMetronomeEnabled, setIsMetronomeEnabled] = useState(false);
   const [isPianoReady, setIsPianoReady] = useState(false);
   const [showGestureHelp, setShowGestureHelp] = useState(() => !readScaleGestureHelpDismissed());
   const playbackIntervalRef = useRef(0);
+  const metronomeIntervalRef = useRef(0);
   const activeNotesRef = useRef([]);
   const isPlayingRef = useRef(isPlaying);
   const activeBpmRef = useRef(bpm);
@@ -134,6 +137,12 @@ export default function ScalesPage({
     stopAllNotes();
   }, [stopAllNotes]);
 
+  const stopMetronome = useCallback(() => {
+    if (!metronomeIntervalRef.current) return;
+    window.clearInterval(metronomeIntervalRef.current);
+    metronomeIntervalRef.current = 0;
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     ensurePianoLoaded()
@@ -151,8 +160,24 @@ export default function ScalesPage({
   useEffect(() => {
     return () => {
       stopPlayback();
+      stopMetronome();
     };
-  }, [stopPlayback]);
+  }, [stopMetronome, stopPlayback]);
+
+  useEffect(() => {
+    stopMetronome();
+    if (!isMetronomeEnabled) return;
+
+    const tick = () => {
+      playMetronomeTick().catch(() => {
+      });
+    };
+
+    tick();
+    metronomeIntervalRef.current = window.setInterval(tick, (60 / bpm) * 1000);
+
+    return stopMetronome;
+  }, [bpm, isMetronomeEnabled, stopMetronome]);
 
   const playStepRef = useRef(null);
   const restartIntervalRef = useRef(null);
@@ -357,8 +382,8 @@ export default function ScalesPage({
           </div>
 
           <section>
-            <div className="flex items-center gap-3">
-              <div className="text-xs uppercase tracking-wide text-slate-400">BPM</div>
+            <div className="text-xs uppercase tracking-wide text-slate-400">BPM</div>
+            <div className="mt-2 flex items-center">
               <div className="w-full max-w-40">
                 <StepperControl
                     value={bpm}
@@ -372,6 +397,19 @@ export default function ScalesPage({
                     contentWidth="5ch"
                 />
               </div>
+              <button
+                  type="button"
+                  onClick={() => setIsMetronomeEnabled((prev) => !prev)}
+                  aria-pressed={isMetronomeEnabled}
+                  aria-label={isMetronomeEnabled ? "Disable metronome" : "Enable metronome"}
+                  className={`ml-auto inline-flex h-11 items-center justify-center rounded-md px-3 ${
+                      isMetronomeEnabled
+                          ? "bg-amber-400 text-amber-950"
+                          : "bg-slate-800/80 text-slate-300"
+                  }`}
+              >
+                <Metronome aria-hidden="true" className="h-5 w-5" strokeWidth={2}/>
+              </button>
             </div>
           </section>
 

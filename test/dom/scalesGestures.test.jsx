@@ -9,6 +9,7 @@ vi.mock("../../src/ScalesPage/piano.js", () => ({
   ensurePianoLoaded: vi.fn(async () => ({})),
   ensurePianoReadyForPlayback: vi.fn(async () => true),
   playNote: (...args) => playNoteMock(...args),
+  playMetronomeTick: vi.fn(async () => {}),
   subscribeToPlayedNotes: () => () => {},
 }));
 

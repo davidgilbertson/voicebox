@@ -16,6 +16,7 @@ test("scales page does not mount recorder controls", async () => {
 
   expect(screen.getByRole("combobox", {name: "Scale pattern"})).toHaveValue("Semitones");
   expect(screen.getByRole("button", {name: "Play"})).toBeInTheDocument();
+  expect(screen.getByRole("button", {name: "Enable metronome"})).toBeInTheDocument();
   expect(screen.getByLabelText("Open settings")).toBeEnabled();
 });
 

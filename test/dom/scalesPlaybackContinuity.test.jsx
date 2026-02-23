@@ -4,17 +4,20 @@ import {beforeEach, expect, test, vi} from "vitest";
 import ScalesPage from "../../src/ScalesPage/ScalesPage.jsx";
 
 const playNoteMock = vi.fn(async () => ({stop: vi.fn()}));
+const playMetronomeTickMock = vi.fn(async () => {});
 
 vi.mock("../../src/ScalesPage/piano.js", () => ({
   ensurePianoLoaded: vi.fn(async () => ({})),
   ensurePianoReadyForPlayback: vi.fn(async () => true),
   playNote: (...args) => playNoteMock(...args),
+  playMetronomeTick: (...args) => playMetronomeTickMock(...args),
   subscribeToPlayedNotes: () => () => {
   },
 }));
 
 beforeEach(() => {
   playNoteMock.mockClear();
+  playMetronomeTickMock.mockClear();
   vi.useFakeTimers();
 });
 
@@ -76,4 +79,21 @@ test("pause and resume restarts the current set from the cue note", async () => 
     await vi.advanceTimersByTimeAsync(300);
   });
   expect(playNoteMock.mock.calls[3][0]).toBe(48);
+});
+
+test("metronome ticks while scales playback is stopped", async () => {
+  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  await waitForReady();
+
+  fireEvent.click(screen.getByRole("button", {name: "Enable metronome"}));
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(700);
+  });
+
+  expect(playMetronomeTickMock.mock.calls.length).toBeGreaterThan(0);
+  expect(playNoteMock).not.toHaveBeenCalled();
+  for (const call of playMetronomeTickMock.mock.calls) {
+    expect(call).toHaveLength(0);
+  }
 });

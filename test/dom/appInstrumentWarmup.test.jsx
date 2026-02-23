@@ -3,8 +3,9 @@ import {render, waitFor} from "@testing-library/react";
 import {expect, test, vi} from "vitest";
 import {writeActiveView} from "../../src/AppShell/config.js";
 
-const {ensurePianoLoadedMock} = vi.hoisted(() => ({
+const {ensurePianoLoadedMock, ensureMetronomeTickLoadedMock} = vi.hoisted(() => ({
   ensurePianoLoadedMock: vi.fn(async () => null),
+  ensureMetronomeTickLoadedMock: vi.fn(async () => null),
 }));
 
 vi.mock("../../src/ScalesPage/piano.js", async (importOriginal) => {
@@ -12,6 +13,7 @@ vi.mock("../../src/ScalesPage/piano.js", async (importOriginal) => {
   return {
     ...actual,
     ensurePianoLoaded: ensurePianoLoadedMock,
+    ensureMetronomeTickLoaded: ensureMetronomeTickLoadedMock,
   };
 });
 
@@ -23,5 +25,6 @@ test("instrument warmup starts on app load even when opening on a non-scales pag
 
   await waitFor(() => {
     expect(ensurePianoLoadedMock).toHaveBeenCalledTimes(1);
+    expect(ensureMetronomeTickLoadedMock).toHaveBeenCalledTimes(1);
   });
 });
