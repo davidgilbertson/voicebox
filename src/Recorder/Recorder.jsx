@@ -32,12 +32,27 @@ import {
   writeSpectrogramNoiseProfile,
 } from "./config.js";
 
-const RUN_AT_30_FPS_DEFAULT = false;
 const WAVE_Y_RANGE = 305; // in cents
 const MAX_DRAW_JUMP_CENTS = 80;
 const MIN_LOUDNESS = 8; // Initial session floor before adaptive tracking takes over
 const MAX_LOUDNESS = 1500; // Initial session ceiling before adaptive tracking takes over
 const LOUDNESS_TRACKING_WARMUP_HOPS = Math.round(DISPLAY_PIXELS_PER_SECOND);
+const DEFAULT_CENTER_HZ = 220;
+
+function createHzBuffer(length) {
+  const hzBuffer = new Float32Array(length);
+  hzBuffer.fill(Number.NaN);
+  return hzBuffer;
+}
+
+function createSpectrogramCaptureBuffers(binCount) {
+  return {
+    spectrumNormalized: new Float32Array(binCount),
+    spectrumDb: new Float32Array(binCount),
+    spectrumForPitchDetection: new Float32Array(binCount),
+    spectrumFiltered: new Float32Array(binCount),
+  };
+}
 
 function computeIsForeground() {
   if (document.visibilityState === "hidden") return false;
@@ -144,8 +159,8 @@ export default function Recorder({
     hzBuffer: null,
     hzIndex: 0,
     sampleRate: 48000,
-    centerHz: 220,
-    centerCents: 1200 * Math.log2(220),
+    centerHz: DEFAULT_CENTER_HZ,
+    centerCents: 1200 * Math.log2(DEFAULT_CENTER_HZ),
   });
   // Single shared timeline feeds both pitch and vibrato views so switching preserves continuity.
   const timelineRef = useRef(createPitchTimeline({
@@ -189,7 +204,7 @@ export default function Recorder({
   const manualPauseRef = useRef(false);
   const skipNextSpectrumFrameRef = useRef(false);
   const autoPauseOnSilenceRef = useRef(autoPauseOnSilence);
-  const runAt30FpsRef = useRef(RUN_AT_30_FPS_DEFAULT);
+  const runAt30FpsRef = useRef(runAt30Fps);
   const pitchRangeRef = useRef({
     minHz: noteNameToHz(PITCH_MIN_NOTE_DEFAULT),
     maxHz: noteNameToHz(PITCH_MAX_NOTE_DEFAULT),
@@ -300,12 +315,7 @@ export default function Recorder({
   useEffect(() => {
     const analyser = audioRef.current.analyser;
     const binCount = analyser ? analyser.frequencyBinCount : SPECTROGRAM_BIN_COUNT;
-    spectrogramCaptureRef.current = {
-      spectrumNormalized: new Float32Array(binCount),
-      spectrumDb: new Float32Array(binCount),
-      spectrumForPitchDetection: new Float32Array(binCount),
-      spectrumFiltered: new Float32Array(binCount),
-    };
+    spectrogramCaptureRef.current = createSpectrogramCaptureBuffers(binCount);
     spectrogramChartRef.current?.clear();
     const noiseState = spectrogramNoiseRef.current;
     if (noiseState.calibrating) {
@@ -327,9 +337,11 @@ export default function Recorder({
     if (!analyser) return null;
     const capture = spectrogramCaptureRef.current;
     if (capture.spectrumNormalized.length !== analyser.frequencyBinCount) {
-      capture.spectrumNormalized = new Float32Array(analyser.frequencyBinCount);
-      capture.spectrumDb = new Float32Array(analyser.frequencyBinCount);
-      capture.spectrumForPitchDetection = new Float32Array(analyser.frequencyBinCount);
+      const resizedCapture = createSpectrogramCaptureBuffers(analyser.frequencyBinCount);
+      capture.spectrumNormalized = resizedCapture.spectrumNormalized;
+      capture.spectrumDb = resizedCapture.spectrumDb;
+      capture.spectrumForPitchDetection = resizedCapture.spectrumForPitchDetection;
+      capture.spectrumFiltered = resizedCapture.spectrumFiltered;
     }
     // getFloatFrequencyData gives us decibels
     analyser.getFloatFrequencyData(capture.spectrumDb);
@@ -601,11 +613,7 @@ export default function Recorder({
       const hzLength = Math.floor(CENTER_SECONDS * DISPLAY_PIXELS_PER_SECOND);
       const hzBuffer = previousAudioState.hzBuffer && previousAudioState.hzBuffer.length === hzLength
           ? previousAudioState.hzBuffer
-          : (() => {
-            const nextHzBuffer = new Float32Array(hzLength);
-            nextHzBuffer.fill(Number.NaN);
-            return nextHzBuffer;
-          })();
+          : createHzBuffer(hzLength);
       audioRef.current = {
         ...previousAudioState,
         context,
@@ -616,18 +624,13 @@ export default function Recorder({
         sinkGain,
         hzBuffer,
         sampleRate,
-        centerHz: previousAudioState.centerHz || 220,
-        centerCents: previousAudioState.centerCents || 1200 * Math.log2(220),
+        centerHz: previousAudioState.centerHz || DEFAULT_CENTER_HZ,
+        centerCents: previousAudioState.centerCents || 1200 * Math.log2(DEFAULT_CENTER_HZ),
       };
       const shouldListen = wantsToRunRef.current;
       manualPauseRef.current = !shouldListen;
       setStreamListeningEnabled(stream, shouldListen);
-      spectrogramCaptureRef.current = {
-        spectrumNormalized: new Float32Array(analyser.frequencyBinCount),
-        spectrumDb: new Float32Array(analyser.frequencyBinCount),
-        spectrumForPitchDetection: new Float32Array(analyser.frequencyBinCount),
-        spectrumFiltered: new Float32Array(analyser.frequencyBinCount),
-      };
+      spectrogramCaptureRef.current = createSpectrogramCaptureBuffers(analyser.frequencyBinCount);
 
       setUi((prev) => ({...prev, isRunning: true}));
       setHasEverRun(true);
