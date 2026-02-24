@@ -14,6 +14,7 @@ vi.mock("../../src/ScalesPage/piano.js", () => ({
 }));
 
 beforeEach(() => {
+  window.__setForegroundForTests({visible: true, focused: true});
   playNoteMock.mockClear();
   vi.useFakeTimers();
 });

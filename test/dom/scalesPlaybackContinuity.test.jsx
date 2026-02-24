@@ -16,6 +16,7 @@ vi.mock("../../src/ScalesPage/piano.js", () => ({
 }));
 
 beforeEach(() => {
+  window.__setForegroundForTests({visible: true, focused: true});
   playNoteMock.mockClear();
   playMetronomeTickMock.mockClear();
   vi.useFakeTimers();
@@ -96,4 +97,60 @@ test("metronome ticks while scales playback is stopped", async () => {
   for (const call of playMetronomeTickMock.mock.calls) {
     expect(call).toHaveLength(0);
   }
+});
+
+test("scales playback and metronome pause in background and resume in foreground", async () => {
+  const {rerender} = render(
+      <ScalesPage
+          scaleMinNote="C3"
+          scaleMaxNote="E4"
+          keepRunningInBackground={false}
+          isForeground={true}
+      />
+  );
+  await waitForReady();
+
+  fireEvent.click(screen.getByRole("button", {name: "Enable metronome"}));
+  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(700);
+  });
+  const notesBeforeBackground = playNoteMock.mock.calls.length;
+  const ticksBeforeBackground = playMetronomeTickMock.mock.calls.length;
+  expect(notesBeforeBackground).toBeGreaterThan(0);
+  expect(ticksBeforeBackground).toBeGreaterThan(0);
+
+  rerender(
+      <ScalesPage
+          scaleMinNote="C3"
+          scaleMaxNote="E4"
+          keepRunningInBackground={false}
+          isForeground={false}
+      />
+  );
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(900);
+  });
+  expect(playNoteMock.mock.calls.length).toBe(notesBeforeBackground);
+  expect(playMetronomeTickMock.mock.calls.length).toBe(ticksBeforeBackground);
+
+  rerender(
+      <ScalesPage
+          scaleMinNote="C3"
+          scaleMaxNote="E4"
+          keepRunningInBackground={false}
+          isForeground={true}
+      />
+  );
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(900);
+  });
+  expect(playNoteMock.mock.calls.length).toBeGreaterThan(notesBeforeBackground);
+  expect(playMetronomeTickMock.mock.calls.length).toBeGreaterThan(ticksBeforeBackground);
 });

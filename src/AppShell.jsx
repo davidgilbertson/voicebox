@@ -6,6 +6,7 @@ import SettingsPanel from "./SettingsPanel.jsx";
 import {ensureMetronomeTickLoaded, ensurePianoLoaded} from "./ScalesPage/piano.js";
 import {readActiveView, writeActiveView} from "./AppShell/config.js";
 import {PITCH_NOTE_OPTIONS} from "./pitchScale.js";
+import {computeIsForeground, subscribeToForegroundChanges} from "./foreground.js";
 import {
   readScaleMaxNote,
   readScaleMinNote,
@@ -47,6 +48,7 @@ export default function AppShell() {
   const [pitchLineColorMode, setPitchLineColorMode] = useState(() => readPitchLineColorMode());
   const [spectrogramMinHz, setSpectrogramMinHz] = useState(() => readSpectrogramMinHz());
   const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => readSpectrogramMaxHz());
+  const [isForeground, setIsForeground] = useState(() => computeIsForeground());
   const [runtimeSettings, setRuntimeSettings] = useState({
     spectrogramNoiseCalibrating: false,
     spectrogramNoiseProfileReady: false,
@@ -65,6 +67,8 @@ export default function AppShell() {
   useEffect(() => {
     writeActiveView(activeView);
   }, [activeView]);
+
+  useEffect(() => subscribeToForegroundChanges(setIsForeground), []);
 
   useEffect(() => {
     // We pre-fetch here so these are available offline as soon as possible.
@@ -201,12 +205,15 @@ export default function AppShell() {
                 <ScalesPage
                     scaleMinNote={scaleMinNote}
                     scaleMaxNote={scaleMaxNote}
+                    keepRunningInBackground={keepRunningInBackground}
+                    isForeground={isForeground}
                 />
             ) : (
                 <Recorder
                     activeView={activeView}
                     settingsOpen={settingsOpen}
                     keepRunningInBackground={keepRunningInBackground}
+                    isForeground={isForeground}
                     autoPauseOnSilence={autoPauseOnSilence}
                     runAt30Fps={runAt30Fps}
                     halfResolutionCanvas={halfResolutionCanvas}

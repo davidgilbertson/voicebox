@@ -54,14 +54,6 @@ function createSpectrogramCaptureBuffers(binCount) {
   };
 }
 
-function computeIsForeground() {
-  if (document.visibilityState === "hidden") return false;
-  if (document.hasFocus) {
-    return document.hasFocus();
-  }
-  return true;
-}
-
 function setStreamListeningEnabled(stream, enabled) {
   if (!stream) return;
   const tracks = typeof stream.getAudioTracks === "function"
@@ -130,6 +122,7 @@ export default function Recorder({
                                    activeView,
                                    settingsOpen,
                                    keepRunningInBackground,
+                                   isForeground,
                                    autoPauseOnSilence,
                                    runAt30Fps,
                                    halfResolutionCanvas,
@@ -222,7 +215,6 @@ export default function Recorder({
   });
   const [hasEverRun, setHasEverRun] = useState(false);
   const [wantsToRun, setWantsToRun] = useState(true);
-  const [isForeground, setIsForeground] = useState(() => computeIsForeground());
   const [spectrogramNoiseCalibrating, setSpectrogramNoiseCalibrating] = useState(false);
   const [spectrogramNoiseProfileReady, setSpectrogramNoiseProfileReady] = useState(() => initialNoiseProfile !== null);
   const [batteryUsagePerMinute, setBatteryUsagePerMinute] = useState(null);
@@ -268,25 +260,6 @@ export default function Recorder({
   useEffect(() => {
     autoPauseOnSilenceRef.current = autoPauseOnSilence;
   }, [autoPauseOnSilence]);
-
-  useEffect(() => {
-    const updateForeground = () => {
-      setIsForeground(computeIsForeground());
-    };
-    updateForeground();
-    document.addEventListener("visibilitychange", updateForeground);
-    window.addEventListener("focus", updateForeground);
-    window.addEventListener("blur", updateForeground);
-    window.addEventListener("pageshow", updateForeground);
-    window.addEventListener("pagehide", updateForeground);
-    return () => {
-      document.removeEventListener("visibilitychange", updateForeground);
-      window.removeEventListener("focus", updateForeground);
-      window.removeEventListener("blur", updateForeground);
-      window.removeEventListener("pageshow", updateForeground);
-      window.removeEventListener("pagehide", updateForeground);
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;

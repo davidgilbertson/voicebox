@@ -2,8 +2,8 @@ import {useEffect, useRef, useState} from "react";
 import StepperControl from "./components/StepperControl.jsx";
 import {PITCH_LINE_COLOR_MODES} from "./Recorder/waveformColor.js";
 
-const SETTINGS_CHECKBOX_CLASS = "settings-checkbox h-5 w-5";
-const SETTINGS_SECTION_HEADING_CLASS = "font-semibold uppercase tracking-[0.18em] text-blue-400";
+const settingsCheckboxClass = "settings-checkbox h-5 w-5 shrink-0";
+const settingsSectionHeadingClass = "font-semibold uppercase tracking-[0.18em] text-blue-400";
 const PITCH_LINE_MODE_PREVIEW_CLASS_BY_MODE = {
   blue: "pitch-line-mode-preview pitch-line-mode-blue",
   orange: "pitch-line-mode-preview pitch-line-mode-orange",
@@ -134,14 +134,14 @@ export default function SettingsPanel({
               <div className="flex flex-col gap-1">
                 <span>Keep running in background</span>
                 <span className="text-xs text-slate-400">
-                  Keep recording even if the app doesn't have focus.
+                  Keep recording and scales playback running even if the app doesn't have focus.
                 </span>
               </div>
               <input
                   type="checkbox"
                   checked={keepRunningInBackground}
                   onChange={(event) => onKeepRunningInBackgroundChange(event.target.checked)}
-                  className={SETTINGS_CHECKBOX_CLASS}
+                  className={settingsCheckboxClass}
               />
             </label>
             <label className="flex items-start justify-between gap-4 text-sm">
@@ -155,11 +155,11 @@ export default function SettingsPanel({
                   type="checkbox"
                   checked={autoPauseOnSilence}
                   onChange={(event) => onAutoPauseOnSilenceChange(event.target.checked)}
-                  className={SETTINGS_CHECKBOX_CLASS}
+                  className={settingsCheckboxClass}
               />
             </label>
             <div className="h-2 border-t border-slate-700/80"/>
-            <div className={SETTINGS_SECTION_HEADING_CLASS}>Scales Page</div>
+            <div className={settingsSectionHeadingClass}>Scales Page</div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
                 <div className="text-xs uppercase tracking-wide text-slate-400">Min</div>
@@ -188,7 +188,7 @@ export default function SettingsPanel({
                 />
               </div>
             </div>
-            <div className={SETTINGS_SECTION_HEADING_CLASS}>Spectrogram Page</div>
+            <div className={settingsSectionHeadingClass}>Spectrogram Page</div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
                 <label htmlFor="spectrogram-min-hz" className="block text-xs uppercase tracking-wide text-slate-400">
@@ -259,7 +259,7 @@ export default function SettingsPanel({
               </div>
             </div>
             <div className="h-2 border-t border-slate-700/80"/>
-            <div className={SETTINGS_SECTION_HEADING_CLASS}>Pitch Page</div>
+            <div className={settingsSectionHeadingClass}>Pitch Page</div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-2">
                 <div className="text-xs uppercase tracking-wide text-slate-400">Min</div>
@@ -289,7 +289,7 @@ export default function SettingsPanel({
               </div>
             </div>
             <div className="h-2 border-t border-slate-700/80"/>
-            <div className={SETTINGS_SECTION_HEADING_CLASS}>Pitch + Vibrato Pages</div>
+            <div className={settingsSectionHeadingClass}>Pitch + Vibrato Pages</div>
             <fieldset className="space-y-2">
               <legend className="block text-xs uppercase tracking-wide text-slate-400">
                 Pitch line color
@@ -321,7 +321,7 @@ export default function SettingsPanel({
               </div>
             </fieldset>
             <div className="h-2 border-t border-slate-700/80"/>
-            <div className={SETTINGS_SECTION_HEADING_CLASS}>Performance</div>
+            <div className={settingsSectionHeadingClass}>Performance</div>
             <label className="flex items-start justify-between gap-4 text-sm">
               <div className="flex flex-col gap-1">
                 <span>Run at 30 FPS</span>
@@ -333,7 +333,7 @@ export default function SettingsPanel({
                   type="checkbox"
                   checked={runAt30Fps}
                   onChange={(event) => onRunAt30FpsChange(event.target.checked)}
-                  className={SETTINGS_CHECKBOX_CLASS}
+                  className={settingsCheckboxClass}
               />
             </label>
             <label className="flex items-start justify-between gap-4 text-sm">
@@ -347,7 +347,7 @@ export default function SettingsPanel({
                   type="checkbox"
                   checked={halfResolutionCanvas}
                   onChange={(event) => onHalfResolutionCanvasChange(event.target.checked)}
-                  className={SETTINGS_CHECKBOX_CLASS}
+                  className={settingsCheckboxClass}
               />
             </label>
 

@@ -43,6 +43,8 @@ function semitoneDeltaForRepeatDirection(repeatDirection) {
 export default function ScalesPage({
                                      scaleMinNote = readScaleMinNote(),
                                      scaleMaxNote = readScaleMaxNote(),
+                                     keepRunningInBackground = false,
+                                     isForeground = true,
                                    }) {
   const [bpm, setBpm] = useState(() => readScaleBpm());
   const [selectedScaleName, setSelectedScaleName] = useState(() => readScaleSelectedName());
@@ -70,6 +72,7 @@ export default function ScalesPage({
   });
 
   const selectedScalePattern = SCALE_PATTERNS[selectedScaleName] ?? SEMITONE_PATTERN;
+  const allowPlayback = keepRunningInBackground || isForeground;
 
   useEffect(() => {
     if (!Object.hasOwn(SCALE_PATTERNS, selectedScaleName)) {
@@ -166,7 +169,7 @@ export default function ScalesPage({
 
   useEffect(() => {
     stopMetronome();
-    if (!isMetronomeEnabled) return;
+    if (!isMetronomeEnabled || !allowPlayback) return;
 
     const tick = () => {
       playMetronomeTick().catch(() => {
@@ -177,7 +180,7 @@ export default function ScalesPage({
     metronomeIntervalRef.current = window.setInterval(tick, (60 / bpm) * 1000);
 
     return stopMetronome;
-  }, [bpm, isMetronomeEnabled, stopMetronome]);
+  }, [allowPlayback, bpm, isMetronomeEnabled, stopMetronome]);
 
   const playStepRef = useRef(null);
   const restartIntervalRef = useRef(null);
@@ -272,7 +275,7 @@ export default function ScalesPage({
   }, []);
 
   useEffect(() => {
-    if (!isPlaying) {
+    if (!isPlaying || !allowPlayback) {
       stopPlayback();
       stepInFlightRef.current = false;
       lastStepAtMsRef.current = 0;
@@ -297,7 +300,7 @@ export default function ScalesPage({
       cancelled = true;
       stopPlayback();
     };
-  }, [isPlaying, stopPlayback]);
+  }, [allowPlayback, isPlaying, stopPlayback]);
 
   const restartSetImmediately = useCallback((direction) => {
     const nextRootMidi = currentSetRootMidiRef.current + semitoneDeltaForRepeatDirection(direction);

@@ -25,6 +25,7 @@ function tap(area, {x = 200, y = 200, pointerId = 1} = {}) {
 }
 
 beforeEach(() => {
+  window.__setForegroundForTests({visible: true, focused: true});
   playNoteMock.mockClear();
   vi.useFakeTimers();
 });
