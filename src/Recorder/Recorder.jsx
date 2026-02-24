@@ -28,15 +28,15 @@ import {
   VIBRATO_RATE_MIN_HZ,
   VIBRATO_SWEET_MAX_HZ,
   VIBRATO_SWEET_MIN_HZ,
+  readMaxSignalLevel,
   readSpectrogramNoiseProfile,
+  writeMaxSignalLevel,
   writeSpectrogramNoiseProfile,
 } from "./config.js";
 
 const WAVE_Y_RANGE = 305; // in cents
 const MAX_DRAW_JUMP_CENTS = 80;
-const MIN_LOUDNESS = 8; // Initial session floor before adaptive tracking takes over
-const MAX_LOUDNESS = 1500; // Initial session ceiling before adaptive tracking takes over
-const LOUDNESS_TRACKING_WARMUP_HOPS = Math.round(DISPLAY_PIXELS_PER_SECOND);
+const MIN_SIGNAL_THRESHOLD = 0.015; // Time-domain RMS threshold from worklet for auto-pause
 const DEFAULT_CENTER_HZ = 220;
 
 function createHzBuffer(length) {
@@ -62,60 +62,6 @@ function setStreamListeningEnabled(stream, enabled) {
   for (const track of tracks) {
     track.enabled = enabled;
   }
-}
-
-function buildPerceptualWeightProfile(binCount, sampleRate) {
-  const weights = new Float32Array(binCount);
-  let weightSum = 0;
-  const fftSize = binCount * 2;
-  for (let i = 1; i < binCount; i += 1) {
-    const frequencyHz = (i * sampleRate) / fftSize;
-    const f2 = frequencyHz * frequencyHz;
-    const numerator = (12194 ** 2) * (f2 ** 2);
-    const denominator = (f2 + 20.6 ** 2) * (f2 + 12194 ** 2) * Math.sqrt((f2 + 107.7 ** 2) * (f2 + 737.9 ** 2));
-    const aWeightDb = 2 + (20 * Math.log10(numerator / denominator));
-    const powerWeight = 10 ** (aWeightDb / 10);
-    weights[i] = powerWeight;
-    weightSum += powerWeight;
-  }
-  return {
-    weights,
-    weightSum: weightSum > 0 ? weightSum : 1,
-  };
-}
-
-function analyzeSpectrumFrame({
-                                spectrumDb,
-                                spectrumForPitchDetection,
-                                spectrumNormalized,
-                                minDb,
-                                invDbRange,
-                                weights,
-                                weightSum,
-                              }) {
-  let allNegativeInfinity = true;
-  let maxMagnitude = 0;
-  let weightedPower = 0;
-  for (let i = 0; i < spectrumDb.length; i += 1) {
-    const dbValue = spectrumDb[i];
-    if (dbValue !== Number.NEGATIVE_INFINITY) {
-      allNegativeInfinity = false;
-    }
-    const finiteDb = Number.isFinite(dbValue) ? dbValue : minDb;
-    const magnitude = 10 ** (finiteDb / 20);
-    spectrumForPitchDetection[i] = magnitude;
-    if (magnitude > maxMagnitude) {
-      maxMagnitude = magnitude;
-    }
-    const normalized = (finiteDb - minDb) * invDbRange;
-    spectrumNormalized[i] = clamp(normalized, 0, 1);
-    weightedPower += (magnitude * magnitude) * weights[i];
-  }
-  return {
-    allNegativeInfinity,
-    maxMagnitude,
-    loudness: Math.sqrt(weightedPower / weightSum) * 1_000_000,
-  };
 }
 
 export default function Recorder({
@@ -174,14 +120,11 @@ export default function Recorder({
     sampleCount: 0,
   });
   const batteryUsageMonitorRef = useRef(createBatteryUsageMonitor());
-  const loudnessWeightProfileRef = useRef({
-    weights: new Float32Array(0),
-    weightSum: 1,
-  });
-  const loudnessTrackingRef = useRef({
-    minHeardLoudness: MIN_LOUDNESS,
-    maxHeardLoudness: MAX_LOUDNESS,
-    warmupHopsRemaining: LOUDNESS_TRACKING_WARMUP_HOPS,
+  const signalLevelRef = useRef(0);
+  // Decay on load so one unusually loud session does not pin the color scale forever.
+  const initialMaxSignalLevel = useMemo(() => readMaxSignalLevel() * 0.9, []);
+  const signalTrackingRef = useRef({
+    maxHeardSignalLevel: initialMaxSignalLevel,
   });
   const spectrumIntensityEmaRef = useRef(0);
   const animationRef = useRef({
@@ -222,6 +165,12 @@ export default function Recorder({
   const pitchMaxHz = noteNameToHz(pitchMaxNote);
   const pitchMinCents = noteNameToCents(pitchMinNote);
   const pitchMaxCents = noteNameToCents(pitchMaxNote);
+
+  useEffect(() => {
+    // We read the max signal level on load and chop it to 0.9 times the value.
+    // So now we save that value back to LS.
+    writeMaxSignalLevel(initialMaxSignalLevel);
+  }, [initialMaxSignalLevel]);
 
   useEffect(() => {
     activeViewRef.current = activeView;
@@ -322,17 +271,22 @@ export default function Recorder({
     const maxDb = analyser.maxDecibels;
     const dbRange = maxDb - minDb;
     const invDbRange = dbRange > 0 ? 1 / dbRange : 0;
-    const analysis = analyzeSpectrumFrame({
-      spectrumDb: capture.spectrumDb,
-      spectrumForPitchDetection: capture.spectrumForPitchDetection,
-      spectrumNormalized: capture.spectrumNormalized,
-      minDb,
-      invDbRange,
-      weights: loudnessWeightProfileRef.current.weights,
-      weightSum: loudnessWeightProfileRef.current.weightSum,
-    });
-    const {allNegativeInfinity, maxMagnitude} = analysis;
-    const loudness = analysis.loudness;
+    let allNegativeInfinity = true;
+    let maxMagnitude = 0;
+    for (let i = 0; i < capture.spectrumDb.length; i += 1) {
+      const dbValue = capture.spectrumDb[i];
+      if (dbValue !== Number.NEGATIVE_INFINITY) {
+        allNegativeInfinity = false;
+      }
+      const finiteDb = Number.isFinite(dbValue) ? dbValue : minDb;
+      const magnitude = 10 ** (finiteDb / 20);
+      capture.spectrumForPitchDetection[i] = magnitude;
+      if (magnitude > maxMagnitude) {
+        maxMagnitude = magnitude;
+      }
+      const normalized = (finiteDb - minDb) * invDbRange;
+      capture.spectrumNormalized[i] = clamp(normalized, 0, 1);
+    }
     if (maxMagnitude > 0) {
       const scale = 1 / maxMagnitude;
       for (let i = 0; i < capture.spectrumForPitchDetection.length; i += 1) {
@@ -348,36 +302,9 @@ export default function Recorder({
       skipNextSpectrumFrameRef.current = false;
       return null;
     }
-    if (loudness <= 0) {
-      return {
-        spectrumNormalized: capture.spectrumNormalized,
-        spectrumForPitchDetection: capture.spectrumForPitchDetection,
-        loudness,
-      };
-    }
-    const tracking = loudnessTrackingRef.current;
-    if (tracking.warmupHopsRemaining > 0) {
-      tracking.warmupHopsRemaining -= 1;
-    } else if (tracking.warmupHopsRemaining === 0) {
-      tracking.warmupHopsRemaining -= 1;
-      // This is the first step after warmup. Could be page load or pause resume
-      // For page load only we init the min/max to the current volume
-      if (tracking.minHeardLoudness === MIN_LOUDNESS && tracking.maxHeardLoudness === MAX_LOUDNESS) {
-        tracking.minHeardLoudness = loudness;
-        tracking.maxHeardLoudness = loudness;
-      }
-    } else {
-      if (loudness < tracking.minHeardLoudness) {
-        tracking.minHeardLoudness = loudness;
-      }
-      if (loudness > tracking.maxHeardLoudness) {
-        tracking.maxHeardLoudness = loudness;
-      }
-    }
     return {
       spectrumNormalized: capture.spectrumNormalized,
       spectrumForPitchDetection: capture.spectrumForPitchDetection,
-      loudness,
     };
   };
 
@@ -414,10 +341,6 @@ export default function Recorder({
     writeSpectrogramNoiseProfile(null);
     setSpectrogramNoiseProfileReady(false);
   }, []);
-  const restartLoudnessTrackingWarmup = useCallback(() => {
-    loudnessTrackingRef.current.warmupHopsRemaining = LOUDNESS_TRACKING_WARMUP_HOPS;
-  }, []);
-
   const onNoiseCalibratePointerDown = useCallback((event) => {
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -476,11 +399,18 @@ export default function Recorder({
     const capturedSpectrum = captureSpectrogramBins();
     const spectrumNormalized = capturedSpectrum?.spectrumNormalized ?? null;
     const spectrumForPitchDetection = capturedSpectrum?.spectrumForPitchDetection ?? null;
-    const loudness = capturedSpectrum?.loudness ?? 0;
+    const signalLevel = signalLevelRef.current;
     if (!spectrumForPitchDetection) return false;
-    const minHeardLoudness = loudnessTrackingRef.current.minHeardLoudness;
-    const maxHeardLoudness = loudnessTrackingRef.current.maxHeardLoudness;
-    const isAboveSilenceThreshold = loudness > minHeardLoudness * 2;
+
+    const signalTracking = signalTrackingRef.current;
+    // We only update on non-trivial increases to minimize work
+    if (signalLevel > (signalTracking.maxHeardSignalLevel + 0.01)) {
+      signalTracking.maxHeardSignalLevel = signalLevel;
+      writeMaxSignalLevel(signalLevel);
+    }
+    const maxHeardSignalLevel = signalTracking.maxHeardSignalLevel;
+
+    const isAboveSilenceThreshold = signalLevel > MIN_SIGNAL_THRESHOLD;
     const result = isAboveSilenceThreshold
         ? analyzeAudioWindowFftPitch(
             audioRef.current,
@@ -494,14 +424,14 @@ export default function Recorder({
         };
     let pitchWriteResult = null;
     if (result) {
-      const loudnessSpan = maxHeardLoudness - minHeardLoudness;
-      const spectrumIntensity = clamp(
-          loudnessSpan > 0 ? ((loudness - minHeardLoudness) / loudnessSpan) : 0,
+      const signalSpan = maxHeardSignalLevel - MIN_SIGNAL_THRESHOLD;
+      const signalIntensity = clamp(
+          signalSpan > 0 ? ((signalLevel - MIN_SIGNAL_THRESHOLD) / signalSpan) : 0,
           0,
           1
       );
       const previousSpectrumIntensity = spectrumIntensityEmaRef.current;
-      const smoothedSpectrumIntensity = previousSpectrumIntensity + ((spectrumIntensity - previousSpectrumIntensity) * 0.2);
+      const smoothedSpectrumIntensity = previousSpectrumIntensity + ((signalIntensity - previousSpectrumIntensity) * 0.2);
       spectrumIntensityEmaRef.current = smoothedSpectrumIntensity;
       pitchWriteResult = writePitchTimeline(timelineRef.current, {
         autoPauseOnSilence: autoPauseOnSilenceRef.current,
@@ -537,7 +467,7 @@ export default function Recorder({
       });
       const context = new AudioContext();
       await context.audioWorklet.addModule(
-          new URL("./worklets/audioCaptureProcessor.js", import.meta.url)
+          new URL("./worklets/audioWorklet.js", import.meta.url)
       );
       await context.resume();
       const source = context.createMediaStreamSource(stream);
@@ -550,10 +480,9 @@ export default function Recorder({
       const analyser = context.createAnalyser();
       analyser.fftSize = FFT_SIZE;
       analyser.smoothingTimeConstant = 0;
-      loudnessWeightProfileRef.current = buildPerceptualWeightProfile(analyser.frequencyBinCount, context.sampleRate);
-      restartLoudnessTrackingWarmup();
       captureNode.port.onmessage = (event) => {
-        const sampleCount = Number(event.data);
+        const sampleCount = Number(event.data.sampleCount);
+        signalLevelRef.current = Number(event.data.signalLevel) || 0;
         const expectedHopSize = hopSizeRef.current;
         if (!Number.isFinite(sampleCount) || sampleCount !== expectedHopSize) {
           console.log("something has gone very wrong this should not be possible", {
@@ -655,6 +584,7 @@ export default function Recorder({
     audioRef.current.captureNode = null;
     audioRef.current.analyser = null;
     audioRef.current.sinkGain = null;
+    signalLevelRef.current = 0;
     manualPauseRef.current = false;
     setUi((prev) => ({...prev, isRunning: false}));
     animationRef.current.timelineDirty = false;
@@ -838,14 +768,10 @@ export default function Recorder({
   useEffect(() => {
     if (!ui.isRunning) return;
     const shouldListen = wantsToRun;
-    const wasPaused = manualPauseRef.current;
     manualPauseRef.current = !shouldListen;
-    if (shouldListen && wasPaused) {
-      restartLoudnessTrackingWarmup();
-    }
     const stream = audioRef.current.stream;
     setStreamListeningEnabled(stream, shouldListen);
-  }, [restartLoudnessTrackingWarmup, ui.isRunning, wantsToRun]);
+  }, [ui.isRunning, wantsToRun]);
 
   useEffect(() => {
     onSettingsRuntimeChange({

@@ -40,12 +40,17 @@ Chart progression is driven by audio sample counts, not wall-clock time.
 
 - Per-bin linear magnitudes, peak-normalized per hop for pitch detection.
 
-7. `spectrumPeakMagnitude`
+7. `signalLevel`
 
-- Max linear magnitude across one hop's spectrum.
-- Used for silence gating and chart intensity scaling.
+- Time-domain RMS from worklet input samples, in a practical `[0..1]` range.
+- Used for silence gating / auto-pause thresholding and line-color intensity normalization.
 
-8. `intensity`
+8. `maxSignalLevel`
+
+- Running per-session maximum of `signalLevel` (after warmup).
+- Initialized from persisted localStorage value with a decay factor (`stored * 0.9`).
+
+9. `intensity`
 
 - Normalized `[0..1]` value used for pitch/vibrato line coloring.
 - Stored in timeline as `timelineRef.current.intensities`.
@@ -53,13 +58,19 @@ Chart progression is driven by audio sample counts, not wall-clock time.
 ## Pipeline
 
 1. Audio worklet (`AudioCaptureProcessor`) counts incoming input samples.
-2. Every full `hopSize` samples, it posts one message containing `sampleCount` (expected to equal `hopSize`).
+2. Every full `hopSize` samples, it posts one message containing:
+
+- `sampleCount` (expected to equal `hopSize`)
+- `signalLevel` (hop RMS, `[0..1]`)
+
 3. On each message (`captureNode.port.onmessage` in `src/Recorder/Recorder.jsx`):
 
 - Capture analyser spectrum once.
-- Build `spectrumDb`, `spectrumNormalized`, `spectrumForPitchDetection`, `spectrumPeakMagnitude`.
-- Detect pitch from `spectrumForPitchDetection`.
-- Compute `intensity` from `spectrumPeakMagnitude` (with EMA smoothing).
+- Build `spectrumDb`, `spectrumNormalized`, `spectrumForPitchDetection`.
+- Silence-gate pitch detection from `signalLevel` threshold.
+- Detect pitch from `spectrumForPitchDetection` when gate is open.
+- Update running `maxSignalLevel` from `signalLevel` after warmup.
+- Compute `intensity` from `signalLevel` using fixed floor + running max (with EMA smoothing).
 - Write pitch/intensity into shared timeline ring.
 - Append spectrogram column (`spectrumNormalized`, optionally noise-filtered) unless silence-paused.
 

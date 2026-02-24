@@ -10,6 +10,7 @@ const HALF_RESOLUTION_CANVAS_STORAGE_KEY = "voicebox.halfResolutionCanvas";
 const PITCH_MIN_NOTE_STORAGE_KEY = "voicebox.pitchMinNote";
 const PITCH_MAX_NOTE_STORAGE_KEY = "voicebox.pitchMaxNote";
 const PITCH_LINE_COLOR_MODE_STORAGE_KEY = "voicebox.pitchLineColorMode";
+const MAX_SIGNAL_LEVEL_STORAGE_KEY = "voicebox.maxSignalLevel";
 const SPECTROGRAM_MIN_HZ_STORAGE_KEY = "voicebox.spectrogramMinHz";
 const SPECTROGRAM_MAX_HZ_STORAGE_KEY = "voicebox.spectrogramMaxHz";
 const SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY = "voicebox.spectrogramNoiseProfile";
@@ -37,6 +38,7 @@ const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
 const RUN_AT_30_FPS_DEFAULT = false;
 const HALF_RESOLUTION_CANVAS_DEFAULT = false;
 const PITCH_LINE_COLOR_MODE_DEFAULT = "terrain";
+const MAX_SIGNAL_LEVEL_DEFAULT = 0.2;
 const PITCH_LINE_COLOR_MODE_SET = new Set(PITCH_LINE_COLOR_MODES.map((item) => item.value));
 
 function safeReadPitchNote(storageKey, fallback) {
@@ -107,6 +109,16 @@ export function readPitchLineColorMode() {
 export function writePitchLineColorMode(value) {
   if (!PITCH_LINE_COLOR_MODE_SET.has(value)) return;
   ls.set(PITCH_LINE_COLOR_MODE_STORAGE_KEY, value);
+}
+
+export function readMaxSignalLevel() {
+  const stored = Number(ls.get(MAX_SIGNAL_LEVEL_STORAGE_KEY, MAX_SIGNAL_LEVEL_DEFAULT));
+  return Number.isFinite(stored) && stored > 0 ? stored : MAX_SIGNAL_LEVEL_DEFAULT;
+}
+
+export function writeMaxSignalLevel(value) {
+  if (!Number.isFinite(value) || value <= 0) return;
+  ls.set(MAX_SIGNAL_LEVEL_STORAGE_KEY, value);
 }
 
 export function readSpectrogramMinHz() {
