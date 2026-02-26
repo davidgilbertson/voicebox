@@ -16,8 +16,11 @@ const SPECTROGRAM_MAX_HZ_STORAGE_KEY = "voicebox.spectrogramMaxHz";
 const SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY = "voicebox.spectrogramNoiseProfile";
 
 // Developer-changeable tuning and defaults.
-// The pitch detection algorithm is tuned to work well with FFT_SIZE = 8192
-export const FFT_SIZE = 8192; // AnalyserNode uses this as the input window sample count
+// The FFT_SIZE trade-off:
+// 8192 means ~170ms of input at 48kHz, and a bin near 50Hz is 20px tall on a 1000px-high log spectrogram (40->11000Hz)
+// 4096 means ~85ms of input at 48kHz, and a bin near 50Hz is 38px tall on a 1000px-high log spectrogram (40->11000Hz)
+// export const FFT_SIZE = 8192; // AnalyserNode uses this as the input window sample count
+export const FFT_SIZE = 4096; // AnalyserNode uses this as the input window sample count
 export const SPECTROGRAM_BIN_COUNT = FFT_SIZE / 2; // output bin count is always FFT_SIZE / 2
 export const DISPLAY_PIXELS_PER_SECOND = 80; // E.g. @ 400px wide, the chart would show 5 seconds of audio
 export const SILENCE_PAUSE_THRESHOLD_MS = 300;
@@ -28,8 +31,7 @@ export const VIBRATO_SWEET_MAX_HZ = 8;
 export const VIBRATO_RATE_MAX_HZ = 9;
 export const VIBRATO_ANALYSIS_WINDOW_SECONDS = 0.5;
 export const VIBRATO_MIN_CONTIGUOUS_SECONDS = 0.4;
-export const VIBRATO_MAX_MARKER_PX_PER_FRAME = 2;
-export const VIBRATO_RATE_HOLD_MS = 300;
+export const VIBRATO_RATE_HOLD_MS = 2000;
 export const PITCH_MIN_NOTE_DEFAULT = "C1";
 export const PITCH_MAX_NOTE_DEFAULT = "F6";
 const SPECTROGRAM_MIN_HZ_DEFAULT = 30;

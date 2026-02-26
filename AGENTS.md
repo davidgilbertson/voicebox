@@ -8,6 +8,7 @@
   2. Then fix the code so the bug no longer occurs and the test passes.
   3. Prefer tests that validate behavior/classes of behavior, not tests that are unnecessarily hyper-focused on one exact implementation detail.
   4. If the issue is not realistically testable in automation (for example, requires real phone/device interaction), call that out explicitly and rely on manual verification.
+- When running tests, just do `npm test` with no args.
 - For colors, use Tailwind. For colors in JS, `import colors from "tailwindcss/colors";`
 - Don't do checks for `window` being undefined in the app code.
 - Don't create variables for the sake of variables, if you can inline a value then do so. Only create variables if it will be used in many places, or naming it is important for understanding.

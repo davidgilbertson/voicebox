@@ -32,11 +32,11 @@ test("timeline keeps SPS * seconds points and 60 points per 5Hz oscillation at 3
     seconds,
     silencePauseStepThreshold: silencePauseStepThreshold(samplesPerSecond, 300),
   });
-  const vibratoRateHz = 5;
+  const vibratoRate = 5;
   const totalTicks = samplesPerSecond * seconds;
   for (let i = 1; i <= totalTicks; i += 1) {
     const t = i / samplesPerSecond;
-    const cents = Math.sin(2 * Math.PI * vibratoRateHz * t) * 50;
+    const cents = Math.sin(2 * Math.PI * vibratoRate * t) * 50;
     writePitchTimeline(state, {
       cents,
       intensity: 0.5,
@@ -45,7 +45,7 @@ test("timeline keeps SPS * seconds points and 60 points per 5Hz oscillation at 3
 
   assert.equal(state.count, samplesPerSecond * seconds);
   const values = orderedValues(state);
-  const firstOscillation = values.slice(0, samplesPerSecond / vibratoRateHz);
+  const firstOscillation = values.slice(0, samplesPerSecond / vibratoRate);
   assert.equal(firstOscillation.length, 60);
   assert.ok(firstOscillation.every(Number.isFinite));
   const intensities = orderedIntensities(state);

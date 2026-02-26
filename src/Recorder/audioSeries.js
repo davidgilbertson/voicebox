@@ -108,6 +108,21 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
     return {score, p0Magnitude};
   }
 
+  function findTopTwoSeedPeaks() {
+    const localPeaks = [];
+    for (let bin = minBin + 1; bin < maxBin; bin += 1) {
+      const left = spectrumBins[bin - 1];
+      const center = spectrumBins[bin];
+      const right = spectrumBins[bin + 1];
+      if (!(center >= left && center > right)) continue;
+      localPeaks.push({bin, magnitude: center});
+    }
+    localPeaks.sort((a, b) => b.magnitude - a.magnitude);
+    if (localPeaks.length >= 2) return [localPeaks[0], localPeaks[1]];
+    if (localPeaks.length === 1) return [localPeaks[0]];
+    return [];
+  }
+
   function refineF0FromPartials(baseF0Bin) {
     let weightedSum = 0;
     let totalWeight = 0;
@@ -147,24 +162,34 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
     }
   }
 
+  const seedPeaks = findTopTwoSeedPeaks();
+  if (!seedPeaks.length) {
+    seedPeaks.push({bin: strongestPeakBin, magnitude: strongestPeakMagnitude});
+  }
+  if (seedPeaks.length === 1 && seedPeaks[0].bin !== strongestPeakBin) {
+    seedPeaks.push({bin: strongestPeakBin, magnitude: strongestPeakMagnitude});
+  }
+
   let bestP = 1;
   let bestF0Bin = strongestPeakBin;
   let bestScore = Number.NEGATIVE_INFINITY;
-  for (let p = 1; p <= maxP; p += 1) {
-    const f0Bin = strongestPeakBin / p;
-    if (f0Bin < minBin || f0Bin > maxBin) continue;
-    const {score, p0Magnitude} = scoreHypothesis(f0Bin);
-    let hypothesisScore = score;
-    if (p > 1) {
-      const expectedP0Magnitude = strongestPeakMagnitude * expectedP0MinRatio;
-      const p0Deficit = Math.max(0, expectedP0Magnitude - p0Magnitude);
-      hypothesisScore -= p0Deficit * expectedP0PenaltyWeight;
-    }
-    hypothesisScore -= p * downwardBiasPerP;
-    if (hypothesisScore > bestScore) {
-      bestScore = hypothesisScore;
-      bestP = p;
-      bestF0Bin = f0Bin;
+  for (const seedPeak of seedPeaks.slice(0, 2)) {
+    for (let p = 1; p <= maxP; p += 1) {
+      const f0Bin = seedPeak.bin / p;
+      if (f0Bin < minBin || f0Bin > maxBin) continue;
+      const {score, p0Magnitude} = scoreHypothesis(f0Bin);
+      let hypothesisScore = score;
+      if (p > 1) {
+        const expectedP0Magnitude = seedPeak.magnitude * expectedP0MinRatio;
+        const p0Deficit = Math.max(0, expectedP0Magnitude - p0Magnitude);
+        hypothesisScore -= p0Deficit * expectedP0PenaltyWeight;
+      }
+      hypothesisScore -= p * downwardBiasPerP;
+      if (hypothesisScore > bestScore) {
+        bestScore = hypothesisScore;
+        bestP = p;
+        bestF0Bin = f0Bin;
+      }
     }
   }
 

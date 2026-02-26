@@ -19,25 +19,13 @@ function contiguousFiniteTail(values, maxSamples) {
   return tail;
 }
 
-function median(values) {
-  if (!values.length) return Number.NaN;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 0) {
-    return (sorted[mid - 1] + sorted[mid]) / 2;
-  }
-  return sorted[mid];
-}
-
-export function estimateTimelineVibratoRateHz({
+function centeredFiniteTail({
   values,
   writeIndex,
   count,
   samplesPerSecond,
-  minRateHz = 4,
-  maxRateHz = 10,
-  analysisWindowSeconds = 2.5,
-  minContinuousSeconds = 0.6,
+  analysisWindowSeconds,
+  minContinuousSeconds,
 }) {
   if (!values || count <= 0 || samplesPerSecond <= 0) return null;
 
@@ -53,41 +41,85 @@ export function estimateTimelineVibratoRateHz({
   }
   const mean = sum / tail.length;
 
-  let sumSquares = 0;
   const centered = new Array(tail.length);
+  let sumSquares = 0;
   for (let i = 0; i < tail.length; i += 1) {
     const delta = tail[i] - mean;
     centered[i] = delta;
     sumSquares += delta * delta;
   }
   const rms = Math.sqrt(sumSquares / centered.length);
-  if (rms < 5) return null;
+  return {
+    centered,
+    rms,
+  };
+}
 
-  const crossings = [];
-  const epsilon = 1e-6;
-  for (let i = 1; i < centered.length; i += 1) {
-    const prev = centered[i - 1];
-    const next = centered[i];
-    if (!(prev <= 0 && next > 0)) continue;
-    const slope = next - prev;
-    if (Math.abs(slope) <= epsilon) continue;
-    const t = (0 - prev) / slope;
-    crossings.push((i - 1) + t);
+function rateFromLastTwoPeaks(centered, samplesPerSecond) {
+  if (!centered || centered.length < 5) return null;
+
+  const peakIndices = [];
+  const troughIndices = [];
+  for (let i = 2; i < centered.length - 2; i += 1) {
+    // 5-point peak shape. Same idea as the experiment code, but without debug payloads/logging.
+    const isPeakShape = centered[i - 2] < centered[i - 1]
+      && centered[i - 1] < centered[i]
+      && centered[i] > centered[i + 1]
+      && centered[i + 1] > centered[i + 2];
+    const isTroughShape = centered[i - 2] > centered[i - 1]
+      && centered[i - 1] > centered[i]
+      && centered[i] < centered[i + 1]
+      && centered[i + 1] < centered[i + 2];
+    if (isPeakShape) peakIndices.push(i);
+    if (isTroughShape) troughIndices.push(i);
   }
 
-  if (crossings.length < 2) return null;
+  const slopeLookback = Math.min(6, centered.length - 1);
+  const endSlope = centered[centered.length - 1] - centered[centered.length - 1 - slopeLookback];
+  const selected = endSlope >= 0 ? troughIndices : peakIndices;
+  if (selected.length < 2) return null;
 
-  const periodsInSamples = [];
-  for (let i = 1; i < crossings.length; i += 1) {
-    const spacing = crossings[i] - crossings[i - 1];
-    if (spacing > 0) periodsInSamples.push(spacing);
+  const firstIndex = selected[selected.length - 2];
+  const secondIndex = selected[selected.length - 1];
+  const spacingSamples = secondIndex - firstIndex;
+  if (!(spacingSamples > 0)) return null;
+
+  let minInWindow = Number.POSITIVE_INFINITY;
+  let maxInWindow = Number.NEGATIVE_INFINITY;
+  for (let i = firstIndex; i <= secondIndex; i += 1) {
+    const value = centered[i];
+    if (value < minInWindow) minInWindow = value;
+    if (value > maxInWindow) maxInWindow = value;
   }
-  if (!periodsInSamples.length) return null;
+  // Ignore tiny motion; this generally does not sound like intentional vibrato.
+  if ((maxInWindow - minInWindow) < 12) return null;
 
-  const periodSamples = median(periodsInSamples);
-  if (!Number.isFinite(periodSamples) || periodSamples <= 0) return null;
+  const rateHz = samplesPerSecond / spacingSamples;
+  return Number.isFinite(rateHz) ? rateHz : null;
+}
 
-  const rateHz = samplesPerSecond / periodSamples;
+export function estimateTimelineVibratoRate({
+  values,
+  writeIndex,
+  count,
+  samplesPerSecond,
+  minRateHz = 4,
+  maxRateHz = 10,
+  analysisWindowSeconds = 2.5,
+  minContinuousSeconds = 0.6,
+}) {
+  const tailData = centeredFiniteTail({
+    values,
+    writeIndex,
+    count,
+    samplesPerSecond,
+    analysisWindowSeconds,
+    minContinuousSeconds,
+  });
+  if (!tailData) return null;
+  if (tailData.rms < 5) return null;
+
+  const rateHz = rateFromLastTwoPeaks(tailData.centered, samplesPerSecond);
   if (!Number.isFinite(rateHz)) return null;
   if (rateHz < minRateHz || rateHz > maxRateHz) return null;
   return rateHz;

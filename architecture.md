@@ -2,6 +2,8 @@
 
 This describes the pipeline from mic input to chart canvases.
 
+In this app, audio work is typically done in < 1 ms but we still care about performance to limit battery drain.
+
 ## Core rule
 
 Chart progression is driven by audio sample counts, not wall-clock time.

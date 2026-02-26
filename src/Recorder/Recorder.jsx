@@ -5,7 +5,9 @@ import {
   updateCenterFromHzBuffer,
 } from "./audioSeries.js";
 import {createPitchTimeline, resizePitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
-import {estimateTimelineVibratoRateHz} from "./vibratoRate.js";
+import {
+  estimateTimelineVibratoRate
+} from "./vibratoRate.js";
 import VibratoChart from "./VibratoChart.jsx";
 import PitchChart from "./PitchChart.jsx";
 import SpectrogramChart from "./SpectrogramChart.jsx";
@@ -21,7 +23,6 @@ import {
   SILENCE_PAUSE_THRESHOLD_MS,
   SPECTROGRAM_BIN_COUNT,
   VIBRATO_ANALYSIS_WINDOW_SECONDS,
-  VIBRATO_MAX_MARKER_PX_PER_FRAME,
   VIBRATO_MIN_CONTIGUOUS_SECONDS,
   VIBRATO_RATE_HOLD_MS,
   VIBRATO_RATE_MAX_HZ,
@@ -130,8 +131,10 @@ export default function Recorder({
   const animationRef = useRef({
     rafId: 0,
     lastFrameMs: 0,
-    displayedVibratoRateHz: null,
+    displayedVibratoRate: null,
+    lastVibratoRateUpdateMs: null,
     lastValidVibratoTick: null,
+    missingVibratoTickCount: 0,
     timelineDirty: false, // TODO (@davidgilbertson): not convinced this is necessary
   });
   const forceRedrawRef = useRef(false);
@@ -154,7 +157,7 @@ export default function Recorder({
   const [ui, setUi] = useState({
     isRunning: false,
     error: "",
-    vibratoRateHz: null,
+    vibratoRate: null,
   });
   const [hasEverRun, setHasEverRun] = useState(false);
   const [wantsToRun, setWantsToRun] = useState(true);
@@ -409,6 +412,7 @@ export default function Recorder({
       writeMaxSignalLevel(signalLevel);
     }
     const maxHeardSignalLevel = signalTracking.maxHeardSignalLevel;
+    const usedMaxSignalLevel = maxHeardSignalLevel * 0.8;
 
     const isAboveSilenceThreshold = signalLevel > MIN_SIGNAL_THRESHOLD;
     const result = isAboveSilenceThreshold
@@ -424,7 +428,7 @@ export default function Recorder({
         };
     let pitchWriteResult = null;
     if (result) {
-      const signalSpan = maxHeardSignalLevel - MIN_SIGNAL_THRESHOLD;
+      const signalSpan = usedMaxSignalLevel - MIN_SIGNAL_THRESHOLD;
       const signalIntensity = clamp(
           signalSpan > 0 ? ((signalLevel - MIN_SIGNAL_THRESHOLD) / signalSpan) : 0,
           0,
@@ -643,8 +647,8 @@ export default function Recorder({
 
     const didTimelineChange = animationRef.current.timelineDirty;
     animationRef.current.timelineDirty = false;
-    const previousDisplayedRateHz = animationRef.current.displayedVibratoRateHz;
-    let displayedRateHz = null;
+    const previousDisplayedRate = animationRef.current.displayedVibratoRate;
+    let displayedRate = null;
     const currentView = activeViewRef.current;
 
     if (currentView === "vibrato") {
@@ -655,9 +659,9 @@ export default function Recorder({
           pitchRangeRef.current.minHz,
           pitchRangeRef.current.maxHz
       );
-      let estimatedRateHz = null;
+      let estimatedRate = null;
       if (didTimelineChange) {
-        estimatedRateHz = estimateTimelineVibratoRateHz({
+        estimatedRate = estimateTimelineVibratoRate({
           values: timelineRef.current.values,
           writeIndex: timelineRef.current.writeIndex,
           count: timelineRef.current.count,
@@ -669,36 +673,42 @@ export default function Recorder({
         });
       }
 
-      if (estimatedRateHz !== null) {
+      if (estimatedRate !== null) {
         animationRef.current.lastValidVibratoTick = timelineTickCount;
-        const previousRateHz = animationRef.current.displayedVibratoRateHz;
-        if (previousRateHz === null) {
-          displayedRateHz = estimatedRateHz;
+        if (previousDisplayedRate === null) {
+          displayedRate = estimatedRate;
+          animationRef.current.missingVibratoTickCount = 0;
         } else {
-          const barWidth = Math.max(1, vibratoChartRef.current?.getRateBarWidth() ?? 1);
-          const hzSpan = VIBRATO_RATE_MAX_HZ - VIBRATO_RATE_MIN_HZ;
-          const pixelsPerHz = barWidth / hzSpan;
-          const maxHzStep = VIBRATO_MAX_MARKER_PX_PER_FRAME / pixelsPerHz;
-          const delta = estimatedRateHz - previousRateHz;
-          if (Math.abs(delta) > maxHzStep) {
-            displayedRateHz = previousRateHz + Math.sign(delta) * maxHzStep;
-          } else {
-            displayedRateHz = estimatedRateHz;
-          }
+          const elapsedSinceLastRateUpdateMs = animationRef.current.lastVibratoRateUpdateMs === null
+              ? 16
+              : Math.max(0, nowMs - animationRef.current.lastVibratoRateUpdateMs);
+          const baseSmoothingFactor = 1 - Math.exp(-elapsedSinceLastRateUpdateMs / 420);
+          // Treat missing ticks like they had the current estimate; bigger gaps then pull faster.
+          const missingTickCount = animationRef.current.missingVibratoTickCount;
+          const smoothingFactor = 1 - ((1 - baseSmoothingFactor) ** (missingTickCount + 1));
+          displayedRate = previousDisplayedRate + ((estimatedRate - previousDisplayedRate) * smoothingFactor);
+          animationRef.current.missingVibratoTickCount = 0;
         }
+        animationRef.current.lastVibratoRateUpdateMs = nowMs;
       } else if (
-          previousDisplayedRateHz !== null &&
+          previousDisplayedRate !== null &&
           animationRef.current.lastValidVibratoTick !== null &&
           timelineTickCount - animationRef.current.lastValidVibratoTick <= holdTickThreshold
       ) {
-        displayedRateHz = previousDisplayedRateHz;
+        displayedRate = previousDisplayedRate;
+        animationRef.current.lastVibratoRateUpdateMs = nowMs;
+        if (didTimelineChange) {
+          animationRef.current.missingVibratoTickCount += 1;
+        }
       }
     } else {
       animationRef.current.lastValidVibratoTick = null;
+      animationRef.current.lastVibratoRateUpdateMs = null;
+      animationRef.current.missingVibratoTickCount = 0;
     }
 
-    const didDisplayRateChange = displayedRateHz !== previousDisplayedRateHz;
-    animationRef.current.displayedVibratoRateHz = displayedRateHz;
+    const didDisplayRateChange = displayedRate !== previousDisplayedRate;
+    animationRef.current.displayedVibratoRate = displayedRate;
 
     const shouldDrawNow = forceRedrawRef.current || didTimelineChange;
     if (shouldDrawNow) {
@@ -708,7 +718,7 @@ export default function Recorder({
     if (didDisplayRateChange) {
       setUi((prev) => ({
         ...prev,
-        vibratoRateHz: displayedRateHz,
+        vibratoRate: displayedRate,
       }));
     }
     animationRef.current.rafId = requestAnimationFrame(renderLoop);
@@ -809,7 +819,7 @@ export default function Recorder({
                 ref={vibratoChartRef}
                 yRange={WAVE_Y_RANGE}
                 maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
-                vibratoRateHz={ui.vibratoRateHz}
+                vibratoRate={ui.vibratoRate}
                 vibratoRateMinHz={VIBRATO_RATE_MIN_HZ}
                 vibratoRateMaxHz={VIBRATO_RATE_MAX_HZ}
                 vibratoSweetMinHz={VIBRATO_SWEET_MIN_HZ}

@@ -13,7 +13,7 @@ const VibratoChart = forwardRef(function VibratoChart({
                                                         yRange,
                                                         maxDrawJumpCents,
                                                         lineColorMode = "terrain",
-                                                        vibratoRateHz,
+                                                        vibratoRate,
                                                         vibratoRateMinHz,
                                                         vibratoRateMaxHz,
                                                         vibratoSweetMinHz,
@@ -21,7 +21,6 @@ const VibratoChart = forwardRef(function VibratoChart({
                                                         renderScale = 1,
                                                       }, ref) {
   const chartRef = useRef(null);
-  const barRef = useRef(null);
   const backgroundCacheRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
@@ -83,14 +82,11 @@ const VibratoChart = forwardRef(function VibratoChart({
         },
       });
     },
-    getRateBarWidth() {
-      return Math.max(1, barRef.current?.clientWidth ?? 1);
-    },
   }), [lineColorMode, maxDrawJumpCents, yRange]);
 
-  const vibratoRatePositionPct = vibratoRateHz === null
+  const vibratoRatePositionPct = vibratoRate === null
       ? null
-      : ((vibratoRateHz - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100;
+      : ((vibratoRate - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100;
   const vibratoRatePillPct = vibratoRatePositionPct === null
       ? null
       : clamp(vibratoRatePositionPct, 8, 92);
@@ -98,6 +94,11 @@ const VibratoChart = forwardRef(function VibratoChart({
   const sweetEndPct = ((vibratoSweetMaxHz - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100;
   const sweetSpanHz = Math.max(1e-3, vibratoSweetMaxHz - vibratoSweetMinHz);
   const fadePct = clamp((1 / sweetSpanHz) * 100, 0, 50);
+  const intermediateHzLabels = [];
+  for (let hz = Math.ceil(vibratoRateMinHz) + 1; hz < Math.floor(vibratoRateMaxHz); hz += 1) {
+    if (hz === vibratoSweetMinHz || hz === vibratoSweetMaxHz) continue;
+    intermediateHzLabels.push(hz);
+  }
   const sweetGradient = `linear-gradient(to right,
     rgba(52, 211, 153, 0) 0%,
     rgba(52, 211, 153, 0.85) ${fadePct}%,
@@ -115,7 +116,7 @@ const VibratoChart = forwardRef(function VibratoChart({
         </div>
         <div className="pointer-events-none border-t border-slate-800/70 px-2 pb-2 pt-1">
           <div className="relative">
-            <div ref={barRef} className="relative h-3 w-full overflow-hidden rounded-none bg-slate-600/80">
+            <div className="relative h-3 w-full overflow-hidden rounded-none bg-slate-600/80">
               <div
                   className="absolute top-0 bottom-0"
                   style={{
@@ -131,7 +132,7 @@ const VibratoChart = forwardRef(function VibratoChart({
                       className="absolute -top-8 -translate-x-1/2 whitespace-nowrap rounded-full border border-slate-300/20 bg-slate-900/85 px-2 py-0.5 text-xs font-medium text-slate-100"
                       style={{left: `${vibratoRatePillPct}%`}}
                   >
-                    {vibratoRateHz.toFixed(1)} Hz
+                    {vibratoRate.toFixed(1)} Hz
                   </div>
                   <div
                       className="absolute -top-3 bottom-0 w-0.5 bg-white/90"
@@ -148,6 +149,15 @@ const VibratoChart = forwardRef(function VibratoChart({
             <span className="absolute top-0 -translate-x-1/2 text-slate-300/85" style={{left: `${sweetEndPct}%`}}>
               {vibratoSweetMaxHz} Hz
             </span>
+            {intermediateHzLabels.map((hz) => (
+                <span
+                    key={hz}
+                    className="absolute top-0 -translate-x-1/2"
+                    style={{left: `${((hz - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100}%`}}
+                >
+                  {hz} Hz
+                </span>
+            ))}
             <span className="absolute right-0 top-0">{vibratoRateMaxHz} Hz</span>
           </div>
         </div>

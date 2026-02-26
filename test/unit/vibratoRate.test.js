@@ -1,6 +1,8 @@
 import {test} from "vitest";
 import assert from "node:assert/strict";
-import {estimateTimelineVibratoRateHz} from "../../src/Recorder/vibratoRate.js";
+import {
+  estimateTimelineVibratoRate,
+} from "../../src/Recorder/vibratoRate.js";
 
 function createTimelineFromSeries(series) {
   return {
@@ -10,7 +12,7 @@ function createTimelineFromSeries(series) {
   };
 }
 
-test("vibrato rate estimator detects a stable 6Hz signal", () => {
+function assertDetectsStable6Hz(estimate) {
   const samplesPerSecond = 200;
   const seconds = 5;
   const total = samplesPerSecond * seconds;
@@ -21,7 +23,7 @@ test("vibrato rate estimator detects a stable 6Hz signal", () => {
   }
 
   const timeline = createTimelineFromSeries(series);
-  const rateHz = estimateTimelineVibratoRateHz({
+  const rateHz = estimate({
     ...timeline,
     samplesPerSecond,
     minRateHz: 4,
@@ -30,9 +32,9 @@ test("vibrato rate estimator detects a stable 6Hz signal", () => {
 
   assert.ok(rateHz !== null);
   assert.ok(Math.abs(rateHz - 6) < 0.2);
-});
+}
 
-test("vibrato rate estimator returns null when signal is out of range", () => {
+function assertOutOfRangeReturnsNull(estimate) {
   const samplesPerSecond = 200;
   const seconds = 5;
   const total = samplesPerSecond * seconds;
@@ -43,7 +45,7 @@ test("vibrato rate estimator returns null when signal is out of range", () => {
   }
 
   const timeline = createTimelineFromSeries(series);
-  const rateHz = estimateTimelineVibratoRateHz({
+  const rateHz = estimate({
     ...timeline,
     samplesPerSecond,
     minRateHz: 4,
@@ -51,15 +53,15 @@ test("vibrato rate estimator returns null when signal is out of range", () => {
   });
 
   assert.equal(rateHz, null);
-});
+}
 
-test("vibrato rate estimator returns null for silent gaps", () => {
+function assertSilentGapReturnsNull(estimate) {
   const samplesPerSecond = 200;
   const values = Float32Array.from([
     ...new Array(700).fill(Number.NaN),
     ...new Array(300).fill(0),
   ]);
-  const rateHz = estimateTimelineVibratoRateHz({
+  const rateHz = estimate({
     values,
     writeIndex: 0,
     count: values.length,
@@ -68,4 +70,16 @@ test("vibrato rate estimator returns null for silent gaps", () => {
     maxRateHz: 9,
   });
   assert.equal(rateHz, null);
+}
+
+test("default vibrato estimator detects a stable 6Hz signal", () => {
+  assertDetectsStable6Hz(estimateTimelineVibratoRate);
+});
+
+test("default vibrato estimator returns null when signal is out of range", () => {
+  assertOutOfRangeReturnsNull(estimateTimelineVibratoRate);
+});
+
+test("default vibrato estimator returns null for silent gaps", () => {
+  assertSilentGapReturnsNull(estimateTimelineVibratoRate);
 });
