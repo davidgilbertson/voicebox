@@ -3,6 +3,8 @@ import colors from "tailwindcss/colors";
 import {smoothDisplayTimeline} from "./displaySmoothing.js";
 import {clamp} from "../tools.js";
 
+const LINE_WIDTH = 1.8;
+
 const Chart = forwardRef(function Chart({
                                           className = "",
                                           renderScale = 1,
@@ -24,7 +26,6 @@ const Chart = forwardRef(function Chart({
                   yInsetBottom = 0,
                   lineColor = colors.blue[400],
                   mapColorValueToStroke = null,
-                  lineWidth = 1,
                   gapThreshold = Number.POSITIVE_INFINITY,
                   drawBackground,
                 }) => {
@@ -76,7 +77,7 @@ const Chart = forwardRef(function Chart({
     const plotHeight = Math.max(1, plotBottom - plotTop);
     const midY = plotTop + (plotHeight / 2);
     const scaleY = (plotHeight / 2) / yRange;
-    ctx.lineWidth = lineWidth;
+    ctx.lineWidth = LINE_WIDTH;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
 

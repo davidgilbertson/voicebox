@@ -35,7 +35,6 @@ import {
   writeSpectrogramNoiseProfile,
 } from "./config.js";
 
-const WAVE_Y_RANGE = 305; // in cents
 const MAX_DRAW_JUMP_CENTS = 80;
 const MIN_SIGNAL_THRESHOLD = 0.015; // Time-domain RMS threshold from worklet for auto-pause
 const DEFAULT_CENTER_HZ = 220;
@@ -817,7 +816,6 @@ export default function Recorder({
           <div className={activeView === "vibrato" ? "flex min-h-0 flex-1 flex-col" : "hidden min-h-0 flex-1 flex-col"}>
             <VibratoChart
                 ref={vibratoChartRef}
-                yRange={WAVE_Y_RANGE}
                 maxDrawJumpCents={MAX_DRAW_JUMP_CENTS}
                 vibratoRate={ui.vibratoRate}
                 vibratoRateMinHz={VIBRATO_RATE_MIN_HZ}

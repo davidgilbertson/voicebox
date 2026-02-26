@@ -39,7 +39,6 @@ const PitchChart = forwardRef(function PitchChart({
         yInsetBottom: PLOT_Y_INSET,
         lineColor: WAVEFORM_LINE_COLOR,
         mapColorValueToStroke: (intensity) => mapWaveformIntensityToStrokeColor(intensity, WAVEFORM_LINE_COLOR, lineColorMode),
-        lineWidth: 1.5,
         gapThreshold: maxDrawJumpCents,
         mapValueToY: (value, _height, plotTop, plotHeight) => {
           const normalized = (value - minCents) / centsSpan;

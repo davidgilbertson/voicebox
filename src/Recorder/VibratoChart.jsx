@@ -1,16 +1,70 @@
 import {forwardRef, useImperativeHandle, useRef} from "react";
 import colors from "tailwindcss/colors";
 import Chart from "./Chart.jsx";
-import {clamp, drawGrid, drawSemitoneLabels} from "../tools.js";
+import {clamp} from "../tools.js";
 import {mapWaveformIntensityToStrokeColor} from "./waveformColor.js";
 
 const WAVEFORM_LINE_COLOR = colors.blue[400];
+const Y_RANGE = 405; // in cents
 const LABEL_X = 4;
 const PLOT_LEFT = 21;
 const PLOT_Y_INSET = 5;
 
+function getSemitoneSteps(waveRange) {
+  const maxStep = Math.max(1, Math.floor(waveRange / 100));
+  const steps = [];
+  for (let step = -maxStep; step <= maxStep; step += 1) {
+    steps.push(step);
+  }
+  return steps;
+}
+
+function drawGrid(ctx, width, height, waveRange, options = {}) {
+  const {
+    gridLeft = 0,
+    gridTop = 0,
+    gridBottom = height,
+  } = options;
+  const plotHeight = Math.max(1, gridBottom - gridTop);
+  const midY = gridTop + (plotHeight / 2);
+  const scaleY = (plotHeight / 2) / waveRange;
+  const steps = getSemitoneSteps(waveRange);
+
+  ctx.strokeStyle = colors.slate[700];
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (const step of steps) {
+    const cents = step * 100;
+    const y = midY - cents * scaleY;
+    ctx.moveTo(gridLeft, y);
+    ctx.lineTo(width, y);
+  }
+  ctx.stroke();
+}
+
+export function drawSemitoneLabels(ctx, width, height, waveRange, options = {}) {
+  const {
+    labelX = 8,
+    labelTop = 0,
+    labelBottom = height,
+  } = options;
+  ctx.fillStyle = colors.slate[300];
+  ctx.font = "12px system-ui";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  const plotHeight = Math.max(1, labelBottom - labelTop);
+  const midY = labelTop + (plotHeight / 2);
+  const scaleY = (plotHeight / 2) / waveRange;
+  const steps = getSemitoneSteps(waveRange);
+  for (const step of steps) {
+    const cents = step * 100;
+    const y = midY - cents * scaleY;
+    const label = step > 0 ? `+${step}` : `${step}`;
+    ctx.fillText(label, labelX, y);
+  }
+}
+
 const VibratoChart = forwardRef(function VibratoChart({
-                                                        yRange,
                                                         maxDrawJumpCents,
                                                         lineColorMode = "terrain",
                                                         vibratoRate,
@@ -31,20 +85,19 @@ const VibratoChart = forwardRef(function VibratoChart({
         writeIndex,
         count,
         yOffset,
-        yRange,
+        yRange: Y_RANGE,
         xInsetLeft: PLOT_LEFT,
         yInsetTop: PLOT_Y_INSET,
         yInsetBottom: PLOT_Y_INSET,
         lineColor: WAVEFORM_LINE_COLOR,
         mapColorValueToStroke: (intensity) => mapWaveformIntensityToStrokeColor(intensity, WAVEFORM_LINE_COLOR, lineColorMode),
-        lineWidth: 1.5,
         gapThreshold: maxDrawJumpCents,
         drawBackground: (ctx, width, height) => {
           const cached = backgroundCacheRef.current;
           const cacheValid = cached &&
               cached.width === width &&
               cached.height === height &&
-              cached.yRange === yRange;
+              cached.yRange === Y_RANGE;
 
           if (cacheValid) {
             ctx.drawImage(cached.canvas, 0, 0);
@@ -60,12 +113,12 @@ const VibratoChart = forwardRef(function VibratoChart({
           bgCtx.clearRect(0, 0, width, height);
           bgCtx.imageSmoothingEnabled = true;
           bgCtx.lineWidth = 1;
-          drawGrid(bgCtx, width, height, yRange, {
+          drawGrid(bgCtx, width, height, Y_RANGE, {
             gridLeft: PLOT_LEFT,
             gridTop: PLOT_Y_INSET,
             gridBottom: height - PLOT_Y_INSET,
           });
-          drawSemitoneLabels(bgCtx, width, height, yRange, {
+          drawSemitoneLabels(bgCtx, width, height, Y_RANGE, {
             labelX: LABEL_X,
             labelTop: PLOT_Y_INSET,
             labelBottom: height - PLOT_Y_INSET,
@@ -76,13 +129,13 @@ const VibratoChart = forwardRef(function VibratoChart({
             canvas: bgCanvas,
             width,
             height,
-            yRange,
+            yRange: Y_RANGE,
           };
           ctx.drawImage(bgCanvas, 0, 0);
         },
       });
     },
-  }), [lineColorMode, maxDrawJumpCents, yRange]);
+  }), [lineColorMode, maxDrawJumpCents]);
 
   const vibratoRatePositionPct = vibratoRate === null
       ? null
@@ -114,7 +167,7 @@ const VibratoChart = forwardRef(function VibratoChart({
               renderScale={renderScale}
           />
         </div>
-        <div className="pointer-events-none border-t border-slate-800/70 px-2 pb-2 pt-1">
+        <div className="pointer-events-none px-2 pb-2 pt-1">
           <div className="relative">
             <div className="relative h-3 w-full overflow-hidden rounded-none bg-slate-600/80">
               <div
