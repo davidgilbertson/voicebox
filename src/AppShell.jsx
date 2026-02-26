@@ -34,7 +34,7 @@ import {
   writeSpectrogramMinHz,
 } from "./Recorder/config.js";
 
-export default function AppShell() {
+export default function AppShell({downloadingUpdate = false}) {
   const [activeView, setActiveView] = useState(() => readActiveView());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scaleMinNote, setScaleMinNote] = useState(() => readScaleMinNote());
@@ -199,6 +199,17 @@ export default function AppShell() {
 
   return (
       <div className="h-[var(--app-height)] w-full overflow-hidden bg-black text-slate-100 select-none">
+        <div
+            data-testid="sw-update-banner"
+            aria-live="polite"
+            className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center px-2 transition-all duration-200 ${
+                downloadingUpdate ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0"
+            }`}
+        >
+          <div className="mt-1 flex h-7 items-center rounded-md bg-green-500 px-3 text-[11px] font-semibold uppercase tracking-wide text-green-950">
+            Downloading a new version
+          </div>
+        </div>
         <div className="flex h-full w-full items-stretch">
           <main className="relative flex min-h-0 flex-1 flex-col bg-black md:h-full md:w-full md:flex-none">
             {showingScales ? (
