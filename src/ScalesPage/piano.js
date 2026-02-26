@@ -11,6 +11,8 @@ const playedNoteListeners = new Set();
 // Downloaded from: https://gleitz.github.io/midi-js-soundfonts/MusyngKite/acoustic_grand_piano-mp3.js
 const LOCAL_PIANO_SOUNDFONT_URL = "/soundfonts/acoustic_grand_piano-mp3.js";
 const METRONOME_TICK_URL = "/metronome-tick.wav";
+const METRONOME_BASE_GAIN = 0.7;
+const METRONOME_DUCK_MULTIPLIER = 0.7;
 
 function ensureAudioContext() {
   if (!audioContext) {
@@ -111,14 +113,15 @@ export async function ensureMetronomeTickLoaded() {
   return loadingMetronomeTickPromise;
 }
 
-export async function playMetronomeTick() {
+export async function playMetronomeTick({duck = false} = {}) {
   const ready = await ensureAudioReady();
   if (!ready) return;
   const sampleBuffer = await ensureMetronomeTickLoaded();
   if (!sampleBuffer) return;
 
   const gainNode = audioContext.createGain();
-  gainNode.gain.setValueAtTime(1, audioContext.currentTime);
+  const gain = duck ? METRONOME_BASE_GAIN * METRONOME_DUCK_MULTIPLIER : METRONOME_BASE_GAIN;
+  gainNode.gain.setValueAtTime(gain, audioContext.currentTime);
   gainNode.connect(audioContext.destination);
 
   const source = audioContext.createBufferSource();

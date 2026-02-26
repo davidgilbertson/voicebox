@@ -99,6 +99,35 @@ test("metronome ticks while scales playback is stopped", async () => {
   }
 });
 
+test("metronome shares the scales pulse loop and ducks on simultaneous notes", async () => {
+  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  await waitForReady();
+
+  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(100);
+  });
+  fireEvent.click(screen.getByRole("button", {name: "Enable metronome"}));
+  expect(playMetronomeTickMock).not.toHaveBeenCalled();
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(150);
+  });
+  expect(playNoteMock).toHaveBeenCalledTimes(1);
+  expect(playMetronomeTickMock.mock.calls.length).toBeGreaterThan(0);
+  expect(playMetronomeTickMock.mock.calls[0][0]).toEqual({duck: true});
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(900);
+  });
+  expect(playMetronomeTickMock.mock.calls.length).toBeGreaterThan(1);
+  expect(playMetronomeTickMock.mock.calls.some((call) => call.length === 0)).toBe(true);
+});
+
 test("scales playback and metronome pause in background and resume in foreground", async () => {
   const {rerender} = render(
       <ScalesPage

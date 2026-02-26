@@ -6,7 +6,7 @@ import GestureArea from "./GestureArea.jsx";
 import {readScaleBpm, readScaleGestureHelpDismissed, readScaleMaxNote, readScaleMinNote, readScaleSelectedName, SCALE_BPM_MAX, SCALE_BPM_MIN, writeScaleBpm, writeScaleGestureHelpDismissed, writeScaleSelectedName,} from "./config.js";
 import {clamp} from "../tools.js";
 import {noteNameToMidi} from "../pitchScale.js";
-import {ensurePianoLoaded, ensurePianoReadyForPlayback, playMetronomeTick, playNote} from "./piano.js";
+import {ensurePianoLoaded, playMetronomeTick, playNote} from "./piano.js";
 
 /**
  * Terminology
@@ -53,10 +53,10 @@ export default function ScalesPage({
   const [isMetronomeEnabled, setIsMetronomeEnabled] = useState(false);
   const [isPianoReady, setIsPianoReady] = useState(false);
   const [showGestureHelp, setShowGestureHelp] = useState(() => !readScaleGestureHelpDismissed());
-  const playbackIntervalRef = useRef(0);
-  const metronomeIntervalRef = useRef(0);
+  const playbackTimeoutRef = useRef(0);
   const activeNotesRef = useRef([]);
   const isPlayingRef = useRef(isPlaying);
+  const isMetronomeEnabledRef = useRef(isMetronomeEnabled);
   const activeBpmRef = useRef(bpm);
   const pendingBpmRef = useRef(null);
   const repeatDirectionRef = useRef(repeatDirection);
@@ -65,6 +65,11 @@ export default function ScalesPage({
   const scaleMinMidiRef = useRef(noteNameToMidi(scaleMinNote) ?? MIDI_MIN);
   const scaleMaxMidiRef = useRef(noteNameToMidi(scaleMaxNote) ?? MIDI_MAX);
   const timelineIndexRef = useRef(0);
+  const nextPulseAtMsRef = useRef(0);
+  const playStepRef = useRef(null);
+  const runPulseRef = useRef(null);
+  const stepInFlightRef = useRef(false);
+  const lastStepAtMsRef = useRef(0);
   const rapidVerticalSwipeRef = useRef({
     direction: null,
     atMs: 0,
@@ -89,6 +94,10 @@ export default function ScalesPage({
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  useEffect(() => {
+    isMetronomeEnabledRef.current = isMetronomeEnabled;
+  }, [isMetronomeEnabled]);
 
   useEffect(() => {
     if (isPlayingRef.current) {
@@ -124,6 +133,15 @@ export default function ScalesPage({
     setRepeatDirection(nextRepeatDirection);
   }, []);
 
+  const trackStartedNote = useCallback((startedNote) => {
+    if (!startedNote?.stop) return false;
+    activeNotesRef.current.push(startedNote);
+    if (activeNotesRef.current.length > 16) {
+      activeNotesRef.current.shift()?.stop?.();
+    }
+    return true;
+  }, []);
+
   const stopAllNotes = useCallback(() => {
     for (let i = 0; i < activeNotesRef.current.length; i += 1) {
       const note = activeNotesRef.current[i];
@@ -132,19 +150,45 @@ export default function ScalesPage({
     activeNotesRef.current = [];
   }, []);
 
-  const stopPlayback = useCallback(() => {
-    if (playbackIntervalRef.current) {
-      window.clearInterval(playbackIntervalRef.current);
-      playbackIntervalRef.current = 0;
+  const clearPulseTimeout = useCallback(() => {
+    if (playbackTimeoutRef.current) {
+      window.clearTimeout(playbackTimeoutRef.current);
+      playbackTimeoutRef.current = 0;
     }
-    stopAllNotes();
-  }, [stopAllNotes]);
-
-  const stopMetronome = useCallback(() => {
-    if (!metronomeIntervalRef.current) return;
-    window.clearInterval(metronomeIntervalRef.current);
-    metronomeIntervalRef.current = 0;
   }, []);
+
+  const schedulePulseAt = useCallback((nextAtMs) => {
+    clearPulseTimeout();
+    nextPulseAtMsRef.current = nextAtMs;
+    const delayMs = Math.max(0, nextAtMs - performance.now());
+    playbackTimeoutRef.current = window.setTimeout(() => {
+      runPulseRef.current?.();
+    }, delayMs);
+  }, [clearPulseTimeout]);
+
+  const reschedulePulseFromLastStep = useCallback(() => {
+    const lastStepAtMs = lastStepAtMsRef.current;
+    if (!lastStepAtMs) return;
+    const stepMs = (60 / activeBpmRef.current) * 1000;
+    schedulePulseAt(lastStepAtMs + stepMs);
+  }, [schedulePulseAt]);
+
+  const restartPulseLoop = useCallback(() => {
+    const stepMs = (60 / activeBpmRef.current) * 1000;
+    schedulePulseAt(performance.now() + stepMs);
+  }, [schedulePulseAt]);
+
+  const stopPulseLoop = useCallback(() => {
+    clearPulseTimeout();
+    nextPulseAtMsRef.current = 0;
+    stepInFlightRef.current = false;
+    lastStepAtMsRef.current = 0;
+  }, [clearPulseTimeout]);
+
+  const stopPlayback = useCallback(() => {
+    stopPulseLoop();
+    stopAllNotes();
+  }, [stopAllNotes, stopPulseLoop]);
 
   useEffect(() => {
     let cancelled = false;
@@ -163,71 +207,24 @@ export default function ScalesPage({
   useEffect(() => {
     return () => {
       stopPlayback();
-      stopMetronome();
     };
-  }, [stopMetronome, stopPlayback]);
-
-  useEffect(() => {
-    stopMetronome();
-    if (!isMetronomeEnabled || !allowPlayback) return;
-
-    const tick = () => {
-      playMetronomeTick().catch(() => {
-      });
-    };
-
-    tick();
-    metronomeIntervalRef.current = window.setInterval(tick, (60 / bpm) * 1000);
-
-    return stopMetronome;
-  }, [allowPlayback, bpm, isMetronomeEnabled, stopMetronome]);
-
-  const playStepRef = useRef(null);
-  const restartIntervalRef = useRef(null);
-  const stepInFlightRef = useRef(false);
-  const lastStepAtMsRef = useRef(0);
-
-  useEffect(() => {
-    restartIntervalRef.current = () => {
-      if (playbackIntervalRef.current) {
-        window.clearInterval(playbackIntervalRef.current);
-        playbackIntervalRef.current = 0;
-      }
-      if (!isPlayingRef.current) return;
-      const stepMs = (60 / activeBpmRef.current) * 1000;
-      playbackIntervalRef.current = window.setInterval(() => {
-        if (stepInFlightRef.current) return;
-        const playStep = playStepRef.current;
-        if (!playStep) return;
-        lastStepAtMsRef.current = performance.now();
-        stepInFlightRef.current = true;
-        Promise.resolve(playStep())
-            .finally(() => {
-              stepInFlightRef.current = false;
-            });
-      }, stepMs);
-    };
-  }, []);
+  }, [stopPlayback]);
 
   useEffect(() => {
     playStepRef.current = async () => {
-      if (!isPlayingRef.current) return;
+      if (!isPlayingRef.current) return false;
       const timeline = setTimelineRef.current;
       const currentBpm = activeBpmRef.current;
       const stepDuration = 60 / currentBpm;
       const timelineEntry = timeline[timelineIndexRef.current];
+      let noteWasPlayed = false;
 
       if (timelineEntry === "cue") {
         const cueRootMidi = clamp(currentSetRootMidiRef.current, scaleMinMidiRef.current, scaleMaxMidiRef.current);
 
         try {
           const startedNote = await playNote(cueRootMidi, stepDuration * 2);
-          if (startedNote?.stop) {
-            activeNotesRef.current.push(startedNote);
-            if (activeNotesRef.current.length > 16) {
-              activeNotesRef.current.shift()?.stop?.();
-            }
-          }
+          noteWasPlayed = trackStartedNote(startedNote);
         } catch {
         }
       } else if (timelineEntry !== "rest") {
@@ -248,12 +245,7 @@ export default function ScalesPage({
 
         try {
           const startedNote = await playNote(noteMidi, stepDuration);
-          if (startedNote?.stop) {
-            activeNotesRef.current.push(startedNote);
-            if (activeNotesRef.current.length > 16) {
-              activeNotesRef.current.shift()?.stop?.();
-            }
-          }
+          noteWasPlayed = trackStartedNote(startedNote);
         } catch {
         }
       }
@@ -268,39 +260,66 @@ export default function ScalesPage({
         if (pendingBpmRef.current !== null && pendingBpmRef.current !== activeBpmRef.current) {
           activeBpmRef.current = pendingBpmRef.current;
           pendingBpmRef.current = null;
-          restartIntervalRef.current?.();
+          reschedulePulseFromLastStep();
         }
       }
+      return noteWasPlayed;
     };
-  }, []);
+  }, [reschedulePulseFromLastStep, trackStartedNote]);
+
+  useEffect(() => {
+    runPulseRef.current = async () => {
+      const shouldRun = allowPlayback && (isPlayingRef.current || isMetronomeEnabledRef.current);
+      if (!shouldRun) {
+        stopPulseLoop();
+        return;
+      }
+      if (stepInFlightRef.current) return;
+      stepInFlightRef.current = true;
+      lastStepAtMsRef.current = performance.now();
+      try {
+        const noteWasPlayed = await playStepRef.current?.();
+        if (isMetronomeEnabledRef.current) {
+          const metronomeTickPromise = noteWasPlayed ? playMetronomeTick({duck: true}) : playMetronomeTick();
+          await metronomeTickPromise.catch(() => {
+          });
+        }
+      } finally {
+        stepInFlightRef.current = false;
+        reschedulePulseFromLastStep();
+      }
+    };
+  }, [allowPlayback, reschedulePulseFromLastStep, stopPulseLoop]);
+
+  useEffect(() => {
+    if (!allowPlayback || (!isPlaying && !isMetronomeEnabled)) {
+      stopPulseLoop();
+      return;
+    }
+    if (!nextPulseAtMsRef.current) {
+      restartPulseLoop();
+    }
+  }, [allowPlayback, isMetronomeEnabled, isPlaying, restartPulseLoop, stopPulseLoop]);
 
   useEffect(() => {
     if (!isPlaying || !allowPlayback) {
-      stopPlayback();
-      stepInFlightRef.current = false;
-      lastStepAtMsRef.current = 0;
+      stopAllNotes();
       return;
     }
-    let cancelled = false;
     if (pendingBpmRef.current !== null) {
       activeBpmRef.current = pendingBpmRef.current;
       pendingBpmRef.current = null;
     }
-    ensurePianoReadyForPlayback()
-        .then((ready) => {
-          if (!ready || cancelled || !isPlayingRef.current) return;
-          timelineIndexRef.current = 0;
-          stepInFlightRef.current = false;
-          lastStepAtMsRef.current = 0;
-          restartIntervalRef.current?.();
-        })
-        .catch(() => {
-        });
-    return () => {
-      cancelled = true;
-      stopPlayback();
-    };
-  }, [allowPlayback, isPlaying, stopPlayback]);
+    timelineIndexRef.current = 0;
+    stepInFlightRef.current = false;
+    lastStepAtMsRef.current = 0;
+    restartPulseLoop();
+  }, [allowPlayback, isPlaying, restartPulseLoop, stopAllNotes]);
+
+  useEffect(() => {
+    if (!nextPulseAtMsRef.current || isPlayingRef.current) return;
+    reschedulePulseFromLastStep();
+  }, [bpm, reschedulePulseFromLastStep]);
 
   const restartSetImmediately = useCallback((direction) => {
     const nextRootMidi = currentSetRootMidiRef.current + semitoneDeltaForRepeatDirection(direction);
@@ -308,13 +327,9 @@ export default function ScalesPage({
     timelineIndexRef.current = 0;
     repeatDirectionRef.current = direction;
     setRepeatDirection(direction);
-    if (playbackIntervalRef.current) {
-      window.clearInterval(playbackIntervalRef.current);
-      playbackIntervalRef.current = 0;
-    }
     playStepRef.current?.();
-    restartIntervalRef.current?.();
-  }, []);
+    restartPulseLoop();
+  }, [restartPulseLoop]);
 
   const updateRapidVerticalSwipeState = useCallback((direction) => {
     const nowMs = performance.now();
