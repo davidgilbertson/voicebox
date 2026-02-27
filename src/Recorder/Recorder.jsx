@@ -12,7 +12,7 @@ import VibratoChart from "./VibratoChart.jsx";
 import PitchChart from "./PitchChart.jsx";
 import SpectrogramChart from "./SpectrogramChart.jsx";
 import {noteNameToCents, noteNameToHz} from "../pitchScale.js";
-import {clamp} from "../tools.js";
+import {clamp, pickPreferredAudioInputDeviceId} from "../tools.js";
 import {BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor} from "./batteryUsage.js";
 import {
   CENTER_SECONDS,
@@ -85,6 +85,7 @@ export default function Recorder({
   const spectrogramChartRef = useRef(null);
   const chartContainerRef = useRef(null);
   const isStartingRef = useRef(false);
+  const startAttemptRef = useRef(0);
   const chartWidthPx = Math.max(1, Math.floor(window.innerWidth));
   const chartWidthPxRef = useRef(chartWidthPx);
   const hopSizeRef = useRef(Math.round(48_000 / DISPLAY_PIXELS_PER_SECOND));
@@ -459,20 +460,39 @@ export default function Recorder({
   const startAudio = async () => {
     if (ui.isRunning || isStartingRef.current) return;
     isStartingRef.current = true;
+    const startAttempt = ++startAttemptRef.current;
     setUi((prev) => ({...prev, error: ""}));
     try {
+      let preferredDeviceId = null;
+      if (navigator.mediaDevices && typeof navigator.mediaDevices.enumerateDevices === "function") {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (startAttempt !== startAttemptRef.current) return;
+        preferredDeviceId = pickPreferredAudioInputDeviceId(devices);
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           autoGainControl: false,
           noiseSuppression: false,
           echoCancellation: false,
+          ...(preferredDeviceId ? {deviceId: preferredDeviceId} : {}),
         },
       });
+      if (startAttempt !== startAttemptRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       const context = new AudioContext();
       await context.audioWorklet.addModule(
           new URL("./worklets/audioWorklet.js", import.meta.url)
       );
       await context.resume();
+      if (startAttempt !== startAttemptRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        if (context.state !== "closed") {
+          context.close();
+        }
+        return;
+      }
       const source = context.createMediaStreamSource(stream);
       const captureNode = new AudioWorkletNode(context, "audio-capture-processor", {
         numberOfInputs: 1,
@@ -506,6 +526,18 @@ export default function Recorder({
       sinkGain.gain.value = 0;
       captureNode.connect(sinkGain);
       sinkGain.connect(context.destination);
+      if (startAttempt !== startAttemptRef.current) {
+        captureNode.port.onmessage = null;
+        captureNode.disconnect();
+        source.disconnect();
+        sinkGain.disconnect();
+        analyser.disconnect();
+        stream.getTracks().forEach((track) => track.stop());
+        if (context.state !== "closed") {
+          context.close();
+        }
+        return;
+      }
 
       const sampleRate = context.sampleRate;
       const hopSize = Math.round(sampleRate / DISPLAY_PIXELS_PER_SECOND);
@@ -543,6 +575,9 @@ export default function Recorder({
         animationRef.current.rafId = requestAnimationFrame(renderLoop);
       }
     } catch (err) {
+      if (startAttempt !== startAttemptRef.current) {
+        return;
+      }
       setWantsToRun(false);
       setUi((prev) => ({
         ...prev,
@@ -554,6 +589,7 @@ export default function Recorder({
   };
 
   const stopAudio = () => {
+    startAttemptRef.current += 1;
     if (spectrogramNoiseRef.current.calibrating) {
       finishSpectrogramNoiseCalibration(false);
     }
