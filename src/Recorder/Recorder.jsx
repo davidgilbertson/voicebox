@@ -2,11 +2,13 @@ import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {Pause} from "lucide-react";
 import {
   analyzeAudioWindowFftPitch,
-  updateCenterFromHzBuffer,
 } from "./audioSeries.js";
 import {createPitchTimeline, resizePitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
 import {
-  estimateTimelineVibratoRate
+  computeTimelineVibratoDetectionAlpha,
+  estimateLastKnownTimelineVibratoRate,
+  estimateTimelineCenterCents,
+  estimateTimelineVibratoRate,
 } from "./vibratoRate.js";
 import VibratoChart from "./VibratoChart.jsx";
 import PitchChart from "./PitchChart.jsx";
@@ -24,7 +26,6 @@ import {
   SPECTROGRAM_BIN_COUNT,
   VIBRATO_ANALYSIS_WINDOW_SECONDS,
   VIBRATO_MIN_CONTIGUOUS_SECONDS,
-  VIBRATO_RATE_HOLD_MS,
   VIBRATO_RATE_MAX_HZ,
   VIBRATO_RATE_MIN_HZ,
   VIBRATO_SWEET_MAX_HZ,
@@ -38,6 +39,7 @@ import {
 const MAX_DRAW_JUMP_CENTS = 80;
 const MIN_SIGNAL_THRESHOLD = 0.015; // Time-domain RMS threshold from worklet for auto-pause
 const DEFAULT_CENTER_HZ = 220;
+const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
 
 function createHzBuffer(length) {
   const hzBuffer = new Float32Array(length);
@@ -133,10 +135,9 @@ export default function Recorder({
     lastFrameMs: 0,
     displayedVibratoRate: null,
     lastVibratoRateUpdateMs: null,
-    lastValidVibratoTick: null,
-    missingVibratoTickCount: 0,
     timelineDirty: false, // TODO (@davidgilbertson): not convinced this is necessary
   });
+  const vibratoDetectionAlphaRef = useRef(null);
   const forceRedrawRef = useRef(false);
   const activeViewRef = useRef(activeView);
   const wantsToRunRef = useRef(true);
@@ -644,9 +645,33 @@ export default function Recorder({
     const timeline = timelineRef.current;
     const currentView = activeViewRef.current;
     if (currentView === "vibrato") {
+      if (!vibratoDetectionAlphaRef.current || vibratoDetectionAlphaRef.current.length !== timeline.values.length) {
+        vibratoDetectionAlphaRef.current = new Float32Array(timeline.values.length);
+      }
+      const detectionAlphas = computeTimelineVibratoDetectionAlpha({
+        values: timeline.values,
+        writeIndex: timeline.writeIndex,
+        count: timeline.count,
+        samplesPerSecond: timeline.columnRateHz,
+        minRateHz: VIBRATO_RATE_MIN_HZ,
+        maxRateHz: VIBRATO_RATE_MAX_HZ,
+        analysisWindowSeconds: VIBRATO_ANALYSIS_WINDOW_SECONDS,
+        minContinuousSeconds: VIBRATO_MIN_CONTIGUOUS_SECONDS,
+        output: vibratoDetectionAlphaRef.current,
+      });
+      const centerFromVibrato = estimateTimelineCenterCents({
+        values: timeline.values,
+        writeIndex: timeline.writeIndex,
+        count: timeline.count,
+        detectionAlphas,
+      });
+      if (centerFromVibrato !== null) {
+        audioRef.current.centerCents = centerFromVibrato;
+      }
       vibratoChartRef.current?.draw({
         values: timeline.values,
         intensities: timeline.intensities,
+        detectionAlphas,
         writeIndex: timeline.writeIndex,
         count: timeline.count,
         yOffset: audioRef.current.centerCents,
@@ -683,19 +708,12 @@ export default function Recorder({
     const didTimelineChange = animationRef.current.timelineDirty;
     animationRef.current.timelineDirty = false;
     const previousDisplayedRate = animationRef.current.displayedVibratoRate;
-    let displayedRate = null;
+    let displayedRate = previousDisplayedRate;
     const currentView = activeViewRef.current;
 
     if (currentView === "vibrato") {
-      const timelineTickCount = timelineRef.current.diagnostics.totalTickCount;
-      const holdTickThreshold = Math.round((VIBRATO_RATE_HOLD_MS / 1000) * timelineRef.current.columnRateHz);
-      updateCenterFromHzBuffer(
-          audioRef.current,
-          pitchRangeRef.current.minHz,
-          pitchRangeRef.current.maxHz
-      );
       let estimatedRate = null;
-      if (didTimelineChange) {
+      if (didTimelineChange || forceRedrawRef.current || previousDisplayedRate === null) {
         estimatedRate = estimateTimelineVibratoRate({
           values: timelineRef.current.values,
           writeIndex: timelineRef.current.writeIndex,
@@ -706,40 +724,32 @@ export default function Recorder({
           analysisWindowSeconds: VIBRATO_ANALYSIS_WINDOW_SECONDS,
           minContinuousSeconds: VIBRATO_MIN_CONTIGUOUS_SECONDS,
         });
+        if (estimatedRate === null) {
+          estimatedRate = estimateLastKnownTimelineVibratoRate({
+            values: timelineRef.current.values,
+            writeIndex: timelineRef.current.writeIndex,
+            count: timelineRef.current.count,
+            samplesPerSecond: timelineRef.current.columnRateHz,
+            minRateHz: VIBRATO_RATE_MIN_HZ,
+            maxRateHz: VIBRATO_RATE_MAX_HZ,
+            analysisWindowSeconds: VIBRATO_ANALYSIS_WINDOW_SECONDS,
+            minContinuousSeconds: VIBRATO_MIN_CONTIGUOUS_SECONDS,
+          });
+        }
       }
 
       if (estimatedRate !== null) {
-        animationRef.current.lastValidVibratoTick = timelineTickCount;
         if (previousDisplayedRate === null) {
           displayedRate = estimatedRate;
-          animationRef.current.missingVibratoTickCount = 0;
         } else {
           const elapsedSinceLastRateUpdateMs = animationRef.current.lastVibratoRateUpdateMs === null
               ? 16
               : Math.max(0, nowMs - animationRef.current.lastVibratoRateUpdateMs);
-          const baseSmoothingFactor = 1 - Math.exp(-elapsedSinceLastRateUpdateMs / 420);
-          // Treat missing ticks like they had the current estimate; bigger gaps then pull faster.
-          const missingTickCount = animationRef.current.missingVibratoTickCount;
-          const smoothingFactor = 1 - ((1 - baseSmoothingFactor) ** (missingTickCount + 1));
-          displayedRate = previousDisplayedRate + ((estimatedRate - previousDisplayedRate) * smoothingFactor);
-          animationRef.current.missingVibratoTickCount = 0;
+          const baseSmoothingFactor = 1 - Math.exp(-elapsedSinceLastRateUpdateMs / VIBRATO_RATE_SMOOTHING_TIME_MS);
+          displayedRate = previousDisplayedRate + ((estimatedRate - previousDisplayedRate) * baseSmoothingFactor);
         }
         animationRef.current.lastVibratoRateUpdateMs = nowMs;
-      } else if (
-          previousDisplayedRate !== null &&
-          animationRef.current.lastValidVibratoTick !== null &&
-          timelineTickCount - animationRef.current.lastValidVibratoTick <= holdTickThreshold
-      ) {
-        displayedRate = previousDisplayedRate;
-        animationRef.current.lastVibratoRateUpdateMs = nowMs;
-        if (didTimelineChange) {
-          animationRef.current.missingVibratoTickCount += 1;
-        }
       }
-    } else {
-      animationRef.current.lastValidVibratoTick = null;
-      animationRef.current.lastVibratoRateUpdateMs = null;
-      animationRef.current.missingVibratoTickCount = 0;
     }
 
     const didDisplayRateChange = displayedRate !== previousDisplayedRate;

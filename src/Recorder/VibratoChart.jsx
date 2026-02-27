@@ -78,10 +78,11 @@ const VibratoChart = forwardRef(function VibratoChart({
   const backgroundCacheRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
-    draw({values, intensities, writeIndex, count, yOffset}) {
+    draw({values, intensities, detectionAlphas, writeIndex, count, yOffset}) {
       chartRef.current?.draw({
         values,
         colorValues: intensities,
+        alphaValues: detectionAlphas,
         writeIndex,
         count,
         yOffset,
@@ -194,7 +195,7 @@ const VibratoChart = forwardRef(function VibratoChart({
                 </>
             ) : null}
           </div>
-          <div className="relative mt-1 h-3 text-[10px] leading-none text-slate-400/65">
+          <div className="relative mt-1 h-3 text-xs leading-none text-slate-400/65">
             <span className="absolute left-0 top-0">{vibratoRateMinHz} Hz</span>
             <span className="absolute top-0 -translate-x-1/2 text-slate-300/85" style={{left: `${sweetStartPct}%`}}>
               {vibratoSweetMinHz} Hz
@@ -205,7 +206,7 @@ const VibratoChart = forwardRef(function VibratoChart({
             {intermediateHzLabels.map((hz) => (
                 <span
                     key={hz}
-                    className="absolute top-0 -translate-x-1/2"
+                    className="absolute top-0 -translate-x-1/2 text-slate-300/85"
                     style={{left: `${((hz - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100}%`}}
                 >
                   {hz} Hz

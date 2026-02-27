@@ -3,7 +3,7 @@ import colors from "tailwindcss/colors";
 import {smoothDisplayTimeline} from "./displaySmoothing.js";
 import {clamp} from "../tools.js";
 
-const LINE_WIDTH = 1.8;
+const LINE_WIDTH = 2;
 
 const Chart = forwardRef(function Chart({
                                           className = "",
@@ -15,6 +15,7 @@ const Chart = forwardRef(function Chart({
   const draw = ({
                   values,
                   colorValues = null,
+                  alphaValues = null,
                   writeIndex,
                   count,
                   yOffset = 0,
@@ -78,8 +79,9 @@ const Chart = forwardRef(function Chart({
     const midY = plotTop + (plotHeight / 2);
     const scaleY = (plotHeight / 2) / yRange;
     ctx.lineWidth = LINE_WIDTH;
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
+    const useAlphaSegments = colorValues && mapColorValueToStroke && alphaValues;
+    ctx.lineJoin = useAlphaSegments ? "miter" : "round";
+    ctx.lineCap = useAlphaSegments ? "butt" : "round";
 
     const usePerSegmentColor = colorValues && mapColorValueToStroke;
     if (!usePerSegmentColor) {
@@ -120,11 +122,14 @@ const Chart = forwardRef(function Chart({
       } else {
         if (usePerSegmentColor && lastX !== null) {
           const colorValue = colorValues[bufferIndex];
+          const alphaValue = alphaValues ? alphaValues[bufferIndex] : 1;
           ctx.strokeStyle = mapColorValueToStroke(colorValue);
+          ctx.globalAlpha = Number.isFinite(alphaValue) ? clamp(alphaValue, 0, 1) : 1;
           ctx.beginPath();
           ctx.moveTo(lastX, lastY);
           ctx.lineTo(x, y);
           ctx.stroke();
+          ctx.globalAlpha = 1;
         } else {
           ctx.lineTo(x, y);
         }
@@ -147,7 +152,7 @@ const Chart = forwardRef(function Chart({
       <canvas
           ref={canvasRef}
           className={className}
-          style={{imageRendering: "pixelated"}}
+          style={{imageRendering: "auto"}}
       />
   );
 });
