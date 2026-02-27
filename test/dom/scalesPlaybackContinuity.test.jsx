@@ -34,7 +34,7 @@ async function waitForReady() {
   expect(screen.getByRole("button", {name: "Play"})).toBeEnabled();
 }
 
-test("changing BPM while playing does not restart at the base note", async () => {
+test("changing BPM while playing applies on the next pulse", async () => {
   render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
   await waitForReady();
 
@@ -44,16 +44,20 @@ test("changing BPM while playing does not restart at the base note", async () =>
   });
 
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(900);
+    await vi.advanceTimersByTimeAsync(260);
   });
-  expect(playNoteMock.mock.calls.slice(0, 2).map((args) => args[0])).toEqual([48, 48]);
+  expect(playNoteMock).toHaveBeenCalledTimes(1);
+  expect(playNoteMock.mock.calls[0][0]).toBe(48);
 
-  fireEvent.click(screen.getByRole("button", {name: "Increase scales BPM"}));
+  for (let i = 0; i < 30; i += 1) {
+    fireEvent.click(screen.getByRole("button", {name: "Increase scales BPM"}));
+  }
 
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(300);
+    await vi.advanceTimersByTimeAsync(430);
   });
-  expect(playNoteMock.mock.calls[2][0]).toBe(49);
+  expect(playNoteMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+  expect(playNoteMock.mock.calls[1][0]).toBe(48);
 });
 
 test("pause and resume restarts the current set from the cue note", async () => {
@@ -97,6 +101,29 @@ test("metronome ticks while scales playback is stopped", async () => {
   for (const call of playMetronomeTickMock.mock.calls) {
     expect(call).toHaveLength(0);
   }
+});
+
+test("slow first metronome tick does not trigger immediate catch-up tick", async () => {
+  playMetronomeTickMock.mockImplementationOnce(
+      () =>
+          new Promise((resolve) => {
+            window.setTimeout(resolve, 500);
+          })
+  );
+  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  await waitForReady();
+
+  fireEvent.click(screen.getByRole("button", {name: "Enable metronome"}));
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(800);
+  });
+  expect(playMetronomeTickMock).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(250);
+  });
+  expect(playMetronomeTickMock.mock.calls.length).toBeGreaterThan(1);
 });
 
 test("metronome shares the scales pulse loop and ducks on simultaneous notes", async () => {

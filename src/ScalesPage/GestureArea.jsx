@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from "react";
+import {useCallback, useEffect, useRef, useState} from "react";
 import {ArrowDown, ArrowRight, ArrowUp} from "lucide-react";
 
 const TAP_GESTURE_MAX_PX = 10;
@@ -30,6 +30,7 @@ function swipeDirection(deltaX, deltaY) {
 export default function GestureArea({
                                       onTap,
                                       onSwipe,
+                                      externalFlashSignal = null,
                                       showHelp = false,
                                       helpContent = null,
                                       className = "",
@@ -57,7 +58,7 @@ export default function GestureArea({
     };
   }, []);
 
-  const showSwipeFlash = (direction) => {
+  const showSwipeFlash = useCallback((direction) => {
     if (direction !== "up" && direction !== "down" && direction !== "right") return;
     setSwipeFlash((prev) => ({direction, id: (prev?.id ?? 0) + 1}));
     setSwipeFlashFading(false);
@@ -73,7 +74,13 @@ export default function GestureArea({
     swipeFlashTimeoutRef.current = window.setTimeout(() => {
       setSwipeFlash(null);
     }, SWIPE_FLASH_TOTAL_MS);
-  };
+  }, []);
+
+  useEffect(() => {
+    const direction = externalFlashSignal?.direction;
+    if (!direction) return;
+    showSwipeFlash(direction);
+  }, [externalFlashSignal, showSwipeFlash]);
 
   const handleGestureMove = (deltaX, deltaY) => {
     const gesture = gestureRef.current;

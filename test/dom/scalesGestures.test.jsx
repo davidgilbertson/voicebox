@@ -72,6 +72,22 @@ test("down swipe shows down-direction gesture feedback", async () => {
   expect(area.querySelector("svg.lucide-arrow-down")).not.toBeNull();
 });
 
+test("auto reversal at top of range shows down-direction gesture feedback", async () => {
+  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="C#3"/>);
+  await waitForReady();
+  const area = screen.getByTestId("scales-gesture-area");
+  fireEvent.click(screen.getByRole("button", {name: "Got it"}));
+  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(11000);
+  });
+  expect(area.querySelector("svg.lucide-arrow-down")).not.toBeNull();
+});
+
 test("left swipe does nothing and tap on empty area toggles play/pause", async () => {
   render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
   await waitForReady();

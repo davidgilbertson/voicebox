@@ -53,12 +53,12 @@ export default function ScalesPage({
   const [isMetronomeEnabled, setIsMetronomeEnabled] = useState(false);
   const [isPianoReady, setIsPianoReady] = useState(false);
   const [showGestureHelp, setShowGestureHelp] = useState(() => !readScaleGestureHelpDismissed());
+  const [gestureFlashSignal, setGestureFlashSignal] = useState(null);
   const playbackTimeoutRef = useRef(0);
   const activeNotesRef = useRef([]);
   const isPlayingRef = useRef(isPlaying);
   const isMetronomeEnabledRef = useRef(isMetronomeEnabled);
   const activeBpmRef = useRef(bpm);
-  const pendingBpmRef = useRef(null);
   const repeatDirectionRef = useRef(repeatDirection);
   const setTimelineRef = useRef(buildSetTimeline(SEMITONE_PATTERN));
   const currentSetRootMidiRef = useRef(noteNameToMidi(scaleMinNote) ?? MIDI_MIN);
@@ -70,6 +70,9 @@ export default function ScalesPage({
   const runPulseRef = useRef(null);
   const stepInFlightRef = useRef(false);
   const lastStepAtMsRef = useRef(0);
+  // First pulse after (re)start is treated specially to avoid startup catch-up bursts
+  // when audio warmup/sample decode takes longer than one step.
+  const startupPrimingRef = useRef(false);
   const rapidVerticalSwipeRef = useRef({
     direction: null,
     atMs: 0,
@@ -100,12 +103,7 @@ export default function ScalesPage({
   }, [isMetronomeEnabled]);
 
   useEffect(() => {
-    if (isPlayingRef.current) {
-      pendingBpmRef.current = bpm;
-      return;
-    }
     activeBpmRef.current = bpm;
-    pendingBpmRef.current = null;
   }, [bpm]);
 
   useEffect(() => {
@@ -131,6 +129,11 @@ export default function ScalesPage({
     if (repeatDirectionRef.current === nextRepeatDirection) return;
     repeatDirectionRef.current = nextRepeatDirection;
     setRepeatDirection(nextRepeatDirection);
+  }, []);
+
+  const flashGestureDirection = useCallback((direction) => {
+    if (direction !== "up" && direction !== "down" && direction !== "right") return;
+    setGestureFlashSignal((prev) => ({direction, id: (prev?.id ?? 0) + 1}));
   }, []);
 
   const trackStartedNote = useCallback((startedNote) => {
@@ -173,7 +176,8 @@ export default function ScalesPage({
     schedulePulseAt(lastStepAtMs + stepMs);
   }, [schedulePulseAt]);
 
-  const restartPulseLoop = useCallback(() => {
+  const restartPulseLoop = useCallback((primeFirstPulse = false) => {
+    startupPrimingRef.current = primeFirstPulse;
     const stepMs = (60 / activeBpmRef.current) * 1000;
     schedulePulseAt(performance.now() + stepMs);
   }, [schedulePulseAt]);
@@ -183,6 +187,7 @@ export default function ScalesPage({
     nextPulseAtMsRef.current = 0;
     stepInFlightRef.current = false;
     lastStepAtMsRef.current = 0;
+    startupPrimingRef.current = false;
   }, [clearPulseTimeout]);
 
   const stopPlayback = useCallback(() => {
@@ -235,13 +240,6 @@ export default function ScalesPage({
             rangeMinMidi,
             rangeMaxMidi
         );
-        if (rangeMinMidi === rangeMaxMidi) {
-          setRepeatDirectionIfChanged("stay");
-        } else if (noteMidi >= rangeMaxMidi) {
-          setRepeatDirectionIfChanged("down");
-        } else if (noteMidi <= rangeMinMidi) {
-          setRepeatDirectionIfChanged("up");
-        }
 
         try {
           const startedNote = await playNote(noteMidi, stepDuration);
@@ -255,17 +253,31 @@ export default function ScalesPage({
       timelineIndexRef.current = nextIndex;
 
       if (nextStartsSet) {
-        const nextRootMidi = currentSetRootMidiRef.current + semitoneDeltaForRepeatDirection(repeatDirectionRef.current);
-        currentSetRootMidiRef.current = clamp(nextRootMidi, scaleMinMidiRef.current, scaleMaxMidiRef.current);
-        if (pendingBpmRef.current !== null && pendingBpmRef.current !== activeBpmRef.current) {
-          activeBpmRef.current = pendingBpmRef.current;
-          pendingBpmRef.current = null;
-          reschedulePulseFromLastStep();
+        const rangeMinMidi = scaleMinMidiRef.current;
+        const rangeMaxMidi = scaleMaxMidiRef.current;
+        if (rangeMinMidi === rangeMaxMidi) {
+          setRepeatDirectionIfChanged("stay");
+          currentSetRootMidiRef.current = rangeMinMidi;
+        } else {
+          let nextDirection = repeatDirectionRef.current;
+          let nextRootMidi = currentSetRootMidiRef.current + semitoneDeltaForRepeatDirection(nextDirection);
+          if (nextRootMidi > rangeMaxMidi) {
+            nextDirection = "down";
+            nextRootMidi = currentSetRootMidiRef.current + semitoneDeltaForRepeatDirection(nextDirection);
+          } else if (nextRootMidi < rangeMinMidi) {
+            nextDirection = "up";
+            nextRootMidi = currentSetRootMidiRef.current + semitoneDeltaForRepeatDirection(nextDirection);
+          }
+          if (nextDirection !== repeatDirectionRef.current) {
+            flashGestureDirection(nextDirection);
+          }
+          setRepeatDirectionIfChanged(nextDirection);
+          currentSetRootMidiRef.current = clamp(nextRootMidi, rangeMinMidi, rangeMaxMidi);
         }
       }
       return noteWasPlayed;
     };
-  }, [reschedulePulseFromLastStep, trackStartedNote]);
+  }, [flashGestureDirection, trackStartedNote]);
 
   useEffect(() => {
     runPulseRef.current = async () => {
@@ -276,6 +288,7 @@ export default function ScalesPage({
       }
       if (stepInFlightRef.current) return;
       stepInFlightRef.current = true;
+      const primingFirstPulse = startupPrimingRef.current;
       lastStepAtMsRef.current = performance.now();
       try {
         const noteWasPlayed = await playStepRef.current?.();
@@ -286,10 +299,18 @@ export default function ScalesPage({
         }
       } finally {
         stepInFlightRef.current = false;
+        // After the first startup pulse, we anchor the next pulse from "now"
+        // instead of catching up from the pre-warmup timestamp.
+        if (primingFirstPulse) {
+          startupPrimingRef.current = false;
+          const stepMs = (60 / activeBpmRef.current) * 1000;
+          schedulePulseAt(performance.now() + stepMs);
+          return;
+        }
         reschedulePulseFromLastStep();
       }
     };
-  }, [allowPlayback, reschedulePulseFromLastStep, stopPulseLoop]);
+  }, [allowPlayback, reschedulePulseFromLastStep, schedulePulseAt, stopPulseLoop]);
 
   useEffect(() => {
     if (!allowPlayback || (!isPlaying && !isMetronomeEnabled)) {
@@ -297,7 +318,7 @@ export default function ScalesPage({
       return;
     }
     if (!nextPulseAtMsRef.current) {
-      restartPulseLoop();
+      restartPulseLoop(true);
     }
   }, [allowPlayback, isMetronomeEnabled, isPlaying, restartPulseLoop, stopPulseLoop]);
 
@@ -306,18 +327,16 @@ export default function ScalesPage({
       stopAllNotes();
       return;
     }
-    if (pendingBpmRef.current !== null) {
-      activeBpmRef.current = pendingBpmRef.current;
-      pendingBpmRef.current = null;
-    }
     timelineIndexRef.current = 0;
     stepInFlightRef.current = false;
     lastStepAtMsRef.current = 0;
-    restartPulseLoop();
+    // Preserve startup priming if another effect has already marked this run
+    // as a fresh start from a stopped loop.
+    restartPulseLoop(startupPrimingRef.current);
   }, [allowPlayback, isPlaying, restartPulseLoop, stopAllNotes]);
 
   useEffect(() => {
-    if (!nextPulseAtMsRef.current || isPlayingRef.current) return;
+    if (!nextPulseAtMsRef.current) return;
     reschedulePulseFromLastStep();
   }, [bpm, reschedulePulseFromLastStep]);
 
@@ -328,7 +347,7 @@ export default function ScalesPage({
     repeatDirectionRef.current = direction;
     setRepeatDirection(direction);
     playStepRef.current?.();
-    restartPulseLoop();
+    restartPulseLoop(false);
   }, [restartPulseLoop]);
 
   const updateRapidVerticalSwipeState = useCallback((direction) => {
@@ -447,6 +466,7 @@ export default function ScalesPage({
               className="relative flex min-h-0 flex-1 items-center justify-center rounded-md touch-none"
               onTap={onGestureTap}
               onSwipe={onGestureSwipe}
+              externalFlashSignal={gestureFlashSignal}
               showHelp={showGestureHelp}
               helpContent={
                 <div
