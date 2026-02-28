@@ -1,13 +1,3 @@
-function orderedTimelineValues(values, writeIndex, count) {
-  const ordered = [];
-  const total = values.length;
-  const firstIndex = count === total ? writeIndex : 0;
-  for (let i = 0; i < count; i += 1) {
-    ordered.push(values[(firstIndex + i) % total]);
-  }
-  return ordered;
-}
-
 function contiguousFiniteTail(values, maxSamples) {
   const tail = [];
   for (let i = values.length - 1; i >= 0 && tail.length < maxSamples; i -= 1) {
@@ -20,18 +10,15 @@ function contiguousFiniteTail(values, maxSamples) {
 }
 
 function centeredFiniteTail({
-                              values,
-                              writeIndex,
-                              count,
+                              ring,
                               samplesPerSecond,
                               analysisWindowSeconds,
                               minContinuousSeconds,
                             }) {
-  if (!values || count <= 0 || samplesPerSecond <= 0) return null;
-
-  const ordered = orderedTimelineValues(values, writeIndex, count);
+  if (!ring || ring.sampleCount <= 0 || samplesPerSecond <= 0) return null;
+  const values = ring.values();
   const maxSamples = Math.max(1, Math.floor(samplesPerSecond * analysisWindowSeconds));
-  const tail = contiguousFiniteTail(ordered, maxSamples);
+  const tail = contiguousFiniteTail(values, maxSamples);
   const minSamples = Math.max(8, Math.floor(samplesPerSecond * minContinuousSeconds));
   if (tail.length < minSamples) return null;
 
@@ -119,9 +106,7 @@ function rateFromLastTwoPeaks(centered, samplesPerSecond) {
 }
 
 export function estimateTimelineVibratoRate({
-                                              values,
-                                              writeIndex,
-                                              count,
+                                              ring = null,
                                               samplesPerSecond,
                                               minRateHz = 4,
                                               maxRateHz = 10,
@@ -129,9 +114,7 @@ export function estimateTimelineVibratoRate({
                                               minContinuousSeconds = 0.6,
                                             }) {
   const tailData = centeredFiniteTail({
-    values,
-    writeIndex,
-    count,
+    ring,
     samplesPerSecond,
     analysisWindowSeconds,
     minContinuousSeconds,
@@ -146,21 +129,17 @@ export function estimateTimelineVibratoRate({
 }
 
 export function estimateTimelineCenterCents({
-                                              values,
-                                              writeIndex,
-                                              count,
+                                              ring = null,
                                               detectionAlphas = null,
                                               recentSampleCount = 160,
                                             }) {
-  if (!values || count <= 0) return null;
-  const firstIndex = count === values.length ? writeIndex : 0;
-  const start = Math.max(0, count - Math.max(1, Math.floor(recentSampleCount)));
+  if (!ring || ring.sampleCount <= 0) return null;
+  const start = Math.max(0, ring.sampleCount - Math.max(1, Math.floor(recentSampleCount)));
   let sum = 0;
   let finiteCount = 0;
-  for (let i = start; i < count; i += 1) {
-    const index = (firstIndex + i) % values.length;
-    if (detectionAlphas && detectionAlphas[index] < 0.99) continue;
-    const value = values[index];
+  for (let i = start; i < ring.sampleCount; i += 1) {
+    if (detectionAlphas && detectionAlphas[i] < 0.99) continue;
+    const value = ring.at(i);
     if (!Number.isFinite(value)) continue;
     sum += value;
     finiteCount += 1;

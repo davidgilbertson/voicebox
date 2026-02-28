@@ -10,7 +10,7 @@ export async function createRecorderAudioSession({
   let source = null;
   let captureNode = null;
   let analyser = null;
-  let sinkGain = null;
+  let silentOutputGain = null;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -41,10 +41,11 @@ export async function createRecorderAudioSession({
     source.connect(captureNode);
     source.connect(analyser);
 
-    sinkGain = context.createGain();
-    sinkGain.gain.value = 0;
-    captureNode.connect(sinkGain);
-    sinkGain.connect(context.destination);
+    // Keep the worklet in the pull graph while producing no audible output.
+    silentOutputGain = context.createGain();
+    silentOutputGain.gain.value = 0;
+    captureNode.connect(silentOutputGain);
+    silentOutputGain.connect(context.destination);
 
     const sampleRate = context.sampleRate;
     const hopSize = Math.round(sampleRate / displayPixelsPerSecond);
@@ -59,7 +60,7 @@ export async function createRecorderAudioSession({
       source,
       captureNode,
       analyser,
-      sinkGain,
+      silentOutputGain,
       sampleRate,
       hopSize,
     };
@@ -70,7 +71,7 @@ export async function createRecorderAudioSession({
       source,
       captureNode,
       analyser,
-      sinkGain,
+      silentOutputGain,
     });
     throw error;
   }
@@ -82,7 +83,7 @@ export function destroyRecorderAudioSession({
   source,
   captureNode,
   analyser,
-  sinkGain,
+  silentOutputGain,
 }) {
   if (captureNode) {
     captureNode.port.onmessage = null;
@@ -91,8 +92,8 @@ export function destroyRecorderAudioSession({
   if (source) {
     source.disconnect();
   }
-  if (sinkGain) {
-    sinkGain.disconnect();
+  if (silentOutputGain) {
+    silentOutputGain.disconnect();
   }
   if (analyser) {
     analyser.disconnect();

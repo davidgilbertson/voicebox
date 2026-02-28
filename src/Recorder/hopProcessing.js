@@ -131,7 +131,7 @@ export function processOneAudioHop({
   signalTracking,
   spectrumIntensityEma,
   autoPauseOnSilence,
-  timeline,
+  pitchHistory,
   audioState,
   spectrogramNoiseState,
   spectrogramCapture,
@@ -201,7 +201,7 @@ export function processOneAudioHop({
     );
     const smoothedSpectrumIntensity = spectrumIntensityEma + ((signalIntensity - spectrumIntensityEma) * 0.2);
     nextSpectrumIntensityEma = smoothedSpectrumIntensity;
-    pitchWriteResult = writePitchTimeline(timeline, {
+    pitchWriteResult = writePitchTimeline(pitchHistory, {
       autoPauseOnSilence,
       hasSignal: isAboveSilenceThreshold,
       cents: result.cents,
@@ -209,21 +209,19 @@ export function processOneAudioHop({
     });
     if (pitchWriteResult.steps > 0) {
       const estimatedRateNow = estimateTimelineVibratoRate({
-        values: timeline.values,
-        writeIndex: timeline.writeIndex,
-        count: timeline.count,
-        samplesPerSecond: timeline.columnRateHz,
+        ring: pitchHistory.rawPitchCentsRing,
+        samplesPerSecond: pitchHistory.columnRateHz,
         minRateHz: vibratoRateConfig.minRateHz,
         maxRateHz: vibratoRateConfig.maxRateHz,
         analysisWindowSeconds: vibratoRateConfig.analysisWindowSeconds,
         minContinuousSeconds: vibratoRateConfig.minContinuousSeconds,
       });
-      timeline.vibratoRates[pitchWriteResult.lastWriteIndex] = estimatedRateNow ?? Number.NaN;
+      pitchHistory.vibratoRateHzRing.setAt(-1, estimatedRateNow ?? Number.NaN);
       didFrameDataChange = true;
     }
   }
 
-  const spectrogramSilencePaused = pitchWriteResult?.paused ?? timeline.silencePaused;
+  const spectrogramSilencePaused = pitchWriteResult?.paused ?? pitchHistory.silencePaused;
   if (!spectrumNormalized || spectrogramSilencePaused) {
     return {
       didFrameDataChange,

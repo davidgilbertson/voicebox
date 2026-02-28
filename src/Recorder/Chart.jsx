@@ -11,11 +11,9 @@ const Chart = forwardRef(function Chart({
   const canvasRef = useRef(null);
 
   const draw = ({
-                  values,
-                  colorValues = null,
+                  valuesRing,
+                  colorValuesRing,
                   alphaValues = null,
-                  writeIndex,
-                  count,
                   yOffset = 0,
                   yRange = 1,
                   mapValueToY = null,
@@ -28,6 +26,7 @@ const Chart = forwardRef(function Chart({
                   gapThreshold = Number.POSITIVE_INFINITY,
                   drawBackground,
                 }) => {
+    const effectiveSampleCount = valuesRing.sampleCount;
     const canvas = canvasRef.current;
     if (!canvas || yRange <= 0) return;
     const ctx = canvas.getContext("2d");
@@ -56,7 +55,7 @@ const Chart = forwardRef(function Chart({
       drawBackground(ctx, cssWidth, cssHeight);
     }
 
-    if (!values || count <= 0) {
+    if (effectiveSampleCount <= 0) {
       return;
     }
 
@@ -69,11 +68,11 @@ const Chart = forwardRef(function Chart({
     const midY = plotTop + (plotHeight / 2);
     const scaleY = (plotHeight / 2) / yRange;
     ctx.lineWidth = LINE_WIDTH;
-    const useAlphaSegments = colorValues && mapColorValueToStroke && alphaValues;
+    const usePerSegmentColor = Boolean(mapColorValueToStroke);
+    const useAlphaSegments = Boolean(usePerSegmentColor && alphaValues);
     ctx.lineJoin = useAlphaSegments ? "miter" : "round";
     ctx.lineCap = useAlphaSegments ? "butt" : "round";
 
-    const usePerSegmentColor = colorValues && mapColorValueToStroke;
     if (!usePerSegmentColor) {
       ctx.strokeStyle = lineColor;
       ctx.beginPath();
@@ -82,12 +81,10 @@ const Chart = forwardRef(function Chart({
     let lastValue = null;
     let lastY = null;
     let lastX = null;
-    const totalSlots = values.length;
-    const firstIndex = count === totalSlots ? writeIndex : 0;
-    const startSlot = count < totalSlots ? totalSlots - count : 0;
-    for (let i = 0; i < count; i += 1) {
-      const bufferIndex = (firstIndex + i) % totalSlots;
-      const value = values[bufferIndex];
+    const totalSlots = valuesRing.capacity;
+    const startSlot = effectiveSampleCount < totalSlots ? totalSlots - effectiveSampleCount : 0;
+    for (let i = 0; i < effectiveSampleCount; i += 1) {
+      const value = valuesRing.at(i);
       if (Number.isNaN(value)) {
         lastValue = null;
         lastY = null;
@@ -111,8 +108,8 @@ const Chart = forwardRef(function Chart({
         hasActivePath = true;
       } else {
         if (usePerSegmentColor && lastX !== null) {
-          const colorValue = colorValues[bufferIndex];
-          const alphaValue = alphaValues ? alphaValues[bufferIndex] : 1;
+          const colorValue = colorValuesRing.at(i);
+          const alphaValue = alphaValues ? alphaValues[i] : 1;
           ctx.strokeStyle = mapColorValueToStroke(colorValue);
           ctx.globalAlpha = Number.isFinite(alphaValue) ? clamp(alphaValue, 0, 1) : 1;
           ctx.beginPath();

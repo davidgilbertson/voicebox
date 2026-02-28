@@ -17,7 +17,7 @@ Chart progression is driven by audio sample counts, not wall-clock time.
 
 - Audio session lifecycle (`getUserMedia`, `AudioContext`, worklet, analyser, teardown).
 - Foreground/background policy for recorder pages.
-- Per-hop processing and timeline updates.
+- Per-hop processing and pitch-history updates.
 - Render scheduling (`requestAnimationFrame`) and chart drawing dispatch.
 - Runtime UI state publication (`isAudioRunning`, `error`, `vibratoRate`, noise-profile status, battery usage).
 
@@ -71,7 +71,7 @@ Chart progression is driven by audio sample counts, not wall-clock time.
 9. `intensity`
 
 - Normalized `[0..1]` value used for pitch/vibrato line coloring.
-- Stored in timeline as `timelineRef.current.intensities`.
+- Stored in pitch history as `signalStrengthRing`.
 
 ## Pipeline
 
@@ -89,22 +89,22 @@ Chart progression is driven by audio sample counts, not wall-clock time.
 - Detect pitch from `spectrumForPitchDetection` when gate is open.
 - Update running `maxSignalLevel` from `signalLevel` after warmup.
 - Compute `intensity` from `signalLevel` using fixed floor + running max (with EMA smoothing).
-- Write pitch/intensity into shared timeline ring.
+- Write pitch/intensity into shared pitch-history rings.
 - Append spectrogram column (`spectrumNormalized`, optionally noise-filtered) unless silence-paused.
 
 4. `AudioEngine` `renderLoop` draws when dirty:
 
-- Pitch and vibrato read from shared timeline ring.
+- Pitch and vibrato read from shared pitch-history rings.
 - Spectrogram draws from retained bitmap + pending columns queue in `SpectrogramChart`.
 
 ## State objects (actual names, current)
 
-1. Shared pitch/vibrato timeline ring:
+1. Shared pitch-history rings:
 
-- `timeline.values` (pitch cents)
-- `timeline.intensities` (line color intensity)
-- `timeline.writeIndex`
-- `timeline.count`
+- `rawPitchCentsRing` (pitch cents)
+- `smoothedPitchCentsRing` (drawn cents)
+- `signalStrengthRing` (line color intensity)
+- `vibratoRateHzRing`
 
 2. Per-hop spectrum capture buffers:
 

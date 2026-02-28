@@ -1,26 +1,21 @@
+import {RingBuffer} from "./ringBuffer.js";
+
 const SMOOTH_RADIUS = 3;
 const SMOOTH_KERNEL = [0.01, 0.08, 0.22, 0.38, 0.22, 0.08, 0.01];
 
-function wrapIndex(length, index) {
-  const wrapped = index % length;
-  return wrapped < 0 ? wrapped + length : wrapped;
-}
-
 function updateDisplaySmoothingAtWrite(state) {
-  if (state.count < (SMOOTH_RADIUS * 2) + 1) return;
-  const length = state.values.length;
-  const newestIndex = wrapIndex(length, state.writeIndex - 1);
-  const targetIndex = wrapIndex(length, newestIndex - SMOOTH_RADIUS);
+  const rawPitchCentsRing = state.rawPitchCentsRing;
+  if (rawPitchCentsRing.sampleCount < (SMOOTH_RADIUS * 2) + 1) return;
 
   let smoothed = 0;
   for (let offset = -SMOOTH_RADIUS; offset <= SMOOTH_RADIUS; offset += 1) {
-    const sample = state.values[wrapIndex(length, targetIndex + offset)];
+    const sample = rawPitchCentsRing.fromNewest(SMOOTH_RADIUS - offset);
     if (!Number.isFinite(sample)) {
       return;
     }
     smoothed += sample * SMOOTH_KERNEL[offset + SMOOTH_RADIUS];
   }
-  state.displayValues[targetIndex] = smoothed;
+  state.smoothedPitchCentsRing.setAt(-(SMOOTH_RADIUS + 1), smoothed);
 }
 
 export function createPitchTimeline({
@@ -29,21 +24,15 @@ export function createPitchTimeline({
   silencePauseStepThreshold,
 }) {
   const length = Math.max(1, Math.floor(columnRateHz * seconds));
-  const values = new Float32Array(length);
-  const displayValues = new Float32Array(length);
-  const intensities = new Float32Array(length);
-  const vibratoRates = new Float32Array(length);
-  values.fill(Number.NaN);
-  displayValues.fill(Number.NaN);
-  intensities.fill(Number.NaN);
-  vibratoRates.fill(Number.NaN);
+  const rawPitchCentsRing = new RingBuffer(length);
+  const smoothedPitchCentsRing = new RingBuffer(length);
+  const signalStrengthRing = new RingBuffer(length);
+  const vibratoRateHzRing = new RingBuffer(length);
   return {
-    values,
-    displayValues,
-    intensities,
-    vibratoRates,
-    writeIndex: 0,
-    count: 0,
+    rawPitchCentsRing,
+    smoothedPitchCentsRing,
+    signalStrengthRing,
+    vibratoRateHzRing,
     columnRateHz,
     silencePauseStepThreshold,
     silentStepCount: 0,
@@ -55,17 +44,11 @@ export function createPitchTimeline({
 }
 
 function pushValue(state, value, intensity) {
-  const writeIndex = state.writeIndex;
-  state.values[writeIndex] = value;
-  state.displayValues[writeIndex] = value;
-  state.intensities[writeIndex] = intensity;
-  state.vibratoRates[writeIndex] = Number.NaN;
-  state.writeIndex = (writeIndex + 1) % state.values.length;
-  if (state.count < state.values.length) {
-    state.count += 1;
-  }
+  state.rawPitchCentsRing.push(value);
+  state.smoothedPitchCentsRing.push(value);
+  state.signalStrengthRing.push(intensity);
+  state.vibratoRateHzRing.push(Number.NaN);
   updateDisplaySmoothingAtWrite(state);
-  return writeIndex;
 }
 
 export function writePitchTimeline(state, {
@@ -92,62 +75,20 @@ export function writePitchTimeline(state, {
   state.diagnostics.totalTickCount += 1;
 
   if (state.silencePaused) {
-    return {steps: 0, paused: true, lastWriteIndex: null};
+    return {steps: 0, paused: true};
   }
 
   const hasPitch = Number.isFinite(cents);
   const value = hasPitch ? cents : Number.NaN;
   const nextIntensity = hasPitch ? intensity : Number.NaN;
-  const lastWriteIndex = pushValue(state, value, nextIntensity);
-  return {steps: 1, paused: false, lastWriteIndex};
-}
-
-function extractOrderedValues(buffer, writeIndex, count) {
-  if (count <= 0) return new Float32Array(0);
-  const totalLength = buffer.length;
-  const firstIndex = count === totalLength ? writeIndex : 0;
-  const ordered = new Float32Array(count);
-  for (let i = 0; i < count; i += 1) {
-    ordered[i] = buffer[(firstIndex + i) % totalLength];
-  }
-  return ordered;
+  pushValue(state, value, nextIntensity);
+  return {steps: 1, paused: false};
 }
 
 export function resizePitchTimeline(state, nextLength) {
   if (!state) return;
-  const targetLength = Math.max(1, Math.floor(nextLength));
-  const currentLength = state.values.length;
-  if (targetLength === currentLength) return;
-
-  const nextValues = new Float32Array(targetLength);
-  const nextDisplayValues = new Float32Array(targetLength);
-  const nextIntensities = new Float32Array(targetLength);
-  const nextVibratoRates = new Float32Array(targetLength);
-  nextValues.fill(Number.NaN);
-  nextDisplayValues.fill(Number.NaN);
-  nextIntensities.fill(Number.NaN);
-  nextVibratoRates.fill(Number.NaN);
-
-  if (state.count > 0) {
-    const orderedValues = extractOrderedValues(state.values, state.writeIndex, state.count);
-    const orderedDisplayValues = extractOrderedValues(state.displayValues, state.writeIndex, state.count);
-    const orderedIntensities = extractOrderedValues(state.intensities, state.writeIndex, state.count);
-    const orderedVibratoRates = extractOrderedValues(state.vibratoRates, state.writeIndex, state.count);
-    const nextCount = Math.min(targetLength, state.count);
-    const start = orderedValues.length - nextCount;
-    nextValues.set(orderedValues.subarray(start), 0);
-    nextDisplayValues.set(orderedDisplayValues.subarray(start), 0);
-    nextIntensities.set(orderedIntensities.subarray(start), 0);
-    nextVibratoRates.set(orderedVibratoRates.subarray(start), 0);
-    state.count = nextCount;
-    state.writeIndex = nextCount === targetLength ? 0 : nextCount;
-  } else {
-    state.count = 0;
-    state.writeIndex = 0;
-  }
-
-  state.values = nextValues;
-  state.displayValues = nextDisplayValues;
-  state.intensities = nextIntensities;
-  state.vibratoRates = nextVibratoRates;
+  state.rawPitchCentsRing.resize(nextLength);
+  state.smoothedPitchCentsRing.resize(nextLength);
+  state.signalStrengthRing.resize(nextLength);
+  state.vibratoRateHzRing.resize(nextLength);
 }

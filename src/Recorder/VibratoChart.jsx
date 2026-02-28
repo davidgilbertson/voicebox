@@ -9,6 +9,7 @@ import {
   VIBRATO_SWEET_MAX_HZ,
   VIBRATO_SWEET_MIN_HZ,
 } from "./config.js";
+import {estimateTimelineCenterCents} from "./vibratoTools.js";
 
 const WAVEFORM_LINE_COLOR = colors.blue[400];
 const Y_RANGE = 405; // in cents
@@ -16,6 +17,7 @@ const LABEL_X = 4;
 const PLOT_LEFT = 21;
 const PLOT_Y_INSET = 5;
 const MAX_DRAW_JUMP_CENTS = 80;
+const DEFAULT_CENTER_CENTS = 1200 * Math.log2(220);
 
 function getSemitoneSteps(waveRange) {
   const maxStep = Math.max(1, Math.floor(waveRange / 100));
@@ -78,16 +80,33 @@ const VibratoChart = forwardRef(function VibratoChart({
                                                       }, ref) {
   const chartRef = useRef(null);
   const backgroundCacheRef = useRef(null);
+  const centerCentsRef = useRef(DEFAULT_CENTER_CENTS);
+  const detectionAlphasRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
-    draw({values, intensities, detectionAlphas, writeIndex, count, yOffset}) {
+    draw({smoothedPitchCentsRing, rawPitchCentsRing, signalStrengthRing, vibratoRateHzRing}) {
+      const visibleSamples = vibratoRateHzRing.sampleCount;
+      if (!detectionAlphasRef.current || detectionAlphasRef.current.length !== visibleSamples) {
+        detectionAlphasRef.current = new Float32Array(visibleSamples);
+      }
+      const detectionAlphas = detectionAlphasRef.current;
+      for (let i = 0; i < visibleSamples; i += 1) {
+        const rate = vibratoRateHzRing.at(i);
+        detectionAlphas[i] = Number.isFinite(rate) ? 1 : 0.25;
+      }
+      const centerFromVibrato = estimateTimelineCenterCents({
+        ring: rawPitchCentsRing,
+        detectionAlphas,
+      });
+      if (centerFromVibrato !== null) {
+        centerCentsRef.current = centerFromVibrato;
+      }
+
       chartRef.current?.draw({
-        values,
-        colorValues: intensities,
+        valuesRing: smoothedPitchCentsRing,
+        colorValuesRing: signalStrengthRing,
         alphaValues: detectionAlphas,
-        writeIndex,
-        count,
-        yOffset,
+        yOffset: centerCentsRef.current,
         yRange: Y_RANGE,
         xInsetLeft: PLOT_LEFT,
         yInsetTop: PLOT_Y_INSET,

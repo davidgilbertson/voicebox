@@ -3,14 +3,15 @@ import assert from "node:assert/strict";
 import {
   estimateTimelineCenterCents,
   estimateTimelineVibratoRate,
-} from "../../src/Recorder/vibratoRate.js";
+} from "../../src/Recorder/vibratoTools.js";
+import {RingBuffer} from "../../src/Recorder/ringBuffer.js";
 
-function createTimelineFromSeries(series) {
-  return {
-    values: Float32Array.from(series),
-    writeIndex: 0,
-    count: series.length,
-  };
+function createRingFromSeries(series) {
+  const ring = new RingBuffer(series.length);
+  for (const value of series) {
+    ring.push(value);
+  }
+  return ring;
 }
 
 function assertDetectsStable6Hz(estimate) {
@@ -23,9 +24,9 @@ function assertDetectsStable6Hz(estimate) {
     series[i] = Math.sin(2 * Math.PI * 6 * t) * 70;
   }
 
-  const timeline = createTimelineFromSeries(series);
+  const ring = createRingFromSeries(series);
   const rateHz = estimate({
-    ...timeline,
+    ring,
     samplesPerSecond,
     minRateHz: 4,
     maxRateHz: 9,
@@ -45,9 +46,9 @@ function assertOutOfRangeReturnsNull(estimate) {
     series[i] = Math.sin(2 * Math.PI * 10 * t) * 70;
   }
 
-  const timeline = createTimelineFromSeries(series);
+  const ring = createRingFromSeries(series);
   const rateHz = estimate({
-    ...timeline,
+    ring,
     samplesPerSecond,
     minRateHz: 4,
     maxRateHz: 9,
@@ -58,14 +59,13 @@ function assertOutOfRangeReturnsNull(estimate) {
 
 function assertSilentGapReturnsNull(estimate) {
   const samplesPerSecond = 200;
-  const values = Float32Array.from([
+  const series = [
     ...new Array(700).fill(Number.NaN),
     ...new Array(300).fill(0),
-  ]);
+  ];
+  const ring = createRingFromSeries(series);
   const rateHz = estimate({
-    values,
-    writeIndex: 0,
-    count: values.length,
+    ring,
     samplesPerSecond,
     minRateHz: 4,
     maxRateHz: 9,
@@ -96,9 +96,9 @@ test("default vibrato estimator handles rounded plateaus", () => {
     series[i] = Math.round(raw / 10) * 10;
   }
 
-  const timeline = createTimelineFromSeries(series);
+  const ring = createRingFromSeries(series);
   const rateHz = estimateTimelineVibratoRate({
-    ...timeline,
+    ring,
     samplesPerSecond,
     minRateHz: 4,
     maxRateHz: 9,
@@ -110,9 +110,9 @@ test("default vibrato estimator handles rounded plateaus", () => {
 
 test("default vibrato estimator handles turning-point at second-last sample", () => {
   const series = [-14, -1, -14, 3, -16, -33, -18, -2, 18, 26, 22, 9, -5, 5, 0];
-  const timeline = createTimelineFromSeries(series);
+  const ring = createRingFromSeries(series);
   const rateHz = estimateTimelineVibratoRate({
-    ...timeline,
+    ring,
     samplesPerSecond: 40,
     minRateHz: 4,
     maxRateHz: 10,
@@ -123,15 +123,13 @@ test("default vibrato estimator handles turning-point at second-last sample", ()
   assert.ok(Math.abs(rateHz - 6.6667) < 0.01);
 });
 
-test("timeline center can use vibrato-only samples", () => {
-  const values = Float32Array.from([100, 100, 100, 300, 300, 300]);
+test("pitch-history center can use vibrato-only samples", () => {
+  const ring = createRingFromSeries([100, 100, 100, 300, 300, 300]);
   const detectionAlphas = Float32Array.from([0.25, 0.25, 0.25, 1, 1, 1]);
   const center = estimateTimelineCenterCents({
-    values,
-    writeIndex: 0,
-    count: values.length,
+    ring,
     detectionAlphas,
-    recentSampleCount: values.length,
+    recentSampleCount: ring.sampleCount,
   });
   assert.equal(center, 300);
 });

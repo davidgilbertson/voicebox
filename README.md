@@ -49,7 +49,7 @@ The Spectrogram, Pitch, and Vibrato pages are all linked, so you can switch betw
 ### General
 
 - **Keep running in background**: continue recording when app loses focus.
-- **Auto pause on silence**: pauses timeline writes during silence.
+- **Auto pause on silence**: pauses pitch-history writes during silence.
 
 ### Scales Page
 

@@ -17,8 +17,8 @@ function createAnalyserWithSpectrum(spectrumDb, {minDecibels = -100, maxDecibels
   };
 }
 
-test("processOneAudioHop does not write timeline when silence gating pauses immediately", () => {
-  const timeline = createPitchTimeline({
+test("processOneAudioHop does not write pitch history when silence gating pauses immediately", () => {
+  const pitchHistory = createPitchTimeline({
     columnRateHz: 80,
     seconds: 2,
     silencePauseStepThreshold: 1,
@@ -38,7 +38,7 @@ test("processOneAudioHop does not write timeline when silence gating pauses imme
     signalTracking: {maxHeardSignalLevel: 0.2},
     spectrumIntensityEma: 0,
     autoPauseOnSilence: true,
-    timeline,
+    pitchHistory,
     audioState,
     spectrogramNoiseState: {profile: null, calibrating: false, sumBins: null, sampleCount: 0},
     spectrogramCapture,
@@ -51,11 +51,11 @@ test("processOneAudioHop does not write timeline when silence gating pauses imme
 
   expect(result.didFrameDataChange).toBe(false);
   expect(result.spectrogramColumn).toBeNull();
-  expect(timeline.count).toBe(0);
+  expect(pitchHistory.rawPitchCentsRing.sampleCount).toBe(0);
 });
 
-test("processOneAudioHop writes one timeline step for valid signal and returns spectrogram column", () => {
-  const timeline = createPitchTimeline({
+test("processOneAudioHop writes one pitch-history step for valid signal and returns spectrogram column", () => {
+  const pitchHistory = createPitchTimeline({
     columnRateHz: 80,
     seconds: 2,
     silencePauseStepThreshold: 4,
@@ -77,7 +77,7 @@ test("processOneAudioHop writes one timeline step for valid signal and returns s
     signalTracking: {maxHeardSignalLevel: 0.1},
     spectrumIntensityEma: 0,
     autoPauseOnSilence: true,
-    timeline,
+    pitchHistory,
     audioState,
     spectrogramNoiseState: {profile: null, calibrating: false, sumBins: null, sampleCount: 0},
     spectrogramCapture,
@@ -91,8 +91,8 @@ test("processOneAudioHop writes one timeline step for valid signal and returns s
   expect(result.didFrameDataChange).toBe(true);
   expect(result.spectrogramColumn).toBeInstanceOf(Float32Array);
   expect(result.shouldPersistMaxSignalLevel).toBe(true);
-  expect(timeline.count).toBe(1);
-  expect(Number.isFinite(timeline.values[0])).toBe(true);
+  expect(pitchHistory.rawPitchCentsRing.sampleCount).toBe(1);
+  expect(Number.isFinite(pitchHistory.rawPitchCentsRing.newest())).toBe(true);
   expect(analyzePitch).toHaveBeenCalledTimes(1);
   expect(estimateTimelineVibratoRate).toHaveBeenCalledTimes(1);
 });

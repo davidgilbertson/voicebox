@@ -7,42 +7,22 @@ function silencePauseStepThreshold(columnRateHz, silencePauseThresholdMs) {
 }
 
 function orderedValues(state) {
-  const values = [];
-  const firstIndex = state.count === state.values.length ? state.writeIndex : 0;
-  for (let i = 0; i < state.count; i += 1) {
-    values.push(state.values[(firstIndex + i) % state.values.length]);
-  }
-  return values;
+  return Array.from(state.rawPitchCentsRing.slice());
 }
 
 function orderedIntensities(state) {
-  const intensities = [];
-  const firstIndex = state.count === state.intensities.length ? state.writeIndex : 0;
-  for (let i = 0; i < state.count; i += 1) {
-    intensities.push(state.intensities[(firstIndex + i) % state.intensities.length]);
-  }
-  return intensities;
+  return Array.from(state.signalStrengthRing.slice());
 }
 
 function orderedDisplayValues(state) {
-  const values = [];
-  const firstIndex = state.count === state.displayValues.length ? state.writeIndex : 0;
-  for (let i = 0; i < state.count; i += 1) {
-    values.push(state.displayValues[(firstIndex + i) % state.displayValues.length]);
-  }
-  return values;
+  return Array.from(state.smoothedPitchCentsRing.slice());
 }
 
 function orderedVibratoRates(state) {
-  const rates = [];
-  const firstIndex = state.count === state.vibratoRates.length ? state.writeIndex : 0;
-  for (let i = 0; i < state.count; i += 1) {
-    rates.push(state.vibratoRates[(firstIndex + i) % state.vibratoRates.length]);
-  }
-  return rates;
+  return Array.from(state.vibratoRateHzRing.slice());
 }
 
-test("timeline keeps SPS * seconds points and 60 points per 5Hz oscillation at 300 SPS", () => {
+test("pitch history keeps SPS * seconds points and 60 points per 5Hz oscillation at 300 SPS", () => {
   const samplesPerSecond = 300;
   const seconds = 5;
   const state = createPitchTimeline({
@@ -61,7 +41,7 @@ test("timeline keeps SPS * seconds points and 60 points per 5Hz oscillation at 3
     });
   }
 
-  assert.equal(state.count, samplesPerSecond * seconds);
+  assert.equal(state.rawPitchCentsRing.sampleCount, samplesPerSecond * seconds);
   const values = orderedValues(state);
   const firstOscillation = values.slice(0, samplesPerSecond / vibratoRate);
   assert.equal(firstOscillation.length, 60);
@@ -70,7 +50,7 @@ test("timeline keeps SPS * seconds points and 60 points per 5Hz oscillation at 3
   assert.ok(intensities.every((value) => value === 0.5));
 });
 
-test("columnRateHz defines timeline resolution when provided", () => {
+test("columnRateHz defines pitch-history resolution when provided", () => {
   const samplesPerSecond = 1200;
   const columnRateHz = 60;
   const seconds = 5;
@@ -89,12 +69,12 @@ test("columnRateHz defines timeline resolution when provided", () => {
     });
   }
 
-  assert.equal(state.values.length, totalColumns);
-  assert.equal(state.count, totalColumns);
+  assert.equal(state.rawPitchCentsRing.capacity, totalColumns);
+  assert.equal(state.rawPitchCentsRing.sampleCount, totalColumns);
   assert.equal(state.diagnostics.totalTickCount, totalColumns);
 });
 
-test("silence auto-pause can be disabled so timeline keeps advancing with NaN values", () => {
+test("silence auto-pause can be disabled so pitch history keeps advancing with NaN values", () => {
   const samplesPerSecond = 100;
   const state = createPitchTimeline({
     columnRateHz: samplesPerSecond,
@@ -111,14 +91,14 @@ test("silence auto-pause can be disabled so timeline keeps advancing with NaN va
   }
 
   assert.equal(state.silencePaused, false);
-  assert.equal(state.count, samplesPerSecond);
+  assert.equal(state.rawPitchCentsRing.sampleCount, samplesPerSecond);
   const values = orderedValues(state);
   assert.ok(values.every(Number.isNaN));
   const intensities = orderedIntensities(state);
   assert.ok(intensities.every(Number.isNaN));
 });
 
-test("silence auto-pause enabled stops writes after threshold", () => {
+test("silence auto-pause enabled stops pitch-history writes after threshold", () => {
   const samplesPerSecond = 100;
   const state = createPitchTimeline({
     columnRateHz: samplesPerSecond,
@@ -156,7 +136,7 @@ test("each write keeps intensity samples aligned with pitch samples", () => {
   });
 
   const intensities = orderedIntensities(state);
-  assert.equal(intensities.length, state.count);
+  assert.equal(intensities.length, state.signalStrengthRing.sampleCount);
   assert.equal(intensities.length, 2);
   assert.deepEqual(intensities.map((value) => Number(value.toFixed(3))), [0.2, 0.8]);
 });

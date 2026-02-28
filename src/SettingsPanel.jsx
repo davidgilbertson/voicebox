@@ -148,7 +148,7 @@ export default function SettingsPanel({
               <div className="flex flex-col gap-1">
                 <span>Auto pause on silence</span>
                 <span className="text-xs text-slate-400">
-                  Pause timeline writes after brief silence.
+                  Pause pitch-history writes after brief silence.
                 </span>
               </div>
               <input

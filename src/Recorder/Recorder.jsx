@@ -31,10 +31,10 @@ export default function Recorder({
 
   useEffect(() => {
     engine.attachCharts({
-      pitchChart: pitchChartRef.current,
-      vibratoChart: vibratoChartRef.current,
-      spectrogramChart: spectrogramChartRef.current,
-      container: chartContainerRef.current,
+      pitchChart: pitchChartRef,
+      vibratoChart: vibratoChartRef,
+      spectrogramChart: spectrogramChartRef,
+      container: chartContainerRef,
     });
     return () => {
       engine.detachCharts();

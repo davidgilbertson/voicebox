@@ -93,10 +93,10 @@ const SpectrogramChart = forwardRef(function SpectrogramChart({
   const collectTailColumns = (columnCount) => {
     const pending = pendingColumnsRef.current;
     const tailColumns = new Array(columnCount);
-    let writeIndex = columnCount - 1;
-    for (let i = pending.length - 1; i >= 0 && writeIndex >= 0; i -= 1) {
-      tailColumns[writeIndex] = pending[i];
-      writeIndex -= 1;
+    let tailInsertIndex = columnCount - 1;
+    for (let i = pending.length - 1; i >= 0 && tailInsertIndex >= 0; i -= 1) {
+      tailColumns[tailInsertIndex] = pending[i];
+      tailInsertIndex -= 1;
     }
     return tailColumns;
   };

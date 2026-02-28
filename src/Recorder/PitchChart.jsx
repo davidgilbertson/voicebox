@@ -27,14 +27,12 @@ const PitchChart = forwardRef(function PitchChart({
   const backgroundCacheRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
-    draw({values, intensities, writeIndex, count}) {
+    draw({smoothedPitchCentsRing, signalStrengthRing}) {
       const centsSpan = maxCents - minCents;
       if (centsSpan <= 0) return;
       chartRef.current?.draw({
-        values,
-        colorValues: intensities,
-        writeIndex,
-        count,
+        valuesRing: smoothedPitchCentsRing,
+        colorValuesRing: signalStrengthRing,
         xInsetLeft: PLOT_LEFT,
         yInsetTop: PLOT_Y_INSET,
         yInsetBottom: PLOT_Y_INSET,

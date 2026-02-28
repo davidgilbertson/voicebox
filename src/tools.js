@@ -19,21 +19,14 @@ export function pickPreferredAudioInputDeviceId(devices) {
   return preferredInput?.deviceId || null;
 }
 
-export function readNewestRingValue(values, writeIndex, count) {
-  if (!values || count <= 0) return Number.NaN;
-  const newestIndex = count === values.length ? ((writeIndex + values.length - 1) % values.length) : (count - 1);
-  return values[newestIndex];
+export function readNewestRingValue(ring) {
+  if (!ring) return Number.NaN;
+  return ring.newest();
 }
 
-export function findMostRecentFiniteInRing(values, writeIndex, count) {
-  if (!values || count <= 0) return null;
-  const total = values.length;
-  const firstIndex = count === total ? writeIndex : 0;
-  for (let i = count - 1; i >= 0; i -= 1) {
-    const value = values[(firstIndex + i) % total];
-    if (Number.isFinite(value)) return value;
-  }
-  return null;
+export function findMostRecentFiniteInRing(ring) {
+  if (!ring) return null;
+  return ring.findMostRecentFinite();
 }
 
 export function getColorPalette() {

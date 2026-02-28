@@ -16,7 +16,7 @@ import {
   writeSpectrogramNoiseProfile,
 } from "./config.js";
 import {createPitchTimeline, resizePitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
-import {estimateTimelineCenterCents, estimateTimelineVibratoRate} from "./vibratoRate.js";
+import {estimateTimelineVibratoRate} from "./vibratoTools.js";
 import {analyzeAudioWindowFftPitch} from "./audioSeries.js";
 import {createSpectrogramCaptureBuffers, processOneAudioHop} from "./hopProcessing.js";
 import {createRecorderAudioSession, destroyRecorderAudioSession} from "./audioSession.js";
@@ -27,7 +27,6 @@ import {findMostRecentFiniteInRing, pickPreferredAudioInputDeviceId, readNewestR
 
 const DEFAULT_CENTER_HZ = 220;
 const MIN_SIGNAL_THRESHOLD = 0.015;
-const NON_VIBRATO_ALPHA = 0.25;
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
 
 function createHzBuffer(length) {
@@ -46,19 +45,13 @@ function setStreamListeningEnabled(stream, enabled) {
   }
 }
 
-function fillDetectionAlphaFromVibratoRate(vibratoRates, output) {
-  for (let i = 0; i < vibratoRates.length; i += 1) {
-    output[i] = Number.isFinite(vibratoRates[i]) ? 1 : NON_VIBRATO_ALPHA;
-  }
-}
-
 export function createAudioEngine() {
   const listeners = new Set();
   const chartRefs = {
-    pitchChart: null,
-    vibratoChart: null,
-    spectrogramChart: null,
-    container: null,
+    pitchChartRef: null,
+    vibratoChartRef: null,
+    spectrogramChartRef: null,
+    containerRef: null,
   };
   let resizeObserver = null;
   const batteryUsageMonitor = createBatteryUsageMonitor();
@@ -111,7 +104,6 @@ export function createAudioEngine() {
     displayedVibratoRate: null,
     lastVibratoRateUpdateMs: null,
     lastKnownVibratoRate: null,
-    vibratoDetectionAlpha: null,
   };
 
   const audioState = {
@@ -120,14 +112,13 @@ export function createAudioEngine() {
     source: null,
     stream: null,
     captureNode: null,
-    sinkGain: null,
+    silentOutputGain: null,
     hzBuffer: null,
     hzIndex: 0,
     sampleRate: 48000,
     centerHz: DEFAULT_CENTER_HZ,
-    centerCents: 1200 * Math.log2(DEFAULT_CENTER_HZ),
   };
-  const timeline = createPitchTimeline({
+  const pitchHistory = createPitchTimeline({
     columnRateHz: DISPLAY_PIXELS_PER_SECOND,
     seconds: state.chartWidthPx / DISPLAY_PIXELS_PER_SECOND,
     silencePauseStepThreshold: Math.round((SILENCE_PAUSE_THRESHOLD_MS / 1000) * DISPLAY_PIXELS_PER_SECOND),
@@ -148,15 +139,11 @@ export function createAudioEngine() {
     syncAudioState();
   });
 
-  function notifyUi() {
+  function setUi(nextPartial) {
+    state.ui = {...state.ui, ...nextPartial};
     for (const listener of listeners) {
       listener(state.ui);
     }
-  }
-
-  function setUi(nextPartial) {
-    state.ui = {...state.ui, ...nextPartial};
-    notifyUi();
   }
 
   async function sampleBatteryUsage() {
@@ -186,7 +173,7 @@ export function createAudioEngine() {
       signalTracking,
       spectrumIntensityEma: state.spectrumIntensityEma,
       autoPauseOnSilence: state.autoPauseOnSilence,
-      timeline,
+      pitchHistory,
       audioState,
       spectrogramNoiseState,
       spectrogramCapture,
@@ -208,7 +195,7 @@ export function createAudioEngine() {
       writeMaxSignalLevel(state.signalLevel);
     }
     if (result.spectrogramColumn) {
-      chartRefs.spectrogramChart?.appendColumn(result.spectrogramColumn);
+      chartRefs.spectrogramChartRef?.current?.appendColumn(result.spectrogramColumn);
     }
     if (result.didFrameDataChange) {
       state.frameDirty = true;
@@ -260,11 +247,10 @@ export function createAudioEngine() {
       audioState.stream = session.stream;
       audioState.captureNode = session.captureNode;
       audioState.analyser = session.analyser;
-      audioState.sinkGain = session.sinkGain;
+      audioState.silentOutputGain = session.silentOutputGain;
       audioState.sampleRate = session.sampleRate;
       audioState.hzBuffer = hzBuffer;
       audioState.centerHz = audioState.centerHz || DEFAULT_CENTER_HZ;
-      audioState.centerCents = audioState.centerCents || 1200 * Math.log2(DEFAULT_CENTER_HZ);
 
       setStreamListeningEnabled(session.stream, state.ui.isWantedRunning);
       spectrogramCapture = createSpectrogramCaptureBuffers(session.analyser.frequencyBinCount);
@@ -297,7 +283,7 @@ export function createAudioEngine() {
     audioState.stream = null;
     audioState.captureNode = null;
     audioState.analyser = null;
-    audioState.sinkGain = null;
+    audioState.silentOutputGain = null;
     state.signalLevel = 0;
     state.frameDirty = false;
     setUi({isAudioRunning: false});
@@ -357,42 +343,24 @@ export function createAudioEngine() {
   function drawActiveChart() {
     const currentView = state.activeView;
     if (currentView === "vibrato") {
-      if (!renderState.vibratoDetectionAlpha || renderState.vibratoDetectionAlpha.length !== timeline.vibratoRates.length) {
-        renderState.vibratoDetectionAlpha = new Float32Array(timeline.vibratoRates.length);
-      }
-      fillDetectionAlphaFromVibratoRate(timeline.vibratoRates, renderState.vibratoDetectionAlpha);
-      const detectionAlphas = renderState.vibratoDetectionAlpha;
-      const centerFromVibrato = estimateTimelineCenterCents({
-        values: timeline.values,
-        writeIndex: timeline.writeIndex,
-        count: timeline.count,
-        detectionAlphas,
-      });
-      if (centerFromVibrato !== null) {
-        audioState.centerCents = centerFromVibrato;
-      }
-      chartRefs.vibratoChart?.draw({
-        values: timeline.displayValues,
-        intensities: timeline.intensities,
-        detectionAlphas,
-        writeIndex: timeline.writeIndex,
-        count: timeline.count,
-        yOffset: audioState.centerCents,
+      chartRefs.vibratoChartRef?.current?.draw({
+        smoothedPitchCentsRing: pitchHistory.smoothedPitchCentsRing,
+        rawPitchCentsRing: pitchHistory.rawPitchCentsRing,
+        signalStrengthRing: pitchHistory.signalStrengthRing,
+        vibratoRateHzRing: pitchHistory.vibratoRateHzRing,
       });
       return;
     }
     if (currentView === "spectrogram") {
-      chartRefs.spectrogramChart?.draw({
+      chartRefs.spectrogramChartRef?.current?.draw({
         binCount: spectrogramCapture.spectrumNormalized.length,
         sampleRate: audioState.sampleRate,
       });
       return;
     }
-    chartRefs.pitchChart?.draw({
-      values: timeline.displayValues,
-      intensities: timeline.intensities,
-      writeIndex: timeline.writeIndex,
-      count: timeline.count,
+    chartRefs.pitchChartRef?.current?.draw({
+      smoothedPitchCentsRing: pitchHistory.smoothedPitchCentsRing,
+      signalStrengthRing: pitchHistory.signalStrengthRing,
     });
   }
 
@@ -414,11 +382,8 @@ export function createAudioEngine() {
     let displayedRate = previousDisplayedRate;
 
     if (state.activeView === "vibrato") {
-      const newestRate = readNewestRingValue(
-          timeline.vibratoRates,
-          timeline.writeIndex,
-          timeline.count
-      );
+      const vibratoRateRing = pitchHistory.vibratoRateHzRing;
+      const newestRate = readNewestRingValue(vibratoRateRing);
       let estimatedRate = null;
       if (Number.isFinite(newestRate)) {
         estimatedRate = newestRate;
@@ -426,11 +391,7 @@ export function createAudioEngine() {
       } else if (previousDisplayedRate !== null) {
         estimatedRate = previousDisplayedRate;
       } else {
-        estimatedRate = renderState.lastKnownVibratoRate ?? findMostRecentFiniteInRing(
-            timeline.vibratoRates,
-            timeline.writeIndex,
-            timeline.count
-        );
+        estimatedRate = renderState.lastKnownVibratoRate ?? findMostRecentFiniteInRing(vibratoRateRing);
       }
 
       if (estimatedRate !== null) {
@@ -473,13 +434,13 @@ export function createAudioEngine() {
 
   function setupResizeObserver() {
     teardownResizeObserver();
-    const container = chartRefs.container;
+    const container = chartRefs.containerRef?.current;
     if (!container || typeof ResizeObserver !== "function") return;
     const onResize = () => {
       const nextWidth = Math.max(1, Math.floor(container.clientWidth ?? window.innerWidth));
       if (nextWidth !== state.chartWidthPx) {
         state.chartWidthPx = nextWidth;
-        resizePitchTimeline(timeline, nextWidth);
+        resizePitchTimeline(pitchHistory, nextWidth);
       }
       if (!state.ui.isAudioRunning) {
         state.forceRedraw = true;
@@ -495,18 +456,18 @@ export function createAudioEngine() {
 
   const engine = {
     attachCharts({pitchChart, vibratoChart, spectrogramChart, container}) {
-      chartRefs.pitchChart = pitchChart ?? null;
-      chartRefs.vibratoChart = vibratoChart ?? null;
-      chartRefs.spectrogramChart = spectrogramChart ?? null;
-      chartRefs.container = container ?? null;
+      chartRefs.pitchChartRef = pitchChart ?? null;
+      chartRefs.vibratoChartRef = vibratoChart ?? null;
+      chartRefs.spectrogramChartRef = spectrogramChart ?? null;
+      chartRefs.containerRef = container ?? null;
       setupResizeObserver();
       state.forceRedraw = true;
     },
     detachCharts() {
-      chartRefs.pitchChart = null;
-      chartRefs.vibratoChart = null;
-      chartRefs.spectrogramChart = null;
-      chartRefs.container = null;
+      chartRefs.pitchChartRef = null;
+      chartRefs.vibratoChartRef = null;
+      chartRefs.spectrogramChartRef = null;
+      chartRefs.containerRef = null;
       teardownResizeObserver();
     },
     updateSettings({

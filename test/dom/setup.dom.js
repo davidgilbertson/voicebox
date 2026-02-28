@@ -181,10 +181,6 @@ class FakeAudioContext {
         return Math.max(1, Math.floor(fftSize / 2));
       },
       smoothingTimeConstant: 0,
-      // TODO (@davidgilbertson): never used now?
-      getByteFrequencyData: (array) => {
-        array.fill(0);
-      },
       getFloatFrequencyData: (array) => {
         array.fill(-120);
       },
