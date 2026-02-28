@@ -24,6 +24,24 @@ function orderedIntensities(state) {
   return intensities;
 }
 
+function orderedDisplayValues(state) {
+  const values = [];
+  const firstIndex = state.count === state.displayValues.length ? state.writeIndex : 0;
+  for (let i = 0; i < state.count; i += 1) {
+    values.push(state.displayValues[(firstIndex + i) % state.displayValues.length]);
+  }
+  return values;
+}
+
+function orderedVibratoRates(state) {
+  const rates = [];
+  const firstIndex = state.count === state.vibratoRates.length ? state.writeIndex : 0;
+  for (let i = 0; i < state.count; i += 1) {
+    rates.push(state.vibratoRates[(firstIndex + i) % state.vibratoRates.length]);
+  }
+  return rates;
+}
+
 test("timeline keeps SPS * seconds points and 60 points per 5Hz oscillation at 300 SPS", () => {
   const samplesPerSecond = 300;
   const seconds = 5;
@@ -141,4 +159,63 @@ test("each write keeps intensity samples aligned with pitch samples", () => {
   assert.equal(intensities.length, state.count);
   assert.equal(intensities.length, 2);
   assert.deepEqual(intensities.map((value) => Number(value.toFixed(3))), [0.2, 0.8]);
+});
+
+test("each write initializes vibrato rate to NaN", () => {
+  const state = createPitchTimeline({
+    columnRateHz: 10,
+    seconds: 1,
+    silencePauseStepThreshold: silencePauseStepThreshold(10, 300),
+  });
+
+  writePitchTimeline(state, {
+    cents: 100,
+    intensity: 0.2,
+  });
+  writePitchTimeline(state, {
+    cents: 200,
+    intensity: 0.8,
+  });
+
+  const rates = orderedVibratoRates(state);
+  assert.ok(rates.every(Number.isNaN));
+});
+
+test("display smoothing finalizes index i-3 as new samples arrive", () => {
+  const state = createPitchTimeline({
+    columnRateHz: 20,
+    seconds: 1,
+    silencePauseStepThreshold: silencePauseStepThreshold(20, 300),
+  });
+  const series = [0, 0, 0, 10, 0, 0, 0, 0];
+  for (const cents of series) {
+    writePitchTimeline(state, {
+      cents,
+      intensity: 0.5,
+    });
+  }
+
+  const raw = orderedValues(state);
+  const display = orderedDisplayValues(state);
+  assert.equal(raw[3], 10);
+  assert.equal(Number(display[3].toFixed(2)), 3.8);
+});
+
+test("display smoothing keeps raw value when smoothing window has NaN", () => {
+  const state = createPitchTimeline({
+    columnRateHz: 20,
+    seconds: 1,
+    silencePauseStepThreshold: silencePauseStepThreshold(20, 300),
+  });
+  const series = [0, 0, 0, 10, 0, Number.NaN, 0];
+  for (const cents of series) {
+    writePitchTimeline(state, {
+      cents,
+      intensity: 0.5,
+      autoPauseOnSilence: false,
+    });
+  }
+
+  const display = orderedDisplayValues(state);
+  assert.equal(display[3], 10);
 });

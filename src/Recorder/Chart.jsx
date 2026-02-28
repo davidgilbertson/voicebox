@@ -1,6 +1,5 @@
 import {forwardRef, useImperativeHandle, useRef} from "react";
 import colors from "tailwindcss/colors";
-import {smoothDisplayTimeline} from "./displaySmoothing.js";
 import {clamp} from "../tools.js";
 
 const LINE_WIDTH = 2;
@@ -10,7 +9,6 @@ const Chart = forwardRef(function Chart({
                                           renderScale = 1,
                                         }, ref) {
   const canvasRef = useRef(null);
-  const smoothedValuesRef = useRef(null);
 
   const draw = ({
                   values,
@@ -62,14 +60,6 @@ const Chart = forwardRef(function Chart({
       return;
     }
 
-    if (!smoothedValuesRef.current || smoothedValuesRef.current.length !== values.length) {
-      smoothedValuesRef.current = new Float32Array(values.length);
-    }
-    const drawValues = smoothDisplayTimeline(
-        {values, writeIndex, count},
-        {output: smoothedValuesRef.current}
-    );
-
     const plotLeft = Math.max(0, xInsetLeft);
     const plotRight = Math.max(plotLeft + 1, cssWidth - Math.max(0, xInsetRight));
     const plotTop = Math.max(0, yInsetTop);
@@ -92,12 +82,12 @@ const Chart = forwardRef(function Chart({
     let lastValue = null;
     let lastY = null;
     let lastX = null;
-    const totalSlots = drawValues.length;
+    const totalSlots = values.length;
     const firstIndex = count === totalSlots ? writeIndex : 0;
     const startSlot = count < totalSlots ? totalSlots - count : 0;
     for (let i = 0; i < count; i += 1) {
       const bufferIndex = (firstIndex + i) % totalSlots;
-      const value = drawValues[bufferIndex];
+      const value = values[bufferIndex];
       if (Number.isNaN(value)) {
         lastValue = null;
         lastY = null;

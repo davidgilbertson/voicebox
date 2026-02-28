@@ -1,10 +1,5 @@
 let cachedColorPalette = null;
 
-// Linear interpolate between two values.
-export function lerp(current, next, factor) {
-  return current + (next - current) * factor;
-}
-
 export function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -22,6 +17,23 @@ export function pickPreferredAudioInputDeviceId(devices) {
         );
       });
   return preferredInput?.deviceId || null;
+}
+
+export function readNewestRingValue(values, writeIndex, count) {
+  if (!values || count <= 0) return Number.NaN;
+  const newestIndex = count === values.length ? ((writeIndex + values.length - 1) % values.length) : (count - 1);
+  return values[newestIndex];
+}
+
+export function findMostRecentFiniteInRing(values, writeIndex, count) {
+  if (!values || count <= 0) return null;
+  const total = values.length;
+  const firstIndex = count === total ? writeIndex : 0;
+  for (let i = count - 1; i >= 0; i -= 1) {
+    const value = values[(firstIndex + i) % total];
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
 }
 
 export function getColorPalette() {

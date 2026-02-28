@@ -1,8 +1,6 @@
 import {test} from "vitest";
 import assert from "node:assert/strict";
 import {
-  computeTimelineVibratoDetectionAlpha,
-  estimateLastKnownTimelineVibratoRate,
   estimateTimelineCenterCents,
   estimateTimelineVibratoRate,
 } from "../../src/Recorder/vibratoRate.js";
@@ -87,57 +85,42 @@ test("default vibrato estimator returns null for silent gaps", () => {
   assertSilentGapReturnsNull(estimateTimelineVibratoRate);
 });
 
-test("vibrato detection alpha uses one-way fade-to-solid within a run", () => {
+test("default vibrato estimator handles rounded plateaus", () => {
   const samplesPerSecond = 200;
-  const values = [];
-  for (let i = 0; i < samplesPerSecond * 2; i += 1) {
+  const seconds = 5;
+  const total = samplesPerSecond * seconds;
+  const series = new Array(total);
+  for (let i = 0; i < total; i += 1) {
     const t = i / samplesPerSecond;
-    values.push(Math.sin(2 * Math.PI * 6 * t) * 70);
+    const raw = Math.sin(2 * Math.PI * 6 * t) * 70;
+    series[i] = Math.round(raw / 10) * 10;
   }
-  for (let i = 0; i < samplesPerSecond; i += 1) {
-    values.push(0);
-  }
-  const timeline = createTimelineFromSeries(values);
-  const alpha = computeTimelineVibratoDetectionAlpha({
+
+  const timeline = createTimelineFromSeries(series);
+  const rateHz = estimateTimelineVibratoRate({
     ...timeline,
     samplesPerSecond,
     minRateHz: 4,
     maxRateHz: 9,
-    analysisWindowSeconds: 0.5,
-    minContinuousSeconds: 0.4,
   });
 
-  const orderedAlpha = Array.from(alpha.subarray(0, timeline.count));
-  const firstSolidIndex = orderedAlpha.findIndex((value) => value === 1);
-  assert.ok(firstSolidIndex > 0);
-  const leadingFaded = orderedAlpha.slice(0, firstSolidIndex).every((value) => value === 0.25);
-  const trailingSolid = orderedAlpha.slice(firstSolidIndex).every((value) => value === 1);
-  assert.equal(leadingFaded, true);
-  assert.equal(trailingSolid, true);
+  assert.ok(rateHz !== null);
+  assert.ok(Math.abs(rateHz - 6) < 0.6);
 });
 
-test("last-known vibrato rate survives trailing non-vibrato samples", () => {
-  const samplesPerSecond = 200;
-  const values = [];
-  for (let i = 0; i < samplesPerSecond * 2; i += 1) {
-    const t = i / samplesPerSecond;
-    values.push(Math.sin(2 * Math.PI * 6 * t) * 70);
-  }
-  for (let i = 0; i < samplesPerSecond; i += 1) {
-    values.push(0);
-  }
-  const timeline = createTimelineFromSeries(values);
-  const lastKnownRate = estimateLastKnownTimelineVibratoRate({
+test("default vibrato estimator handles turning-point at second-last sample", () => {
+  const series = [-14, -1, -14, 3, -16, -33, -18, -2, 18, 26, 22, 9, -5, 5, 0];
+  const timeline = createTimelineFromSeries(series);
+  const rateHz = estimateTimelineVibratoRate({
     ...timeline,
-    samplesPerSecond,
+    samplesPerSecond: 40,
     minRateHz: 4,
-    maxRateHz: 9,
-    analysisWindowSeconds: 0.5,
-    minContinuousSeconds: 0.4,
+    maxRateHz: 10,
+    minContinuousSeconds: 0.1,
   });
 
-  assert.ok(lastKnownRate !== null);
-  assert.ok(Math.abs(lastKnownRate - 6) < 0.3);
+  assert.ok(rateHz !== null);
+  assert.ok(Math.abs(rateHz - 6.6667) < 0.01);
 });
 
 test("timeline center can use vibrato-only samples", () => {

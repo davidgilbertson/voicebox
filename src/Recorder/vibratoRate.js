@@ -8,8 +8,6 @@ function orderedTimelineValues(values, writeIndex, count) {
   return ordered;
 }
 
-const NON_VIBRATO_ALPHA = 0.25;
-
 function contiguousFiniteTail(values, maxSamples) {
   const tail = [];
   for (let i = values.length - 1; i >= 0 && tail.length < maxSamples; i -= 1) {
@@ -22,13 +20,13 @@ function contiguousFiniteTail(values, maxSamples) {
 }
 
 function centeredFiniteTail({
-  values,
-  writeIndex,
-  count,
-  samplesPerSecond,
-  analysisWindowSeconds,
-  minContinuousSeconds,
-}) {
+                              values,
+                              writeIndex,
+                              count,
+                              samplesPerSecond,
+                              analysisWindowSeconds,
+                              minContinuousSeconds,
+                            }) {
   if (!values || count <= 0 || samplesPerSecond <= 0) return null;
 
   const ordered = orderedTimelineValues(values, writeIndex, count);
@@ -59,57 +57,77 @@ function centeredFiniteTail({
 
 function rateFromLastTwoPeaks(centered, samplesPerSecond) {
   if (!centered || centered.length < 5) return null;
-
-  const peakIndices = [];
-  const troughIndices = [];
-  for (let i = 2; i < centered.length - 2; i += 1) {
-    // 5-point peak shape. Same idea as the experiment code, but without debug payloads/logging.
-    const isPeakShape = centered[i - 2] < centered[i - 1]
-      && centered[i - 1] < centered[i]
-      && centered[i] > centered[i + 1]
-      && centered[i + 1] > centered[i + 2];
-    const isTroughShape = centered[i - 2] > centered[i - 1]
-      && centered[i - 1] > centered[i]
-      && centered[i] < centered[i + 1]
-      && centered[i + 1] < centered[i + 2];
-    if (isPeakShape) peakIndices.push(i);
-    if (isTroughShape) troughIndices.push(i);
+  // Keep slope probe aligned with the first extrema candidate index (length - 3).
+  let expectedType = centered[centered.length - 2] - centered[centered.length - 3] >= 0 ? "trough" : "peak";
+  const extrema = [];
+  let peakCount = 0;
+  let troughCount = 0;
+  let index = centered.length - 3;
+  while (index >= 2 && (peakCount < 2 || troughCount < 2)) {
+    const left2 = centered[index - 2];
+    const left1 = centered[index - 1];
+    const value = centered[index];
+    const right1 = centered[index + 1];
+    const right2 = centered[index + 2];
+    if (expectedType === "trough") {
+      const isTrough = value <= left2
+          && value <= left1
+          && value <= right1
+          && value <= right2
+          && (value < left2 || value < left1 || value < right1 || value < right2);
+      if (isTrough) {
+        extrema.push({type: "trough", index});
+        troughCount += 1;
+        expectedType = "peak";
+        // Skip one sample to avoid duplicate detections on flat bottoms.
+        index -= 2;
+        continue;
+      }
+    } else {
+      const isPeak = value >= left2
+          && value >= left1
+          && value >= right1
+          && value >= right2
+          && (value > left2 || value > left1 || value > right1 || value > right2);
+      if (isPeak) {
+        extrema.push({type: "peak", index});
+        peakCount += 1;
+        expectedType = "trough";
+        // Skip one sample to avoid duplicate detections on flat tops.
+        index -= 2;
+        continue;
+      }
+    }
+    index -= 1;
   }
 
-  const slopeLookback = Math.min(6, centered.length - 1);
-  const endSlope = centered[centered.length - 1] - centered[centered.length - 1 - slopeLookback];
-  const selected = endSlope >= 0 ? troughIndices : peakIndices;
-  if (selected.length < 2) return null;
-
-  const firstIndex = selected[selected.length - 2];
-  const secondIndex = selected[selected.length - 1];
-  const spacingSamples = secondIndex - firstIndex;
-  if (!(spacingSamples > 0)) return null;
-
+  if (peakCount < 2 || troughCount < 2 || extrema.length < 4) return null;
+  const leg1 = extrema[0].index - extrema[1].index;
+  const leg2 = extrema[1].index - extrema[2].index;
+  const leg3 = extrema[2].index - extrema[3].index;
+  if (!(leg1 > 0 && leg2 > 0 && leg3 > 0)) return null;
+  const legSamples = (leg1 + leg2 + leg3) / 3;
   let minInWindow = Number.POSITIVE_INFINITY;
   let maxInWindow = Number.NEGATIVE_INFINITY;
-  for (let i = firstIndex; i <= secondIndex; i += 1) {
-    const value = centered[i];
+  for (const value of centered) {
     if (value < minInWindow) minInWindow = value;
     if (value > maxInWindow) maxInWindow = value;
   }
-  // Ignore tiny motion; this generally does not sound like intentional vibrato.
   if ((maxInWindow - minInWindow) < 12) return null;
-
-  const rateHz = samplesPerSecond / spacingSamples;
+  const rateHz = samplesPerSecond / (legSamples * 2);
   return Number.isFinite(rateHz) ? rateHz : null;
 }
 
 export function estimateTimelineVibratoRate({
-  values,
-  writeIndex,
-  count,
-  samplesPerSecond,
-  minRateHz = 4,
-  maxRateHz = 10,
-  analysisWindowSeconds = 2.5,
-  minContinuousSeconds = 0.6,
-}) {
+                                              values,
+                                              writeIndex,
+                                              count,
+                                              samplesPerSecond,
+                                              minRateHz = 4,
+                                              maxRateHz = 10,
+                                              analysisWindowSeconds = 2.5,
+                                              minContinuousSeconds = 0.6,
+                                            }) {
   const tailData = centeredFiniteTail({
     values,
     writeIndex,
@@ -127,208 +145,13 @@ export function estimateTimelineVibratoRate({
   return rateHz;
 }
 
-function computeRunDetectionAlphas({
-  orderedValues,
-  orderedIndices,
-  runStart,
-  runEnd,
-  samplesPerSecond,
-  minRateHz,
-  maxRateHz,
-  analysisWindowSeconds,
-  minContinuousSeconds,
-  output,
-  onDetectedRate = null,
-}) {
-  const maxSamples = Math.max(1, Math.floor(samplesPerSecond * analysisWindowSeconds));
-  const minSamples = Math.max(8, Math.floor(samplesPerSecond * minContinuousSeconds));
-  const runLength = runEnd - runStart + 1;
-  const prefixSum = new Float64Array(runLength + 1);
-  const prefixSquares = new Float64Array(runLength + 1);
-  for (let i = 0; i < runLength; i += 1) {
-    const value = orderedValues[runStart + i];
-    prefixSum[i + 1] = prefixSum[i] + value;
-    prefixSquares[i + 1] = prefixSquares[i] + (value * value);
-  }
-
-  let detectedInRun = false;
-  for (let i = runStart; i <= runEnd; i += 1) {
-    const runOffset = i - runStart;
-    const windowStart = Math.max(0, runOffset - maxSamples + 1);
-    const windowLength = runOffset - windowStart + 1;
-    let detectedNow = false;
-    if (windowLength >= minSamples) {
-      const sum = prefixSum[runOffset + 1] - prefixSum[windowStart];
-      const mean = sum / windowLength;
-      const sumSquares = prefixSquares[runOffset + 1] - prefixSquares[windowStart];
-      const meanSquares = sumSquares / windowLength;
-      const variance = Math.max(0, meanSquares - (mean * mean));
-      const rms = Math.sqrt(variance);
-      if (rms >= 5) {
-        const centered = new Float32Array(windowLength);
-        for (let j = 0; j < windowLength; j += 1) {
-          centered[j] = orderedValues[runStart + windowStart + j] - mean;
-        }
-        const rateHz = rateFromLastTwoPeaks(centered, samplesPerSecond);
-        detectedNow = Number.isFinite(rateHz) && rateHz >= minRateHz && rateHz <= maxRateHz;
-        if (detectedNow && onDetectedRate) {
-          onDetectedRate(rateHz);
-        }
-      }
-    }
-    if (detectedNow) {
-      detectedInRun = true;
-    }
-    output[orderedIndices[i]] = detectedInRun ? 1 : NON_VIBRATO_ALPHA;
-  }
-}
-
-export function computeTimelineVibratoDetectionAlpha({
-  values,
-  writeIndex,
-  count,
-  samplesPerSecond,
-  minRateHz = 4,
-  maxRateHz = 10,
-  analysisWindowSeconds = 2.5,
-  minContinuousSeconds = 0.6,
-  output,
-}) {
-  if (!values || values.length === 0) return values;
-  if (!output || output.length !== values.length) {
-    output = new Float32Array(values.length);
-  }
-  output.fill(NON_VIBRATO_ALPHA);
-  if (count <= 0 || samplesPerSecond <= 0) return output;
-
-  const totalSlots = values.length;
-  const firstIndex = count === totalSlots ? writeIndex : 0;
-  const orderedValues = new Float32Array(count);
-  const orderedIndices = new Uint32Array(count);
-  for (let i = 0; i < count; i += 1) {
-    const bufferIndex = (firstIndex + i) % totalSlots;
-    orderedIndices[i] = bufferIndex;
-    orderedValues[i] = values[bufferIndex];
-  }
-
-  let runStart = -1;
-  for (let i = 0; i < count; i += 1) {
-    if (Number.isFinite(orderedValues[i])) {
-      if (runStart === -1) runStart = i;
-      continue;
-    }
-    if (runStart !== -1) {
-      computeRunDetectionAlphas({
-        orderedValues,
-        orderedIndices,
-        runStart,
-        runEnd: i - 1,
-        samplesPerSecond,
-        minRateHz,
-        maxRateHz,
-        analysisWindowSeconds,
-        minContinuousSeconds,
-        output,
-      });
-      runStart = -1;
-    }
-  }
-
-  if (runStart !== -1) {
-    computeRunDetectionAlphas({
-      orderedValues,
-      orderedIndices,
-      runStart,
-      runEnd: count - 1,
-      samplesPerSecond,
-      minRateHz,
-      maxRateHz,
-      analysisWindowSeconds,
-      minContinuousSeconds,
-      output,
-    });
-  }
-
-  return output;
-}
-
-export function estimateLastKnownTimelineVibratoRate({
-  values,
-  writeIndex,
-  count,
-  samplesPerSecond,
-  minRateHz = 4,
-  maxRateHz = 10,
-  analysisWindowSeconds = 2.5,
-  minContinuousSeconds = 0.6,
-}) {
-  if (!values || count <= 0 || samplesPerSecond <= 0) return null;
-  const alphaBuffer = new Float32Array(values.length);
-  let lastDetectedRateHz = null;
-  const totalSlots = values.length;
-  const firstIndex = count === totalSlots ? writeIndex : 0;
-  const orderedValues = new Float32Array(count);
-  const orderedIndices = new Uint32Array(count);
-  for (let i = 0; i < count; i += 1) {
-    const bufferIndex = (firstIndex + i) % totalSlots;
-    orderedIndices[i] = bufferIndex;
-    orderedValues[i] = values[bufferIndex];
-  }
-
-  let runStart = -1;
-  for (let i = 0; i < count; i += 1) {
-    if (Number.isFinite(orderedValues[i])) {
-      if (runStart === -1) runStart = i;
-      continue;
-    }
-    if (runStart !== -1) {
-      computeRunDetectionAlphas({
-        orderedValues,
-        orderedIndices,
-        runStart,
-        runEnd: i - 1,
-        samplesPerSecond,
-        minRateHz,
-        maxRateHz,
-        analysisWindowSeconds,
-        minContinuousSeconds,
-        output: alphaBuffer,
-        onDetectedRate: (rateHz) => {
-          lastDetectedRateHz = rateHz;
-        },
-      });
-      runStart = -1;
-    }
-  }
-
-  if (runStart !== -1) {
-    computeRunDetectionAlphas({
-      orderedValues,
-      orderedIndices,
-      runStart,
-      runEnd: count - 1,
-      samplesPerSecond,
-      minRateHz,
-      maxRateHz,
-      analysisWindowSeconds,
-      minContinuousSeconds,
-      output: alphaBuffer,
-      onDetectedRate: (rateHz) => {
-        lastDetectedRateHz = rateHz;
-      },
-    });
-  }
-
-  return lastDetectedRateHz;
-}
-
 export function estimateTimelineCenterCents({
-  values,
-  writeIndex,
-  count,
-  detectionAlphas = null,
-  recentSampleCount = 160,
-}) {
+                                              values,
+                                              writeIndex,
+                                              count,
+                                              detectionAlphas = null,
+                                              recentSampleCount = 160,
+                                            }) {
   if (!values || count <= 0) return null;
   const firstIndex = count === values.length ? writeIndex : 0;
   const start = Math.max(0, count - Math.max(1, Math.floor(recentSampleCount)));

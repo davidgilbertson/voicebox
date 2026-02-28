@@ -1,28 +1,4 @@
-import {clamp, lerp} from "../tools.js";
-
-function computeCenterHzMean(hzBuffer, minHz, maxHz) {
-  let sum = 0;
-  let count = 0;
-  for (let i = 0; i < hzBuffer.length; i += 1) {
-    const value = hzBuffer[i];
-    if (Number.isFinite(value) && value >= minHz && value <= maxHz) {
-      sum += value;
-      count += 1;
-    }
-  }
-  if (!count) return 0;
-  return sum / count;
-}
-
-export function updateCenterFromHzBuffer(state, minHz, maxHz) {
-  const {hzBuffer} = state;
-  if (!hzBuffer || hzBuffer.length === 0) return;
-  const centerHz = computeCenterHzMean(hzBuffer, minHz, maxHz);
-  if (centerHz > 0) {
-    state.centerHz = lerp(state.centerHz, centerHz, 0.2);
-    state.centerCents = 1200 * Math.log2(state.centerHz);
-  }
-}
+import {clamp} from "../tools.js";
 
 function finalizeDetection(state, {
   hz,

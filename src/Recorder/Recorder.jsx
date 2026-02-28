@@ -5,8 +5,6 @@ import {
 } from "./audioSeries.js";
 import {createPitchTimeline, resizePitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
 import {
-  computeTimelineVibratoDetectionAlpha,
-  estimateLastKnownTimelineVibratoRate,
   estimateTimelineCenterCents,
   estimateTimelineVibratoRate,
 } from "./vibratoRate.js";
@@ -14,7 +12,12 @@ import VibratoChart from "./VibratoChart.jsx";
 import PitchChart from "./PitchChart.jsx";
 import SpectrogramChart from "./SpectrogramChart.jsx";
 import {noteNameToCents, noteNameToHz} from "../pitchScale.js";
-import {clamp, pickPreferredAudioInputDeviceId} from "../tools.js";
+import {
+  clamp,
+  findMostRecentFiniteInRing,
+  pickPreferredAudioInputDeviceId,
+  readNewestRingValue,
+} from "../tools.js";
 import {BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor} from "./batteryUsage.js";
 import {
   CENTER_SECONDS,
@@ -40,6 +43,7 @@ const MAX_DRAW_JUMP_CENTS = 80;
 const MIN_SIGNAL_THRESHOLD = 0.015; // Time-domain RMS threshold from worklet for auto-pause
 const DEFAULT_CENTER_HZ = 220;
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
+const NON_VIBRATO_ALPHA = 0.25;
 
 function createHzBuffer(length) {
   const hzBuffer = new Float32Array(length);
@@ -63,6 +67,12 @@ function setStreamListeningEnabled(stream, enabled) {
       : (typeof stream.getTracks === "function" ? stream.getTracks() : []);
   for (const track of tracks) {
     track.enabled = enabled;
+  }
+}
+
+function fillDetectionAlphaFromVibratoRate(vibratoRates, output) {
+  for (let i = 0; i < vibratoRates.length; i += 1) {
+    output[i] = Number.isFinite(vibratoRates[i]) ? 1 : NON_VIBRATO_ALPHA;
   }
 }
 
@@ -137,6 +147,7 @@ export default function Recorder({
     lastVibratoRateUpdateMs: null,
     timelineDirty: false, // TODO (@davidgilbertson): not convinced this is necessary
   });
+  const lastKnownVibratoRateRef = useRef(null);
   const vibratoDetectionAlphaRef = useRef(null);
   const forceRedrawRef = useRef(false);
   const activeViewRef = useRef(activeView);
@@ -445,6 +456,18 @@ export default function Recorder({
         intensity: smoothedSpectrumIntensity,
       });
       if (pitchWriteResult.steps > 0) {
+        const timeline = timelineRef.current;
+        const estimatedRateNow = estimateTimelineVibratoRate({
+          values: timeline.values,
+          writeIndex: timeline.writeIndex,
+          count: timeline.count,
+          samplesPerSecond: timeline.columnRateHz,
+          minRateHz: VIBRATO_RATE_MIN_HZ,
+          maxRateHz: VIBRATO_RATE_MAX_HZ,
+          analysisWindowSeconds: VIBRATO_ANALYSIS_WINDOW_SECONDS,
+          minContinuousSeconds: VIBRATO_MIN_CONTIGUOUS_SECONDS,
+        });
+        timeline.vibratoRates[pitchWriteResult.lastWriteIndex] = estimatedRateNow ?? Number.NaN;
         didTimelineChange = true;
       }
     }
@@ -509,7 +532,7 @@ export default function Recorder({
         signalLevelRef.current = Number(event.data.signalLevel) || 0;
         const expectedHopSize = hopSizeRef.current;
         if (!Number.isFinite(sampleCount) || sampleCount !== expectedHopSize) {
-          console.log("something has gone very wrong this should not be possible", {
+          console.error("something has gone very wrong this should not be possible", {
             sampleCount,
             expectedHopSize,
           });
@@ -645,20 +668,11 @@ export default function Recorder({
     const timeline = timelineRef.current;
     const currentView = activeViewRef.current;
     if (currentView === "vibrato") {
-      if (!vibratoDetectionAlphaRef.current || vibratoDetectionAlphaRef.current.length !== timeline.values.length) {
-        vibratoDetectionAlphaRef.current = new Float32Array(timeline.values.length);
+      if (!vibratoDetectionAlphaRef.current || vibratoDetectionAlphaRef.current.length !== timeline.vibratoRates.length) {
+        vibratoDetectionAlphaRef.current = new Float32Array(timeline.vibratoRates.length);
       }
-      const detectionAlphas = computeTimelineVibratoDetectionAlpha({
-        values: timeline.values,
-        writeIndex: timeline.writeIndex,
-        count: timeline.count,
-        samplesPerSecond: timeline.columnRateHz,
-        minRateHz: VIBRATO_RATE_MIN_HZ,
-        maxRateHz: VIBRATO_RATE_MAX_HZ,
-        analysisWindowSeconds: VIBRATO_ANALYSIS_WINDOW_SECONDS,
-        minContinuousSeconds: VIBRATO_MIN_CONTIGUOUS_SECONDS,
-        output: vibratoDetectionAlphaRef.current,
-      });
+      fillDetectionAlphaFromVibratoRate(timeline.vibratoRates, vibratoDetectionAlphaRef.current);
+      const detectionAlphas = vibratoDetectionAlphaRef.current;
       const centerFromVibrato = estimateTimelineCenterCents({
         values: timeline.values,
         writeIndex: timeline.writeIndex,
@@ -669,7 +683,7 @@ export default function Recorder({
         audioRef.current.centerCents = centerFromVibrato;
       }
       vibratoChartRef.current?.draw({
-        values: timeline.values,
+        values: timeline.displayValues,
         intensities: timeline.intensities,
         detectionAlphas,
         writeIndex: timeline.writeIndex,
@@ -686,7 +700,7 @@ export default function Recorder({
       return;
     }
     pitchChartRef.current?.draw({
-      values: timeline.values,
+      values: timeline.displayValues,
       intensities: timeline.intensities,
       writeIndex: timeline.writeIndex,
       count: timeline.count,
@@ -712,30 +726,23 @@ export default function Recorder({
     const currentView = activeViewRef.current;
 
     if (currentView === "vibrato") {
+      const newestRate = readNewestRingValue(
+          timelineRef.current.vibratoRates,
+          timelineRef.current.writeIndex,
+          timelineRef.current.count
+      );
       let estimatedRate = null;
-      if (didTimelineChange || forceRedrawRef.current || previousDisplayedRate === null) {
-        estimatedRate = estimateTimelineVibratoRate({
-          values: timelineRef.current.values,
-          writeIndex: timelineRef.current.writeIndex,
-          count: timelineRef.current.count,
-          samplesPerSecond: timelineRef.current.columnRateHz,
-          minRateHz: VIBRATO_RATE_MIN_HZ,
-          maxRateHz: VIBRATO_RATE_MAX_HZ,
-          analysisWindowSeconds: VIBRATO_ANALYSIS_WINDOW_SECONDS,
-          minContinuousSeconds: VIBRATO_MIN_CONTIGUOUS_SECONDS,
-        });
-        if (estimatedRate === null) {
-          estimatedRate = estimateLastKnownTimelineVibratoRate({
-            values: timelineRef.current.values,
-            writeIndex: timelineRef.current.writeIndex,
-            count: timelineRef.current.count,
-            samplesPerSecond: timelineRef.current.columnRateHz,
-            minRateHz: VIBRATO_RATE_MIN_HZ,
-            maxRateHz: VIBRATO_RATE_MAX_HZ,
-            analysisWindowSeconds: VIBRATO_ANALYSIS_WINDOW_SECONDS,
-            minContinuousSeconds: VIBRATO_MIN_CONTIGUOUS_SECONDS,
-          });
-        }
+      if (Number.isFinite(newestRate)) {
+        estimatedRate = newestRate;
+        lastKnownVibratoRateRef.current = newestRate;
+      } else if (previousDisplayedRate !== null) {
+        estimatedRate = previousDisplayedRate;
+      } else {
+        estimatedRate = lastKnownVibratoRateRef.current ?? findMostRecentFiniteInRing(
+            timelineRef.current.vibratoRates,
+            timelineRef.current.writeIndex,
+            timelineRef.current.count
+        );
       }
 
       if (estimatedRate !== null) {
