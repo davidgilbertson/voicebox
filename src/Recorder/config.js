@@ -22,23 +22,24 @@ const SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY = "voicebox.spectrogramNoiseProfile"
 // export const FFT_SIZE = 8192; // AnalyserNode uses this as the input window sample count
 export const FFT_SIZE = 4096; // AnalyserNode uses this as the input window sample count
 export const SPECTROGRAM_BIN_COUNT = FFT_SIZE / 2; // output bin count is always FFT_SIZE / 2
-export const DISPLAY_PIXELS_PER_SECOND = 80; // E.g. @ 400px wide, the chart would show 5 seconds of audio
+export const DISPLAY_PIXELS_PER_SECOND = 75; // E.g. @ 400px wide, the chart would show 5 seconds of audio
 export const SILENCE_PAUSE_THRESHOLD_MS = 300;
 export const CENTER_SECONDS = 1; // Window to use for vertical centering
 export const VIBRATO_RATE_MIN_HZ = 3;
 export const VIBRATO_SWEET_MIN_HZ = 4;
 export const VIBRATO_SWEET_MAX_HZ = 8;
 export const VIBRATO_RATE_MAX_HZ = 9;
-export const VIBRATO_ANALYSIS_WINDOW_SECONDS = 0.5;
+export const VIBRATO_ANALYSIS_WINDOW_SECONDS = 0.7;
 export const VIBRATO_MIN_CONTIGUOUS_SECONDS = 0.4;
+export const MAX_DRAW_JUMP_CENTS = 120;
 export const PITCH_MIN_NOTE_DEFAULT = "C1";
 export const PITCH_MAX_NOTE_DEFAULT = "F6";
+const PITCH_LINE_COLOR_MODE_DEFAULT = "terrain";
 const SPECTROGRAM_MIN_HZ_DEFAULT = 30;
 const SPECTROGRAM_MAX_HZ_DEFAULT = 11_000;
 const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
 const RUN_AT_30_FPS_DEFAULT = false;
 const HALF_RESOLUTION_CANVAS_DEFAULT = false;
-const PITCH_LINE_COLOR_MODE_DEFAULT = "terrain";
 const MAX_SIGNAL_LEVEL_DEFAULT = 0.2;
 const PITCH_LINE_COLOR_MODE_SET = new Set(PITCH_LINE_COLOR_MODES.map((item) => item.value));
 

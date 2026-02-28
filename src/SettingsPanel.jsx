@@ -49,7 +49,7 @@ export default function SettingsPanel({
                                         onNoiseCalibrateContextMenu,
                                         onClearSpectrogramNoiseProfile,
                                         batteryUsagePerMinute,
-                                        disableNoiseSampling = false,
+                                        disableNoiseSampling,
                                       }) {
   const dialogRef = useRef(null);
   const [spectrogramMinHzDraft, setSpectrogramMinHzDraft] = useState(() => String(spectrogramMinHz));

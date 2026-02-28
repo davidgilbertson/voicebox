@@ -32,6 +32,16 @@ const RAPID_VERTICAL_SWIPE_MS = 500;
 const MIDI_MIN = 21;
 const MIDI_MAX = 108;
 
+function patternOffsetBounds(pattern) {
+  let min = pattern[0] ?? 0;
+  let max = pattern[0] ?? 0;
+  for (let i = 1; i < pattern.length; i += 1) {
+    min = Math.min(min, pattern[i]);
+    max = Math.max(max, pattern[i]);
+  }
+  return {min, max};
+}
+
 function buildSetTimeline(pattern) {
   return ["cue", "rest", "rest", ...pattern, "rest", "rest", "rest", "rest"];
 }
@@ -61,6 +71,7 @@ export default function ScalesPage({
   const activeBpmRef = useRef(bpm);
   const repeatDirectionRef = useRef(repeatDirection);
   const setTimelineRef = useRef(buildSetTimeline(SEMITONE_PATTERN));
+  const patternOffsetBoundsRef = useRef(patternOffsetBounds(SEMITONE_PATTERN));
   const currentSetRootMidiRef = useRef(noteNameToMidi(scaleMinNote) ?? MIDI_MIN);
   const scaleMinMidiRef = useRef(noteNameToMidi(scaleMinNote) ?? MIDI_MIN);
   const scaleMaxMidiRef = useRef(noteNameToMidi(scaleMaxNote) ?? MIDI_MAX);
@@ -112,6 +123,7 @@ export default function ScalesPage({
 
   useEffect(() => {
     setTimelineRef.current = buildSetTimeline(selectedScalePattern);
+    patternOffsetBoundsRef.current = patternOffsetBounds(selectedScalePattern);
     timelineIndexRef.current = 0;
   }, [selectedScalePattern]);
 
@@ -261,12 +273,24 @@ export default function ScalesPage({
         } else {
           let nextDirection = repeatDirectionRef.current;
           let nextRootMidi = currentSetRootMidiRef.current + semitoneDeltaForRepeatDirection(nextDirection);
-          if (nextRootMidi > rangeMaxMidi) {
-            nextDirection = "down";
-            nextRootMidi = currentSetRootMidiRef.current + semitoneDeltaForRepeatDirection(nextDirection);
-          } else if (nextRootMidi < rangeMinMidi) {
-            nextDirection = "up";
-            nextRootMidi = currentSetRootMidiRef.current + semitoneDeltaForRepeatDirection(nextDirection);
+          const patternMinOffset = patternOffsetBoundsRef.current.min;
+          const patternMaxOffset = patternOffsetBoundsRef.current.max;
+          if (nextDirection === "up") {
+            if (nextRootMidi + patternMaxOffset > rangeMaxMidi) {
+              nextDirection = "down";
+              nextRootMidi = currentSetRootMidiRef.current + semitoneDeltaForRepeatDirection(nextDirection);
+              if (nextRootMidi + patternMinOffset < rangeMinMidi) {
+                nextRootMidi = currentSetRootMidiRef.current;
+              }
+            }
+          } else if (nextDirection === "down") {
+            if (nextRootMidi + patternMinOffset < rangeMinMidi) {
+              nextDirection = "up";
+              nextRootMidi = currentSetRootMidiRef.current + semitoneDeltaForRepeatDirection(nextDirection);
+              if (nextRootMidi + patternMaxOffset > rangeMaxMidi) {
+                nextRootMidi = currentSetRootMidiRef.current;
+              }
+            }
           }
           if (nextDirection !== repeatDirectionRef.current) {
             flashGestureDirection(nextDirection);

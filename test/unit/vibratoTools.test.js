@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   estimateTimelineCenterCents,
   estimateTimelineVibratoRate,
-} from "../../src/Recorder/vibratoTools.js";
+} from "../../src/Recorder/Vibrato/vibratoTools.js";
 import {RingBuffer} from "../../src/Recorder/ringBuffer.js";
 
 function createRingFromSeries(series) {
@@ -28,8 +28,6 @@ function assertDetectsStable6Hz(estimate) {
   const rateHz = estimate({
     ring,
     samplesPerSecond,
-    minRateHz: 4,
-    maxRateHz: 9,
   });
 
   assert.ok(rateHz !== null);
@@ -50,8 +48,6 @@ function assertOutOfRangeReturnsNull(estimate) {
   const rateHz = estimate({
     ring,
     samplesPerSecond,
-    minRateHz: 4,
-    maxRateHz: 9,
   });
 
   assert.equal(rateHz, null);
@@ -67,8 +63,6 @@ function assertSilentGapReturnsNull(estimate) {
   const rateHz = estimate({
     ring,
     samplesPerSecond,
-    minRateHz: 4,
-    maxRateHz: 9,
   });
   assert.equal(rateHz, null);
 }
@@ -100,8 +94,6 @@ test("default vibrato estimator handles rounded plateaus", () => {
   const rateHz = estimateTimelineVibratoRate({
     ring,
     samplesPerSecond,
-    minRateHz: 4,
-    maxRateHz: 9,
   });
 
   assert.ok(rateHz !== null);
@@ -109,14 +101,11 @@ test("default vibrato estimator handles rounded plateaus", () => {
 });
 
 test("default vibrato estimator handles turning-point at second-last sample", () => {
-  const series = [-14, -1, -14, 3, -16, -33, -18, -2, 18, 26, 22, 9, -5, 5, 0];
+  const series = [10, -14, -1, -14, 3, -16, -33, -18, -2, 18, 26, 22, 9, -5, 5, 0];
   const ring = createRingFromSeries(series);
   const rateHz = estimateTimelineVibratoRate({
     ring,
     samplesPerSecond: 40,
-    minRateHz: 4,
-    maxRateHz: 10,
-    minContinuousSeconds: 0.1,
   });
 
   assert.ok(rateHz !== null);

@@ -210,3 +210,24 @@ test("scales playback and metronome pause in background and resume in foreground
   expect(playNoteMock.mock.calls.length).toBeGreaterThan(notesBeforeBackground);
   expect(playMetronomeTickMock.mock.calls.length).toBeGreaterThan(ticksBeforeBackground);
 });
+
+test("repeat-up bounces before a set would exceed the top note", async () => {
+  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E3"/>);
+  await waitForReady();
+
+  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(16000);
+  });
+
+  const cueRoots = playNoteMock.mock.calls
+      .filter(([, duration]) => duration > 0.4)
+      .map(([midi]) => midi);
+
+  expect(cueRoots.length).toBeGreaterThanOrEqual(3);
+  expect(cueRoots.slice(0, 3)).toEqual([48, 48, 48]);
+});

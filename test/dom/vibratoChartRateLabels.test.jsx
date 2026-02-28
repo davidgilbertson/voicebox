@@ -1,18 +1,15 @@
 import React from "react";
 import {render, screen} from "@testing-library/react";
 import {test, expect} from "vitest";
-import VibratoChart from "../../src/Recorder/VibratoChart.jsx";
+import VibratoChart from "../../src/Recorder/Vibrato/VibratoChart.jsx";
+import {readPitchLineColorMode} from "../../src/Recorder/config.js";
 
 test("vibrato bar shows intermediate integer rate labels", () => {
   render(
       <VibratoChart
-          yRange={300}
-          maxDrawJumpCents={80}
           vibratoRate={null}
-          vibratoRateMinHz={3}
-          vibratoRateMaxHz={9}
-          vibratoSweetMinHz={4}
-          vibratoSweetMaxHz={8}
+          lineColorMode={readPitchLineColorMode()}
+          renderScale={1}
       />
   );
 
@@ -24,13 +21,9 @@ test("vibrato bar shows intermediate integer rate labels", () => {
 test("vibrato rate labels use the lighter style and larger font size", () => {
   render(
       <VibratoChart
-          yRange={300}
-          maxDrawJumpCents={80}
           vibratoRate={null}
-          vibratoRateMinHz={3}
-          vibratoRateMaxHz={9}
-          vibratoSweetMinHz={4}
-          vibratoSweetMaxHz={8}
+          lineColorMode={readPitchLineColorMode()}
+          renderScale={1}
       />
   );
 

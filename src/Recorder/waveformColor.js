@@ -14,7 +14,7 @@ export const PITCH_LINE_COLOR_MODES = [
 
 const WAVEFORM_COLOR_MODE_SET = new Set(PITCH_LINE_COLOR_MODES.map((item) => item.value));
 const MIN_WAVEFORM_COLOR_INDEX = 36;
-const DEFAULT_PITCH_LINE_COLOR_MODE = "terrain";
+const PITCH_LINE_COLOR_MODE_DEFAULT = "terrain";
 const paletteByMode = new Map();
 const colorStringsByMode = new Map();
 const FIXED_COLOR_BY_MODE = {
@@ -42,7 +42,7 @@ function createPaletteFromStops(stops) {
 }
 
 function resolvePitchLineColorMode(mode) {
-  return WAVEFORM_COLOR_MODE_SET.has(mode) ? mode : DEFAULT_PITCH_LINE_COLOR_MODE;
+  return WAVEFORM_COLOR_MODE_SET.has(mode) ? mode : PITCH_LINE_COLOR_MODE_DEFAULT;
 }
 
 function isFixedColorMode(mode) {
@@ -114,7 +114,7 @@ function mapWaveformIntensityToNormalized(intensity) {
   return clamp(intensity, 0, 1);
 }
 
-function mapWaveformIntensityToPaletteIndex(intensity, mode = DEFAULT_PITCH_LINE_COLOR_MODE) {
+function mapWaveformIntensityToPaletteIndex(intensity, mode) {
   if (isFixedColorMode(resolvePitchLineColorMode(mode))) return null;
   const normalized = mapWaveformIntensityToNormalized(intensity);
   if (!Number.isFinite(normalized)) return null;
@@ -128,7 +128,7 @@ function mapWaveformIntensityToPaletteIndex(intensity, mode = DEFAULT_PITCH_LINE
 export function mapWaveformIntensityToStrokeColor(
     intensity,
     fallbackColor,
-    mode = DEFAULT_PITCH_LINE_COLOR_MODE
+    mode
 ) {
   const resolved = resolvePitchLineColorMode(mode);
   if (isFixedColorMode(resolved)) return FIXED_COLOR_BY_MODE[resolved] ?? fallbackColor;

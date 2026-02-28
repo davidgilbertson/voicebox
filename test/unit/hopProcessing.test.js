@@ -46,7 +46,6 @@ test("processOneAudioHop does not write pitch history when silence gating pauses
     analyzePitch: vi.fn(() => ({cents: 1200})),
     writePitchTimeline,
     estimateTimelineVibratoRate: vi.fn(() => null),
-    vibratoRateConfig: {minRateHz: 4, maxRateHz: 8, analysisWindowSeconds: 2, minContinuousSeconds: 0.2},
   });
 
   expect(result.didFrameDataChange).toBe(false);
@@ -85,7 +84,6 @@ test("processOneAudioHop writes one pitch-history step for valid signal and retu
     analyzePitch,
     writePitchTimeline,
     estimateTimelineVibratoRate,
-    vibratoRateConfig: {minRateHz: 4, maxRateHz: 8, analysisWindowSeconds: 2, minContinuousSeconds: 0.2},
   });
 
   expect(result.didFrameDataChange).toBe(true);

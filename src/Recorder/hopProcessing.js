@@ -139,7 +139,6 @@ export function processOneAudioHop({
   analyzePitch,
   writePitchTimeline,
   estimateTimelineVibratoRate,
-  vibratoRateConfig,
 }) {
   if (isManuallyPaused) {
     return {
@@ -211,10 +210,6 @@ export function processOneAudioHop({
       const estimatedRateNow = estimateTimelineVibratoRate({
         ring: pitchHistory.rawPitchCentsRing,
         samplesPerSecond: pitchHistory.columnRateHz,
-        minRateHz: vibratoRateConfig.minRateHz,
-        maxRateHz: vibratoRateConfig.maxRateHz,
-        analysisWindowSeconds: vibratoRateConfig.analysisWindowSeconds,
-        minContinuousSeconds: vibratoRateConfig.minContinuousSeconds,
       });
       pitchHistory.vibratoRateHzRing.setAt(-1, estimatedRateNow ?? Number.NaN);
       didFrameDataChange = true;

@@ -83,7 +83,7 @@ test("auto reversal at top of range shows down-direction gesture feedback", asyn
   });
 
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(11000);
+    await vi.advanceTimersByTimeAsync(5800);
   });
   expect(area.querySelector("svg.lucide-arrow-down")).not.toBeNull();
 });

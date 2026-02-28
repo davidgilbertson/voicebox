@@ -6,17 +6,13 @@ import {
   PITCH_MIN_NOTE_DEFAULT,
   SILENCE_PAUSE_THRESHOLD_MS,
   SPECTROGRAM_BIN_COUNT,
-  VIBRATO_ANALYSIS_WINDOW_SECONDS,
-  VIBRATO_MIN_CONTIGUOUS_SECONDS,
-  VIBRATO_RATE_MAX_HZ,
-  VIBRATO_RATE_MIN_HZ,
   readMaxSignalLevel,
   readSpectrogramNoiseProfile,
   writeMaxSignalLevel,
   writeSpectrogramNoiseProfile,
 } from "./config.js";
 import {createPitchTimeline, resizePitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
-import {estimateTimelineVibratoRate} from "./vibratoTools.js";
+import {estimateTimelineVibratoRate} from "./Vibrato/vibratoTools.js";
 import {analyzeAudioWindowFftPitch} from "./audioSeries.js";
 import {createSpectrogramCaptureBuffers, processOneAudioHop} from "./hopProcessing.js";
 import {createRecorderAudioSession, destroyRecorderAudioSession} from "./audioSession.js";
@@ -181,12 +177,6 @@ export function createAudioEngine() {
       analyzePitch: analyzeAudioWindowFftPitch,
       writePitchTimeline,
       estimateTimelineVibratoRate,
-      vibratoRateConfig: {
-        minRateHz: VIBRATO_RATE_MIN_HZ,
-        maxRateHz: VIBRATO_RATE_MAX_HZ,
-        analysisWindowSeconds: VIBRATO_ANALYSIS_WINDOW_SECONDS,
-        minContinuousSeconds: VIBRATO_MIN_CONTIGUOUS_SECONDS,
-      },
     });
     state.skipNextSpectrumFrame = result.nextSkipNextSpectrumFrame;
     state.spectrumIntensityEma = result.nextSpectrumIntensityEma;

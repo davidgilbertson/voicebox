@@ -1,8 +1,8 @@
 import {useEffect, useMemo, useRef, useState} from "react";
 import {Pause} from "lucide-react";
-import VibratoChart from "./VibratoChart.jsx";
-import PitchChart from "./PitchChart.jsx";
-import SpectrogramChart from "./SpectrogramChart.jsx";
+import VibratoChart from "./Vibrato/VibratoChart.jsx";
+import PitchChart from "./Pitch/PitchChart.jsx";
+import SpectrogramChart from "./Spectrogram/SpectrogramChart.jsx";
 import {createAudioEngine} from "./AudioEngine.js";
 import {noteNameToCents} from "../pitchScale.js";
 
