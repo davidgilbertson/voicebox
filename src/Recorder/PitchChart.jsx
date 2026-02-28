@@ -14,11 +14,12 @@ const WAVEFORM_LINE_COLOR = colors.blue[400];
 const LABEL_X = 4;
 const PLOT_LEFT = 21;
 const PLOT_Y_INSET = 5;
+const MAX_DRAW_JUMP_CENTS = 80;
 
 const PitchChart = forwardRef(function PitchChart({
                                                     minCents,
                                                     maxCents,
-                                                    maxDrawJumpCents,
+                                                    maxDrawJumpCents = MAX_DRAW_JUMP_CENTS,
                                                     lineColorMode = "terrain",
                                                     renderScale = 1,
                                                   }, ref) {

@@ -3,12 +3,19 @@ import colors from "tailwindcss/colors";
 import Chart from "./Chart.jsx";
 import {clamp} from "../tools.js";
 import {mapWaveformIntensityToStrokeColor} from "./waveformColor.js";
+import {
+  VIBRATO_RATE_MAX_HZ,
+  VIBRATO_RATE_MIN_HZ,
+  VIBRATO_SWEET_MAX_HZ,
+  VIBRATO_SWEET_MIN_HZ,
+} from "./config.js";
 
 const WAVEFORM_LINE_COLOR = colors.blue[400];
 const Y_RANGE = 405; // in cents
 const LABEL_X = 4;
 const PLOT_LEFT = 21;
 const PLOT_Y_INSET = 5;
+const MAX_DRAW_JUMP_CENTS = 80;
 
 function getSemitoneSteps(waveRange) {
   const maxStep = Math.max(1, Math.floor(waveRange / 100));
@@ -65,13 +72,8 @@ export function drawSemitoneLabels(ctx, width, height, waveRange, options = {}) 
 }
 
 const VibratoChart = forwardRef(function VibratoChart({
-                                                        maxDrawJumpCents,
                                                         lineColorMode = "terrain",
                                                         vibratoRate,
-                                                        vibratoRateMinHz,
-                                                        vibratoRateMaxHz,
-                                                        vibratoSweetMinHz,
-                                                        vibratoSweetMaxHz,
                                                         renderScale = 1,
                                                       }, ref) {
   const chartRef = useRef(null);
@@ -92,7 +94,7 @@ const VibratoChart = forwardRef(function VibratoChart({
         yInsetBottom: PLOT_Y_INSET,
         lineColor: WAVEFORM_LINE_COLOR,
         mapColorValueToStroke: (intensity) => mapWaveformIntensityToStrokeColor(intensity, WAVEFORM_LINE_COLOR, lineColorMode),
-        gapThreshold: maxDrawJumpCents,
+        gapThreshold: MAX_DRAW_JUMP_CENTS,
         drawBackground: (ctx, width, height) => {
           const cached = backgroundCacheRef.current;
           const cacheValid = cached &&
@@ -136,21 +138,21 @@ const VibratoChart = forwardRef(function VibratoChart({
         },
       });
     },
-  }), [lineColorMode, maxDrawJumpCents]);
+  }), [lineColorMode]);
 
   const vibratoRatePositionPct = vibratoRate === null
       ? null
-      : ((vibratoRate - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100;
+      : ((vibratoRate - VIBRATO_RATE_MIN_HZ) / (VIBRATO_RATE_MAX_HZ - VIBRATO_RATE_MIN_HZ)) * 100;
   const vibratoRatePillPct = vibratoRatePositionPct === null
       ? null
       : clamp(vibratoRatePositionPct, 8, 92);
-  const sweetStartPct = ((vibratoSweetMinHz - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100;
-  const sweetEndPct = ((vibratoSweetMaxHz - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100;
-  const sweetSpanHz = Math.max(1e-3, vibratoSweetMaxHz - vibratoSweetMinHz);
+  const sweetStartPct = ((VIBRATO_SWEET_MIN_HZ - VIBRATO_RATE_MIN_HZ) / (VIBRATO_RATE_MAX_HZ - VIBRATO_RATE_MIN_HZ)) * 100;
+  const sweetEndPct = ((VIBRATO_SWEET_MAX_HZ - VIBRATO_RATE_MIN_HZ) / (VIBRATO_RATE_MAX_HZ - VIBRATO_RATE_MIN_HZ)) * 100;
+  const sweetSpanHz = Math.max(1e-3, VIBRATO_SWEET_MAX_HZ - VIBRATO_SWEET_MIN_HZ);
   const fadePct = clamp((1 / sweetSpanHz) * 100, 0, 50);
   const intermediateHzLabels = [];
-  for (let hz = Math.ceil(vibratoRateMinHz) + 1; hz < Math.floor(vibratoRateMaxHz); hz += 1) {
-    if (hz === vibratoSweetMinHz || hz === vibratoSweetMaxHz) continue;
+  for (let hz = Math.ceil(VIBRATO_RATE_MIN_HZ) + 1; hz < Math.floor(VIBRATO_RATE_MAX_HZ); hz += 1) {
+    if (hz === VIBRATO_SWEET_MIN_HZ || hz === VIBRATO_SWEET_MAX_HZ) continue;
     intermediateHzLabels.push(hz);
   }
   const sweetGradient = `linear-gradient(to right,
@@ -196,23 +198,23 @@ const VibratoChart = forwardRef(function VibratoChart({
             ) : null}
           </div>
           <div className="relative mt-1 h-3 text-xs leading-none text-slate-400/65">
-            <span className="absolute left-0 top-0">{vibratoRateMinHz} Hz</span>
+            <span className="absolute left-0 top-0">{VIBRATO_RATE_MIN_HZ} Hz</span>
             <span className="absolute top-0 -translate-x-1/2 text-slate-300/85" style={{left: `${sweetStartPct}%`}}>
-              {vibratoSweetMinHz} Hz
+              {VIBRATO_SWEET_MIN_HZ} Hz
             </span>
             <span className="absolute top-0 -translate-x-1/2 text-slate-300/85" style={{left: `${sweetEndPct}%`}}>
-              {vibratoSweetMaxHz} Hz
+              {VIBRATO_SWEET_MAX_HZ} Hz
             </span>
             {intermediateHzLabels.map((hz) => (
                 <span
                     key={hz}
                     className="absolute top-0 -translate-x-1/2 text-slate-300/85"
-                    style={{left: `${((hz - vibratoRateMinHz) / (vibratoRateMaxHz - vibratoRateMinHz)) * 100}%`}}
+                    style={{left: `${((hz - VIBRATO_RATE_MIN_HZ) / (VIBRATO_RATE_MAX_HZ - VIBRATO_RATE_MIN_HZ)) * 100}%`}}
                 >
                   {hz} Hz
                 </span>
             ))}
-            <span className="absolute right-0 top-0">{vibratoRateMaxHz} Hz</span>
+            <span className="absolute right-0 top-0">{VIBRATO_RATE_MAX_HZ} Hz</span>
           </div>
         </div>
       </>

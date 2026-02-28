@@ -224,7 +224,6 @@ export default function AppShell({downloadingUpdate = false}) {
                     activeView={activeView}
                     settingsOpen={settingsOpen}
                     keepRunningInBackground={keepRunningInBackground}
-                    isForeground={isForeground}
                     autoPauseOnSilence={autoPauseOnSilence}
                     runAt30Fps={runAt30Fps}
                     halfResolutionCanvas={halfResolutionCanvas}

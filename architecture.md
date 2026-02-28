@@ -11,6 +11,22 @@ Chart progression is driven by audio sample counts, not wall-clock time.
 1. No `performance.now()`, `setInteraval` or `setTimeout` used to advance chart history.
 3. `requestAnimationFrame` is only for drawing.
 
+## Ownership
+
+1. `AudioEngine` owns recorder runtime behavior:
+
+- Audio session lifecycle (`getUserMedia`, `AudioContext`, worklet, analyser, teardown).
+- Foreground/background policy for recorder pages.
+- Per-hop processing and timeline updates.
+- Render scheduling (`requestAnimationFrame`) and chart drawing dispatch.
+- Runtime UI state publication (`isAudioRunning`, `error`, `vibratoRate`, noise-profile status, battery usage).
+
+2. `Recorder.jsx` is a thin adapter:
+
+- Attaches chart refs and container ref to `AudioEngine`.
+- Forwards page/settings changes into engine APIs.
+- Renders overlays and chart components from engine-provided state.
+
 ## Naming
 
 1. `audioSampleRateHz`
@@ -65,7 +81,7 @@ Chart progression is driven by audio sample counts, not wall-clock time.
 - `sampleCount` (expected to equal `hopSize`)
 - `signalLevel` (hop RMS, `[0..1]`)
 
-3. On each message (`captureNode.port.onmessage` in `src/Recorder/Recorder.jsx`):
+3. On each message (`captureNode.port.onmessage` in `src/Recorder/AudioEngine.js`):
 
 - Capture analyser spectrum once.
 - Build `spectrumDb`, `spectrumNormalized`, `spectrumForPitchDetection`.
@@ -76,26 +92,26 @@ Chart progression is driven by audio sample counts, not wall-clock time.
 - Write pitch/intensity into shared timeline ring.
 - Append spectrogram column (`spectrumNormalized`, optionally noise-filtered) unless silence-paused.
 
-4. `renderLoop` draws when dirty:
+4. `AudioEngine` `renderLoop` draws when dirty:
 
 - Pitch and vibrato read from shared timeline ring.
 - Spectrogram draws from retained bitmap + pending columns queue in `SpectrogramChart`.
 
-## State objects (actual names)
+## State objects (actual names, current)
 
 1. Shared pitch/vibrato timeline ring:
 
-- `timelineRef.current.values` (pitch cents)
-- `timelineRef.current.intensities` (line color intensity)
-- `timelineRef.current.writeIndex`
-- `timelineRef.current.count`
+- `timeline.values` (pitch cents)
+- `timeline.intensities` (line color intensity)
+- `timeline.writeIndex`
+- `timeline.count`
 
 2. Per-hop spectrum capture buffers:
 
-- `spectrogramCaptureRef.current.spectrumDb`
-- `spectrogramCaptureRef.current.spectrumNormalized`
-- `spectrogramCaptureRef.current.spectrumForPitchDetection`
-- `spectrogramCaptureRef.current.spectrumFiltered`
+- `spectrogramCapture.spectrumDb`
+- `spectrogramCapture.spectrumNormalized`
+- `spectrogramCapture.spectrumForPitchDetection`
+- `spectrogramCapture.spectrumFiltered`
 
 3. Spectrogram pending history queue (inside chart component):
 
