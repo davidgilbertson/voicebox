@@ -354,8 +354,9 @@ export function createAudioEngine() {
       return;
     }
     if (currentView === "spectrogram") {
+      const activeSpectrogramBuffers = highResSpectrogramBuffers ?? spectrogramBuffers;
       chartRefs.spectrogramChartRef?.current?.draw({
-        binCount: spectrogramBuffers.spectrumNormalized.length,
+        binCount: activeSpectrogramBuffers.spectrumNormalized.length,
         sampleRate: audioSessionState.sampleRate,
       });
       return;
@@ -444,9 +445,7 @@ export function createAudioEngine() {
         state.chartWidthPx = nextWidth;
         resizePitchProcessingState(pitchProcessingState, nextWidth);
       }
-      if (!state.ui.isAudioRunning) {
-        state.forceRedraw = true;
-      }
+      state.forceRedraw = true;
     };
     resizeObserver = new ResizeObserver(onResize);
     resizeObserver.observe(container);
