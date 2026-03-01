@@ -1,15 +1,14 @@
 import colors from "tailwindcss/colors";
-import {clamp, getColorPalette} from "../tools.js";
+import {clamp} from "../tools.js";
 
 export const PITCH_LINE_COLOR_MODES = [
+  {value: "terrain", label: "Terrain"},
+  {value: "gist_rainbow", label: "Gist Rainbow"},
+  {value: "cool", label: "Cool"},
+  {value: "autumn", label: "Autumn"},
   {value: "blue", label: "Blue"},
   {value: "orange", label: "Orange"},
   {value: "green", label: "Green"},
-  {value: "cool", label: "Cool"},
-  {value: "autumn", label: "Autumn"},
-  {value: "terrain", label: "Terrain"},
-  {value: "gist_rainbow", label: "Gist Rainbow"},
-  {value: "inferno", label: "Inferno"},
 ];
 
 const WAVEFORM_COLOR_MODE_SET = new Set(PITCH_LINE_COLOR_MODES.map((item) => item.value));
@@ -57,17 +56,15 @@ function getPaletteForMode(mode) {
   }
 
   let palette;
-  if (resolved === "inferno") {
-    palette = getColorPalette();
-  } else if (resolved === "cool") {
+  if (resolved === "cool") {
     palette = createPaletteFromStops([
       [0, 1, 1],
       [1, 0, 1],
     ]);
   } else if (resolved === "autumn") {
     palette = createPaletteFromStops([
-      [1, 0, 0],
       [1, 1, 0],
+      [1, 0, 0],
     ]);
   } else if (resolved === "gist_rainbow") {
     palette = createPaletteFromStops([

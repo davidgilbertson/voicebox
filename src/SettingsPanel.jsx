@@ -11,7 +11,6 @@ const PITCH_LINE_MODE_PREVIEW_CLASS_BY_MODE = {
   cool: "pitch-line-mode-preview pitch-line-mode-cool",
   autumn: "pitch-line-mode-preview pitch-line-mode-autumn",
   terrain: "pitch-line-mode-preview pitch-line-mode-terrain",
-  inferno: "pitch-line-mode-preview pitch-line-mode-inferno",
   gist_rainbow: "pitch-line-mode-preview pitch-line-mode-gist-rainbow",
 };
 

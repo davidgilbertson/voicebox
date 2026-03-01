@@ -72,15 +72,15 @@ export default function AboutPage() {
   return (
       <main className="min-h-[var(--app-height)] bg-slate-950 px-5 pt-3 pb-7 text-slate-100 sm:px-7">
         <div className="mx-auto flex w-full max-w-[980px] flex-col gap-12 text-lg">
-        <header className="space-y-8">
+          <header className="space-y-8">
             <div className="flex items-start justify-between gap-3">
               <h1 className="text-4xl font-semibold text-slate-100">Voicebox</h1>
-            <a
-                href="/"
-                className="fixed top-3 right-3 z-20 inline-flex shrink-0 rounded-md bg-blue-400 px-4 py-2 font-semibold text-slate-950 transition hover:bg-blue-300 active:bg-blue-500"
-            >
-              Open Voicebox
-            </a>
+              <a
+                  href="/"
+                  className="fixed top-3 right-3 z-20 inline-flex shrink-0 rounded-md bg-blue-400 px-4 py-2 font-semibold text-slate-950 transition hover:bg-blue-300 active:bg-blue-500"
+              >
+                Open Voicebox
+              </a>
             </div>
             <p className="leading-relaxed text-slate-300">
               Voicebox is a free online vocal training app. It has a spectrogram, real-time pitch tracking, and vibrato analysis. You can also play scales or tinker on the built-in piano keyboard. And it all works offline.
@@ -144,7 +144,8 @@ export default function AboutPage() {
               <ScreenshotPopover src="/images/PitchPage.png" alt="Pitch page screenshot" openLabel="Pitch"/>
               <ul className="list-disc space-y-1 pl-5 leading-relaxed text-slate-300 lg:flex-1">
                 <li>Shows your detected pitch trace over time.</li>
-                <li>You can define the visible pitch range in settings.</li>
+                <li>You can define the visible pitch range in settings to match your voice.</li>
+                <li>You can choose between a line that changes color with volume, or a solid color.</li>
                 <li>Tap the screen to pause/resume.</li>
               </ul>
             </div>
@@ -216,10 +217,13 @@ export default function AboutPage() {
                 <ul className="list-disc space-y-1 pl-5 leading-relaxed text-slate-300">
                   <li>
                     <strong>Run at 30 FPS</strong>: lowers frame rate to reduce battery use. This makes quite a big difference to battery use
-                    and is barely noticable.
+                    and is barely noticeable.
                   </li>
                   <li>
                     <strong>Half-resolution canvas</strong>: lowers chart render resolution for lower CPU/GPU use.
+                  </li>
+                  <li>
+                    <strong>Lower-resolution spectrogram</strong>: halves spectrogram resolution to reduce processing cost. This doesn't affect the pitch detection algorithm.
                   </li>
                   <li>
                     <strong>Battery use</strong>: estimated battery drain rate (<code>%/min</code>). Shows <code>NA</code> when battery stats

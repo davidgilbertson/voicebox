@@ -163,6 +163,26 @@ test("pitch line color mode persists from settings", async () => {
   });
 });
 
+test("pitch line color options are ordered and inferno is removed", async () => {
+  const user = userEvent.setup();
+  render(<AppShell/>);
+
+  await user.click(screen.getByLabelText("Open settings"));
+  const radios = screen.getAllByRole("radio", {name: /.+/});
+  const colorModeLabels = radios.map((radio) => radio.closest("label")?.textContent?.trim()).filter(Boolean);
+
+  expect(colorModeLabels).toEqual([
+    "Terrain",
+    "Gist Rainbow",
+    "Cool",
+    "Autumn",
+    "Blue",
+    "Orange",
+    "Green",
+  ]);
+  expect(screen.queryByRole("radio", {name: "Inferno"})).toBeNull();
+});
+
 test("invalid persisted pitch line color mode falls back to terrain", async () => {
   localStorage.setItem("voicebox.pitchLineColorMode", "red");
   const user = userEvent.setup();

@@ -139,24 +139,12 @@ input[type="reset"] {
   );
 }
 
-.pitch-line-mode-inferno {
-  background-image: linear-gradient(
-          90deg,
-          rgb(0 0 0) 0%,
-          rgb(24 11 68) 20%,
-          rgb(87 16 109) 40%,
-          rgb(161 43 99) 60%,
-          rgb(228 100 52) 80%,
-          rgb(252 254 164) 100%
-  );
-}
-
 .pitch-line-mode-cool {
   background-image: linear-gradient(90deg, rgb(0 255 255) 0%, rgb(255 0 255) 100%);
 }
 
 .pitch-line-mode-autumn {
-  background-image: linear-gradient(90deg, rgb(255 0 0) 0%, rgb(255 255 0) 100%);
+  background-image: linear-gradient(90deg, rgb(255 255 0) 0%, rgb(255 0 0) 100%);
 }
 
 .pitch-line-mode-gist-rainbow {
