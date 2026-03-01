@@ -1,15 +1,17 @@
 export async function createRecorderAudioSession({
-  preferredDeviceId = null,
-  fftSize,
-  displayPixelsPerSecond,
-  workletModuleUrl,
-  onWorkletMessage,
-}) {
+                                                   preferredDeviceId = null,
+                                                   fftSize,
+                                                   highResSpectrogram = false,
+                                                   displayPixelsPerSecond,
+                                                   workletModuleUrl,
+                                                   onWorkletMessage,
+                                                 }) {
   let context = null;
   let stream = null;
   let source = null;
   let captureNode = null;
   let analyser = null;
+  let highResAnalyser = null;
   let silentOutputGain = null;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -40,6 +42,12 @@ export async function createRecorderAudioSession({
 
     source.connect(captureNode);
     source.connect(analyser);
+    if (highResSpectrogram) {
+      highResAnalyser = context.createAnalyser();
+      highResAnalyser.fftSize = fftSize * 2;
+      highResAnalyser.smoothingTimeConstant = 0;
+      source.connect(highResAnalyser);
+    }
 
     // Keep the worklet in the pull graph while producing no audible output.
     silentOutputGain = context.createGain();
@@ -60,6 +68,7 @@ export async function createRecorderAudioSession({
       source,
       captureNode,
       analyser,
+      highResAnalyser,
       silentOutputGain,
       sampleRate,
       hopSize,
@@ -71,6 +80,7 @@ export async function createRecorderAudioSession({
       source,
       captureNode,
       analyser,
+      highResAnalyser,
       silentOutputGain,
     });
     throw error;
@@ -78,13 +88,14 @@ export async function createRecorderAudioSession({
 }
 
 export function destroyRecorderAudioSession({
-  context,
-  stream,
-  source,
-  captureNode,
-  analyser,
-  silentOutputGain,
-}) {
+                                              context,
+                                              stream,
+                                              source,
+                                              captureNode,
+                                              analyser,
+                                              highResAnalyser,
+                                              silentOutputGain,
+                                            }) {
   if (captureNode) {
     captureNode.port.onmessage = null;
     captureNode.disconnect();
@@ -97,6 +108,9 @@ export function destroyRecorderAudioSession({
   }
   if (analyser) {
     analyser.disconnect();
+  }
+  if (highResAnalyser) {
+    highResAnalyser.disconnect();
   }
   if (stream) {
     stream.getTracks().forEach((track) => track.stop());

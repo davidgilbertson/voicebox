@@ -12,7 +12,11 @@ import {
   writeSpectrogramNoiseProfile,
 } from "./config.js";
 import {createPitchProcessingState, resizePitchProcessingState} from "./pitchProcessing.js";
-import {createSpectrogramCaptureBuffers, processOneAudioHop} from "./hopProcessing.js";
+import {
+  createHighResSpectrogramBuffers,
+  createSpectrogramBuffers,
+  processOneAudioHop,
+} from "./hopProcessing.js";
 import {createRecorderAudioSession, destroyRecorderAudioSession} from "./audioSession.js";
 import {BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor} from "./batteryUsage.js";
 import {computeIsForeground, subscribeToForegroundChanges} from "../foreground.js";
@@ -71,6 +75,7 @@ export function createAudioEngine() {
     settingsOpen: false,
     autoPauseOnSilence: true,
     runAt30Fps: false,
+    highResSpectrogram: false,
     pitchRange: {
       minHz: noteNameToHz(PITCH_MIN_NOTE_DEFAULT),
       maxHz: noteNameToHz(PITCH_MAX_NOTE_DEFAULT),
@@ -102,6 +107,7 @@ export function createAudioEngine() {
   const audioSessionState = {
     context: null,
     analyser: null,
+    highResAnalyser: null,
     source: null,
     stream: null,
     captureNode: null,
@@ -115,7 +121,8 @@ export function createAudioEngine() {
     seconds: state.chartWidthPx / DISPLAY_PIXELS_PER_SECOND,
     silencePauseStepThreshold: Math.round((SILENCE_PAUSE_THRESHOLD_MS / 1000) * DISPLAY_PIXELS_PER_SECOND),
   });
-  let spectrogramCapture = createSpectrogramCaptureBuffers(SPECTROGRAM_BIN_COUNT);
+  let spectrogramBuffers = createSpectrogramBuffers(SPECTROGRAM_BIN_COUNT);
+  let highResSpectrogramBuffers = null;
   const spectrogramNoiseState = {
     profile: initialNoiseProfile,
     calibrating: false,
@@ -172,12 +179,14 @@ export function createAudioEngine() {
         audioSessionState,
         processingState: pitchProcessingState,
         spectrogramNoiseState,
-        spectrogramCapture,
+        spectrogramBuffers,
+        highResSpectrogramBuffers,
       },
     });
     state.skipNextSpectrumFrame = result.nextSkipNextSpectrumFrame;
     state.lineStrengthEma = result.nextLineStrengthEma;
-    spectrogramCapture = result.spectrogramCapture;
+    spectrogramBuffers = result.spectrogramBuffers;
+    highResSpectrogramBuffers = result.highResSpectrogramBuffers;
     if (result.shouldPersistMaxSignalLevel) {
       writeMaxSignalLevel(state.signalLevel);
     }
@@ -204,6 +213,7 @@ export function createAudioEngine() {
       const session = await createRecorderAudioSession({
         preferredDeviceId,
         fftSize: FFT_SIZE,
+        highResSpectrogram: state.highResSpectrogram,
         displayPixelsPerSecond: DISPLAY_PIXELS_PER_SECOND,
         workletModuleUrl: new URL("./worklets/audioWorklet.js", import.meta.url),
         onWorkletMessage: (event) => {
@@ -234,12 +244,16 @@ export function createAudioEngine() {
       audioSessionState.stream = session.stream;
       audioSessionState.captureNode = session.captureNode;
       audioSessionState.analyser = session.analyser;
+      audioSessionState.highResAnalyser = session.highResAnalyser;
       audioSessionState.silentOutputGain = session.silentOutputGain;
       audioSessionState.sampleRate = session.sampleRate;
       audioSessionState.hzBuffer = hzBuffer;
 
       setStreamListeningEnabled(session.stream, state.ui.isWantedRunning);
-      spectrogramCapture = createSpectrogramCaptureBuffers(session.analyser.frequencyBinCount);
+      spectrogramBuffers = createSpectrogramBuffers(session.analyser.frequencyBinCount);
+      highResSpectrogramBuffers = session.highResAnalyser
+        ? createHighResSpectrogramBuffers(session.highResAnalyser.frequencyBinCount)
+        : null;
       state.forceRedraw = true;
       setUi({
         isAudioRunning: true,
@@ -269,7 +283,9 @@ export function createAudioEngine() {
     audioSessionState.stream = null;
     audioSessionState.captureNode = null;
     audioSessionState.analyser = null;
+    audioSessionState.highResAnalyser = null;
     audioSessionState.silentOutputGain = null;
+    highResSpectrogramBuffers = null;
     state.signalLevel = 0;
     state.frameDirty = false;
     setUi({isAudioRunning: false});
@@ -296,7 +312,8 @@ export function createAudioEngine() {
   }
 
   function beginSpectrogramNoiseCalibration() {
-    const binCount = audioSessionState.analyser?.frequencyBinCount ?? spectrogramCapture.spectrumNormalized.length;
+    const binCount = (audioSessionState.highResAnalyser ?? audioSessionState.analyser)?.frequencyBinCount
+      ?? spectrogramBuffers.spectrumNormalized.length;
     spectrogramNoiseState.calibrating = true;
     spectrogramNoiseState.sumBins = new Float32Array(binCount);
     spectrogramNoiseState.sampleCount = 0;
@@ -338,7 +355,7 @@ export function createAudioEngine() {
     }
     if (currentView === "spectrogram") {
       chartRefs.spectrogramChartRef?.current?.draw({
-        binCount: spectrogramCapture.spectrumNormalized.length,
+        binCount: spectrogramBuffers.spectrumNormalized.length,
         sampleRate: audioSessionState.sampleRate,
       });
       return;
@@ -459,6 +476,7 @@ export function createAudioEngine() {
                      keepRunningInBackground,
                      autoPauseOnSilence,
                      runAt30Fps,
+                     highResSpectrogram,
                      pitchMinNote,
                      pitchMaxNote,
                      spectrogramMinHz,
@@ -472,6 +490,13 @@ export function createAudioEngine() {
       }
       if (typeof runAt30Fps === "boolean") {
         state.runAt30Fps = runAt30Fps;
+      }
+      let shouldRestartAudio = false;
+      if (typeof highResSpectrogram === "boolean") {
+        if (highResSpectrogram !== state.highResSpectrogram) {
+          state.highResSpectrogram = highResSpectrogram;
+          shouldRestartAudio = true;
+        }
       }
       if (pitchMinNote && pitchMaxNote) {
         state.pitchRange = {
@@ -488,6 +513,9 @@ export function createAudioEngine() {
         };
       }
       state.forceRedraw = true;
+      if (shouldRestartAudio && state.ui.isAudioRunning) {
+        stopAudio();
+      }
       syncAudioState();
     },
     setActiveView(view) {

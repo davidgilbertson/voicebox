@@ -15,6 +15,7 @@ import {
 } from "./ScalesPage/config.js";
 import {
   readAutoPauseOnSilence,
+  readHighResSpectrogram,
   readHalfResolutionCanvas,
   readKeepRunningInBackground,
   readPitchMaxNote,
@@ -24,6 +25,7 @@ import {
   readSpectrogramMaxHz,
   readSpectrogramMinHz,
   writeAutoPauseOnSilence,
+  writeHighResSpectrogram,
   writeHalfResolutionCanvas,
   writeKeepRunningInBackground,
   writePitchMaxNote,
@@ -43,6 +45,7 @@ export default function AppShell({downloadingUpdate = false}) {
   const [autoPauseOnSilence, setAutoPauseOnSilence] = useState(() => readAutoPauseOnSilence());
   const [runAt30Fps, setRunAt30Fps] = useState(() => readRunAt30Fps());
   const [halfResolutionCanvas, setHalfResolutionCanvas] = useState(() => readHalfResolutionCanvas());
+  const [highResSpectrogram, setHighResSpectrogram] = useState(() => readHighResSpectrogram());
   const [pitchMinNote, setPitchMinNote] = useState(() => readPitchMinNote());
   const [pitchMaxNote, setPitchMaxNote] = useState(() => readPitchMaxNote());
   const [pitchLineColorMode, setPitchLineColorMode] = useState(() => readPitchLineColorMode());
@@ -98,6 +101,10 @@ export default function AppShell({downloadingUpdate = false}) {
   useEffect(() => {
     writeHalfResolutionCanvas(halfResolutionCanvas);
   }, [halfResolutionCanvas]);
+
+  useEffect(() => {
+    writeHighResSpectrogram(highResSpectrogram);
+  }, [highResSpectrogram]);
 
   useEffect(() => {
     writePitchMinNote(pitchMinNote);
@@ -227,6 +234,7 @@ export default function AppShell({downloadingUpdate = false}) {
                     autoPauseOnSilence={autoPauseOnSilence}
                     runAt30Fps={runAt30Fps}
                     halfResolutionCanvas={halfResolutionCanvas}
+                    highResSpectrogram={highResSpectrogram}
                     pitchMinNote={pitchMinNote}
                     pitchMaxNote={pitchMaxNote}
                     pitchLineColorMode={pitchLineColorMode}
@@ -327,6 +335,8 @@ export default function AppShell({downloadingUpdate = false}) {
                   onRunAt30FpsChange={setRunAt30Fps}
                   halfResolutionCanvas={halfResolutionCanvas}
                   onHalfResolutionCanvasChange={setHalfResolutionCanvas}
+                  highResSpectrogram={highResSpectrogram}
+                  onHighResSpectrogramChange={setHighResSpectrogram}
                   pitchMinNote={pitchMinNote}
                   pitchMaxNote={pitchMaxNote}
                   pitchLineColorMode={pitchLineColorMode}

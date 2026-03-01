@@ -7,6 +7,7 @@ const KEEP_RUNNING_IN_BACKGROUND_STORAGE_KEY = "voicebox.keepRunningInBackground
 const AUTO_PAUSE_ON_SILENCE_STORAGE_KEY = "voicebox.autoPauseOnSilence";
 const RUN_AT_30_FPS_STORAGE_KEY = "voicebox.runAt30Fps";
 const HALF_RESOLUTION_CANVAS_STORAGE_KEY = "voicebox.halfResolutionCanvas";
+const HIGH_RES_SPECTROGRAM_STORAGE_KEY = "voicebox.highResSpectrogram";
 const PITCH_MIN_NOTE_STORAGE_KEY = "voicebox.pitchMinNote";
 const PITCH_MAX_NOTE_STORAGE_KEY = "voicebox.pitchMaxNote";
 const PITCH_LINE_COLOR_MODE_STORAGE_KEY = "voicebox.pitchLineColorMode";
@@ -40,6 +41,7 @@ const SPECTROGRAM_MAX_HZ_DEFAULT = 11_000;
 const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
 const RUN_AT_30_FPS_DEFAULT = false;
 const HALF_RESOLUTION_CANVAS_DEFAULT = false;
+const HIGH_RES_SPECTROGRAM_DEFAULT = true;
 const MAX_SIGNAL_LEVEL_DEFAULT = 0.2;
 const PITCH_LINE_COLOR_MODE_SET = new Set(PITCH_LINE_COLOR_MODES.map((item) => item.value));
 
@@ -85,6 +87,17 @@ export function readHalfResolutionCanvas() {
 
 export function writeHalfResolutionCanvas(value) {
   ls.set(HALF_RESOLUTION_CANVAS_STORAGE_KEY, value);
+}
+
+export function readHighResSpectrogram() {
+  return ls.get(
+      HIGH_RES_SPECTROGRAM_STORAGE_KEY,
+      HIGH_RES_SPECTROGRAM_DEFAULT
+  ) === true;
+}
+
+export function writeHighResSpectrogram(value) {
+  ls.set(HIGH_RES_SPECTROGRAM_STORAGE_KEY, value);
 }
 
 export function readPitchMinNote() {

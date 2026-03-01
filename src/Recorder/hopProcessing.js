@@ -2,7 +2,7 @@ import {clamp} from "../tools.js";
 import {getPitchFromSpectrum} from "./pitchDetection.js";
 import {processPitchSample} from "./pitchProcessing.js";
 
-export function createSpectrogramCaptureBuffers(binCount) {
+export function createSpectrogramBuffers(binCount) {
   return {
     spectrumNormalized: new Float32Array(binCount),
     spectrumDb: new Float32Array(binCount),
@@ -11,50 +11,66 @@ export function createSpectrogramCaptureBuffers(binCount) {
   };
 }
 
+export function createHighResSpectrogramBuffers(binCount) {
+  return {
+    spectrumNormalized: new Float32Array(binCount),
+    spectrumDb: new Float32Array(binCount),
+    spectrumFiltered: new Float32Array(binCount),
+  };
+}
+
 export function captureSpectrumForHop({
-  analyser,
-  spectrogramCapture,
-  skipNextSpectrumFrame,
-}) {
+                                        analyser,
+                                        spectrogramBuffers,
+                                        skipNextSpectrumFrame,
+                                        // When false, skip allocating/filling pitch-only arrays for spectrogram-only paths.
+                                        includePitchDetection = true,
+                                      }) {
   if (!analyser) {
     return {
       capturedSpectrum: null,
       nextSkipNextSpectrumFrame: skipNextSpectrumFrame,
-      spectrogramCapture,
+      spectrogramBuffers,
     };
   }
 
-  let nextCapture = spectrogramCapture;
-  if (nextCapture.spectrumNormalized.length !== analyser.frequencyBinCount) {
-    nextCapture = createSpectrogramCaptureBuffers(analyser.frequencyBinCount);
+  let nextBuffers = spectrogramBuffers;
+  if (nextBuffers.spectrumNormalized.length !== analyser.frequencyBinCount) {
+    // FFT size can change across sessions/settings; keep reusable buffers sized to analyser bins.
+    nextBuffers = includePitchDetection
+        ? createSpectrogramBuffers(analyser.frequencyBinCount)
+        : createHighResSpectrogramBuffers(analyser.frequencyBinCount);
   }
 
-  analyser.getFloatFrequencyData(nextCapture.spectrumDb);
+  analyser.getFloatFrequencyData(nextBuffers.spectrumDb);
   const minDb = analyser.minDecibels;
   const maxDb = analyser.maxDecibels;
   const dbRange = maxDb - minDb;
   const invDbRange = dbRange > 0 ? 1 / dbRange : 0;
   let allNegativeInfinity = true;
   let maxMagnitude = 0;
-  for (let i = 0; i < nextCapture.spectrumDb.length; i += 1) {
-    const dbValue = nextCapture.spectrumDb[i];
+  const spectrumForPitchDetection = includePitchDetection ? nextBuffers.spectrumForPitchDetection : null;
+  for (let i = 0; i < nextBuffers.spectrumDb.length; i += 1) {
+    const dbValue = nextBuffers.spectrumDb[i];
     if (dbValue !== Number.NEGATIVE_INFINITY) {
       allNegativeInfinity = false;
     }
     const finiteDb = Number.isFinite(dbValue) ? dbValue : minDb;
-    const magnitude = 10 ** (finiteDb / 20);
-    nextCapture.spectrumForPitchDetection[i] = magnitude;
-    if (magnitude > maxMagnitude) {
-      maxMagnitude = magnitude;
+    if (spectrumForPitchDetection) {
+      const magnitude = 10 ** (finiteDb / 20);
+      spectrumForPitchDetection[i] = magnitude;
+      if (magnitude > maxMagnitude) {
+        maxMagnitude = magnitude;
+      }
     }
     const normalized = (finiteDb - minDb) * invDbRange;
-    nextCapture.spectrumNormalized[i] = clamp(normalized, 0, 1);
+    nextBuffers.spectrumNormalized[i] = clamp(normalized, 0, 1);
   }
 
-  if (maxMagnitude > 0) {
+  if (spectrumForPitchDetection && maxMagnitude > 0) {
     const scale = 1 / maxMagnitude;
-    for (let i = 0; i < nextCapture.spectrumForPitchDetection.length; i += 1) {
-      nextCapture.spectrumForPitchDetection[i] *= scale;
+    for (let i = 0; i < spectrumForPitchDetection.length; i += 1) {
+      spectrumForPitchDetection[i] *= scale;
     }
   }
 
@@ -62,7 +78,7 @@ export function captureSpectrumForHop({
     return {
       capturedSpectrum: null,
       nextSkipNextSpectrumFrame: true,
-      spectrogramCapture: nextCapture,
+      spectrogramBuffers: nextBuffers,
     };
   }
 
@@ -70,25 +86,25 @@ export function captureSpectrumForHop({
     return {
       capturedSpectrum: null,
       nextSkipNextSpectrumFrame: false,
-      spectrogramCapture: nextCapture,
+      spectrogramBuffers: nextBuffers,
     };
   }
 
   return {
     capturedSpectrum: {
-      spectrumNormalized: nextCapture.spectrumNormalized,
-      spectrumForPitchDetection: nextCapture.spectrumForPitchDetection,
+      spectrumNormalized: nextBuffers.spectrumNormalized,
+      spectrumForPitchDetection,
     },
     nextSkipNextSpectrumFrame: false,
-    spectrogramCapture: nextCapture,
+    spectrogramBuffers: nextBuffers,
   };
 }
 
 export function applyNoiseProfileToSpectrum({
-  spectrumNormalized,
-  spectrogramNoiseState,
-  spectrogramCapture,
-}) {
+                                              spectrumNormalized,
+                                              spectrogramNoiseState,
+                                              spectrogramBuffers,
+                                            }) {
   if (spectrogramNoiseState.calibrating && spectrogramNoiseState.sumBins) {
     const captureCount = Math.min(spectrogramNoiseState.sumBins.length, spectrumNormalized.length);
     for (let i = 0; i < captureCount; i += 1) {
@@ -100,14 +116,14 @@ export function applyNoiseProfileToSpectrum({
   if (!spectrogramNoiseState.profile) {
     return {
       spectrumFiltered: spectrumNormalized,
-      spectrogramCapture,
+      spectrogramBuffers,
     };
   }
 
-  if (spectrogramCapture.spectrumFiltered.length !== spectrumNormalized.length) {
-    spectrogramCapture.spectrumFiltered = new Float32Array(spectrumNormalized.length);
+  if (spectrogramBuffers.spectrumFiltered.length !== spectrumNormalized.length) {
+    spectrogramBuffers.spectrumFiltered = new Float32Array(spectrumNormalized.length);
   }
-  const spectrumFiltered = spectrogramCapture.spectrumFiltered;
+  const spectrumFiltered = spectrogramBuffers.spectrumFiltered;
   const profileCount = Math.min(spectrogramNoiseState.profile.length, spectrumNormalized.length);
   for (let i = 0; i < profileCount; i += 1) {
     const value = spectrumNormalized[i];
@@ -119,68 +135,86 @@ export function applyNoiseProfileToSpectrum({
   }
   return {
     spectrumFiltered,
-    spectrogramCapture,
+    spectrogramBuffers,
   };
 }
 
 function processHopSpectrogram({
-  audioSessionState,
-  spectrogramCapture,
-  skipNextSpectrumFrame,
-  spectrogramNoiseState,
-}) {
-  const captureResult = captureSpectrumForHop({
-    analyser: audioSessionState.analyser,
-    spectrogramCapture,
+                                 audioSessionState,
+                                 spectrogramBuffers,
+                                 highResSpectrogramBuffers,
+                                 skipNextSpectrumFrame,
+                                 spectrogramNoiseState,
+                               }) {
+  const analyser = audioSessionState.analyser;
+  const highResAnalyser = audioSessionState.highResAnalyser;
+
+  // Base analyser always drives pitch detection.
+  const baseCaptureResult = captureSpectrumForHop({
+    analyser,
+    spectrogramBuffers,
     skipNextSpectrumFrame,
   });
-  const capturedSpectrum = captureResult.capturedSpectrum;
-  const spectrumNormalized = capturedSpectrum?.spectrumNormalized ?? null;
-  const spectrumForPitchDetection = capturedSpectrum?.spectrumForPitchDetection ?? null;
-  const nextSkipNextSpectrumFrame = captureResult.nextSkipNextSpectrumFrame;
-  const nextSpectrogramCapture = captureResult.spectrogramCapture;
+  const pitchSpectrum = baseCaptureResult.capturedSpectrum;
+  const spectrumForPitchDetection = pitchSpectrum?.spectrumForPitchDetection ?? null;
+  const nextSkipNextSpectrumFrame = baseCaptureResult.nextSkipNextSpectrumFrame;
+  const nextSpectrogramBuffers = baseCaptureResult.spectrogramBuffers;
+
+  const highResCaptureResult = highResAnalyser
+      ? captureSpectrumForHop({
+        analyser: highResAnalyser,
+        spectrogramBuffers: highResSpectrogramBuffers,
+        skipNextSpectrumFrame: nextSkipNextSpectrumFrame,
+        // High-res path is spectrogram-only, so avoid pitch-detection work/allocation.
+        includePitchDetection: false,
+      })
+      : null;
+
+  const spectrogramSpectrum = highResCaptureResult?.capturedSpectrum ?? pitchSpectrum;
+  const spectrumNormalized = spectrogramSpectrum?.spectrumNormalized ?? null;
+  const nextHighResSpectrogramBuffers = highResCaptureResult?.spectrogramBuffers ?? highResSpectrogramBuffers;
+  const activeSpectrogramBuffers = highResAnalyser ? nextHighResSpectrogramBuffers : nextSpectrogramBuffers;
   const buildSpectrogramOutput = ({isSilencePaused}) => {
     if (!spectrumNormalized || isSilencePaused) {
       return {
         spectrogramColumn: null,
-        spectrogramCapture: nextSpectrogramCapture,
+        spectrogramBuffers: activeSpectrogramBuffers,
         didFrameDataChange: false,
       };
     }
     const noiseResult = applyNoiseProfileToSpectrum({
       spectrumNormalized,
       spectrogramNoiseState,
-      spectrogramCapture: nextSpectrogramCapture,
+      spectrogramBuffers: activeSpectrogramBuffers,
     });
     return {
       spectrogramColumn: noiseResult.spectrumFiltered,
-      spectrogramCapture: noiseResult.spectrogramCapture,
+      spectrogramBuffers: noiseResult.spectrogramBuffers,
       didFrameDataChange: true,
     };
   };
   return {
     spectrumForPitchDetection,
     nextSkipNextSpectrumFrame,
-    nextSpectrogramCapture,
+    nextSpectrogramBuffers,
+    nextHighResSpectrogramBuffers,
     buildSpectrogramOutput,
   };
 }
 
 function processHopPitchAndSignals({
-  processingState,
-  audioSessionState,
-  signalLevel,
-  minSignalThreshold,
-  signalTracking,
-  lineStrengthEma,
-  autoPauseOnSilence,
-  activeView,
-  pitchRange,
-  spectrogramRange,
-  spectrumForPitchDetection,
-}) {
-  const minHz = activeView === "spectrogram" ? spectrogramRange.minHz : pitchRange.minHz;
-  const maxHz = activeView === "spectrogram" ? spectrogramRange.maxHz : pitchRange.maxHz;
+                                     processingState,
+                                     audioSessionState,
+                                     signalLevel,
+                                     minSignalThreshold,
+                                     signalTracking,
+                                     lineStrengthEma,
+                                     autoPauseOnSilence,
+                                     pitchRange,
+                                     spectrumForPitchDetection,
+                                   }) {
+  const minHz = pitchRange.minHz;
+  const maxHz = pitchRange.maxHz;
 
   let shouldPersistMaxSignalLevel = false;
   if (signalLevel > (signalTracking.maxHeardSignalLevel + 0.01)) {
@@ -192,8 +226,8 @@ function processHopPitchAndSignals({
 
   const isAboveSilenceThreshold = signalLevel > minSignalThreshold;
   const result = isAboveSilenceThreshold
-    ? getPitchFromSpectrum(audioSessionState, spectrumForPitchDetection, minHz, maxHz)
-    : {cents: Number.NaN};
+      ? getPitchFromSpectrum(audioSessionState, spectrumForPitchDetection, minHz, maxHz)
+      : {cents: Number.NaN};
 
   let didFrameDataChange = false;
   let pitchWriteResult = null;
@@ -201,9 +235,9 @@ function processHopPitchAndSignals({
   if (result) {
     const signalSpan = usedMaxSignalLevel - minSignalThreshold;
     const lineStrength = clamp(
-      signalSpan > 0 ? ((signalLevel - minSignalThreshold) / signalSpan) : 0,
-      0,
-      1
+        signalSpan > 0 ? ((signalLevel - minSignalThreshold) / signalSpan) : 0,
+        0,
+        1
     );
     const smoothedLineStrength = lineStrengthEma + ((lineStrength - lineStrengthEma) * 0.2);
     nextLineStrengthEma = smoothedLineStrength;
@@ -231,13 +265,11 @@ function processHopPitchAndSignals({
  * Assumes caller handles manual pause gating.
  */
 export function processOneAudioHop({
-  engineState,
-  hopState,
-}) {
+                                     engineState,
+                                     hopState,
+                                   }) {
   const {
-    activeView,
     pitchRange,
-    spectrogramRange,
     signalLevel,
     minSignalThreshold,
     signalTracking,
@@ -249,18 +281,21 @@ export function processOneAudioHop({
     audioSessionState,
     processingState,
     spectrogramNoiseState,
-    spectrogramCapture,
+    spectrogramBuffers,
+    highResSpectrogramBuffers,
   } = hopState;
   const spectrogramResult = processHopSpectrogram({
     audioSessionState,
-    spectrogramCapture,
+    spectrogramBuffers,
+    highResSpectrogramBuffers,
     skipNextSpectrumFrame,
     spectrogramNoiseState,
   });
   const {
     spectrumForPitchDetection,
     nextSkipNextSpectrumFrame,
-    nextSpectrogramCapture,
+    nextSpectrogramBuffers,
+    nextHighResSpectrogramBuffers,
     buildSpectrogramOutput,
   } = spectrogramResult;
 
@@ -271,14 +306,13 @@ export function processOneAudioHop({
       nextLineStrengthEma: lineStrengthEma,
       shouldPersistMaxSignalLevel: false,
       spectrogramColumn: null,
-      spectrogramCapture: nextSpectrogramCapture,
+      spectrogramBuffers: nextSpectrogramBuffers,
+      highResSpectrogramBuffers: nextHighResSpectrogramBuffers,
     };
   }
 
   const pitchResult = processHopPitchAndSignals({
-    activeView,
     pitchRange,
-    spectrogramRange,
     signalLevel,
     minSignalThreshold,
     signalTracking,
@@ -292,6 +326,10 @@ export function processOneAudioHop({
     isSilencePaused: pitchResult.isSilencePaused,
   });
   const didFrameDataChange = pitchResult.didFrameDataChange || spectrogramOutput.didFrameDataChange;
+  const nextHighResCaptureAfterNoise = audioSessionState.highResAnalyser
+      // Noise filtering may resize/replace filtered output buffer; retain that updated reference.
+      ? spectrogramOutput.spectrogramBuffers
+      : nextHighResSpectrogramBuffers;
 
   return {
     didFrameDataChange,
@@ -299,6 +337,7 @@ export function processOneAudioHop({
     nextLineStrengthEma: pitchResult.nextLineStrengthEma,
     shouldPersistMaxSignalLevel: pitchResult.shouldPersistMaxSignalLevel,
     spectrogramColumn: spectrogramOutput.spectrogramColumn,
-    spectrogramCapture: spectrogramOutput.spectrogramCapture,
+    spectrogramBuffers: nextSpectrogramBuffers,
+    highResSpectrogramBuffers: nextHighResCaptureAfterNoise,
   };
 }

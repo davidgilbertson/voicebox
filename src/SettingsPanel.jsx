@@ -31,6 +31,8 @@ export default function SettingsPanel({
                                         onRunAt30FpsChange,
                                         halfResolutionCanvas,
                                         onHalfResolutionCanvasChange,
+                                        highResSpectrogram,
+                                        onHighResSpectrogramChange,
                                         pitchMinNote,
                                         pitchMaxNote,
                                         pitchLineColorMode,
@@ -347,6 +349,20 @@ export default function SettingsPanel({
                   type="checkbox"
                   checked={halfResolutionCanvas}
                   onChange={(event) => onHalfResolutionCanvasChange(event.target.checked)}
+                  className={settingsCheckboxClass}
+              />
+            </label>
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <div className="flex flex-col gap-1">
+                <span>Lower-resolution spectrogram</span>
+                <span className="text-xs text-slate-400">
+                  Halve the spectrogram resolution
+                </span>
+              </div>
+              <input
+                  type="checkbox"
+                  checked={!highResSpectrogram}
+                  onChange={(event) => onHighResSpectrogramChange(!event.target.checked)}
                   className={settingsCheckboxClass}
               />
             </label>
