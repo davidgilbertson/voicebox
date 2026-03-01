@@ -19,16 +19,6 @@ export function pickPreferredAudioInputDeviceId(devices) {
   return preferredInput?.deviceId || null;
 }
 
-export function readNewestRingValue(ring) {
-  if (!ring) return Number.NaN;
-  return ring.newest();
-}
-
-export function findMostRecentFiniteInRing(ring) {
-  if (!ring) return null;
-  return ring.findMostRecentFinite();
-}
-
 export function getColorPalette() {
   if (cachedColorPalette) return cachedColorPalette;
 

@@ -1,4 +1,6 @@
 import {clamp} from "../tools.js";
+import {getPitchFromSpectrum} from "./pitchDetection.js";
+import {processPitchSample} from "./pitchProcessing.js";
 
 export function createSpectrogramCaptureBuffers(binCount) {
   return {
@@ -121,41 +123,14 @@ export function applyNoiseProfileToSpectrum({
   };
 }
 
-export function processOneAudioHop({
-  isManuallyPaused,
-  activeView,
-  pitchRange,
-  spectrogramRange,
-  signalLevel,
-  minSignalThreshold,
-  signalTracking,
-  spectrumIntensityEma,
-  autoPauseOnSilence,
-  pitchHistory,
-  audioState,
-  spectrogramNoiseState,
+function processHopSpectrogram({
+  audioSessionState,
   spectrogramCapture,
   skipNextSpectrumFrame,
-  analyzePitch,
-  writePitchTimeline,
-  estimateTimelineVibratoRate,
+  spectrogramNoiseState,
 }) {
-  if (isManuallyPaused) {
-    return {
-      didFrameDataChange: false,
-      nextSkipNextSpectrumFrame: skipNextSpectrumFrame,
-      nextSpectrumIntensityEma: spectrumIntensityEma,
-      shouldPersistMaxSignalLevel: false,
-      spectrogramColumn: null,
-      spectrogramCapture,
-    };
-  }
-
-  const minHz = activeView === "spectrogram" ? spectrogramRange.minHz : pitchRange.minHz;
-  const maxHz = activeView === "spectrogram" ? spectrogramRange.maxHz : pitchRange.maxHz;
-  let didFrameDataChange = false;
   const captureResult = captureSpectrumForHop({
-    analyser: audioState.analyser,
+    analyser: audioSessionState.analyser,
     spectrogramCapture,
     skipNextSpectrumFrame,
   });
@@ -164,17 +139,48 @@ export function processOneAudioHop({
   const spectrumForPitchDetection = capturedSpectrum?.spectrumForPitchDetection ?? null;
   const nextSkipNextSpectrumFrame = captureResult.nextSkipNextSpectrumFrame;
   const nextSpectrogramCapture = captureResult.spectrogramCapture;
-
-  if (!spectrumForPitchDetection) {
-    return {
-      didFrameDataChange: false,
-      nextSkipNextSpectrumFrame,
-      nextSpectrumIntensityEma: spectrumIntensityEma,
-      shouldPersistMaxSignalLevel: false,
-      spectrogramColumn: null,
+  const buildSpectrogramOutput = ({isSilencePaused}) => {
+    if (!spectrumNormalized || isSilencePaused) {
+      return {
+        spectrogramColumn: null,
+        spectrogramCapture: nextSpectrogramCapture,
+        didFrameDataChange: false,
+      };
+    }
+    const noiseResult = applyNoiseProfileToSpectrum({
+      spectrumNormalized,
+      spectrogramNoiseState,
       spectrogramCapture: nextSpectrogramCapture,
+    });
+    return {
+      spectrogramColumn: noiseResult.spectrumFiltered,
+      spectrogramCapture: noiseResult.spectrogramCapture,
+      didFrameDataChange: true,
     };
-  }
+  };
+  return {
+    spectrumForPitchDetection,
+    nextSkipNextSpectrumFrame,
+    nextSpectrogramCapture,
+    buildSpectrogramOutput,
+  };
+}
+
+function processHopPitchAndSignals({
+  processingState,
+  audioSessionState,
+  signalLevel,
+  minSignalThreshold,
+  signalTracking,
+  lineStrengthEma,
+  autoPauseOnSilence,
+  activeView,
+  pitchRange,
+  spectrogramRange,
+  spectrumForPitchDetection,
+}) {
+  const minHz = activeView === "spectrogram" ? spectrogramRange.minHz : pitchRange.minHz;
+  const maxHz = activeView === "spectrogram" ? spectrogramRange.maxHz : pitchRange.maxHz;
 
   let shouldPersistMaxSignalLevel = false;
   if (signalLevel > (signalTracking.maxHeardSignalLevel + 0.01)) {
@@ -186,61 +192,113 @@ export function processOneAudioHop({
 
   const isAboveSilenceThreshold = signalLevel > minSignalThreshold;
   const result = isAboveSilenceThreshold
-    ? analyzePitch(audioState, null, spectrumForPitchDetection, minHz, maxHz)
+    ? getPitchFromSpectrum(audioSessionState, spectrumForPitchDetection, minHz, maxHz)
     : {cents: Number.NaN};
 
+  let didFrameDataChange = false;
   let pitchWriteResult = null;
-  let nextSpectrumIntensityEma = spectrumIntensityEma;
+  let nextLineStrengthEma = lineStrengthEma;
   if (result) {
     const signalSpan = usedMaxSignalLevel - minSignalThreshold;
-    const signalIntensity = clamp(
+    const lineStrength = clamp(
       signalSpan > 0 ? ((signalLevel - minSignalThreshold) / signalSpan) : 0,
       0,
       1
     );
-    const smoothedSpectrumIntensity = spectrumIntensityEma + ((signalIntensity - spectrumIntensityEma) * 0.2);
-    nextSpectrumIntensityEma = smoothedSpectrumIntensity;
-    pitchWriteResult = writePitchTimeline(pitchHistory, {
+    const smoothedLineStrength = lineStrengthEma + ((lineStrength - lineStrengthEma) * 0.2);
+    nextLineStrengthEma = smoothedLineStrength;
+    pitchWriteResult = processPitchSample(processingState, {
       autoPauseOnSilence,
       hasSignal: isAboveSilenceThreshold,
       cents: result.cents,
-      intensity: smoothedSpectrumIntensity,
+      lineStrength: smoothedLineStrength,
     });
     if (pitchWriteResult.steps > 0) {
-      const estimatedRateNow = estimateTimelineVibratoRate({
-        ring: pitchHistory.rawPitchCentsRing,
-        samplesPerSecond: pitchHistory.columnRateHz,
-      });
-      pitchHistory.vibratoRateHzRing.setAt(-1, estimatedRateNow ?? Number.NaN);
       didFrameDataChange = true;
     }
   }
 
-  const spectrogramSilencePaused = pitchWriteResult?.paused ?? pitchHistory.silencePaused;
-  if (!spectrumNormalized || spectrogramSilencePaused) {
+  return {
+    didFrameDataChange,
+    shouldPersistMaxSignalLevel,
+    nextLineStrengthEma,
+    isSilencePaused: pitchWriteResult?.paused ?? processingState.silencePaused,
+  };
+}
+
+/**
+ * Process one FFT hop and update processing state.
+ * Assumes caller handles manual pause gating.
+ */
+export function processOneAudioHop({
+  engineState,
+  hopState,
+}) {
+  const {
+    activeView,
+    pitchRange,
+    spectrogramRange,
+    signalLevel,
+    minSignalThreshold,
+    signalTracking,
+    lineStrengthEma,
+    autoPauseOnSilence,
+    skipNextSpectrumFrame,
+  } = engineState;
+  const {
+    audioSessionState,
+    processingState,
+    spectrogramNoiseState,
+    spectrogramCapture,
+  } = hopState;
+  const spectrogramResult = processHopSpectrogram({
+    audioSessionState,
+    spectrogramCapture,
+    skipNextSpectrumFrame,
+    spectrogramNoiseState,
+  });
+  const {
+    spectrumForPitchDetection,
+    nextSkipNextSpectrumFrame,
+    nextSpectrogramCapture,
+    buildSpectrogramOutput,
+  } = spectrogramResult;
+
+  if (!spectrumForPitchDetection) {
     return {
-      didFrameDataChange,
+      didFrameDataChange: false,
       nextSkipNextSpectrumFrame,
-      nextSpectrumIntensityEma,
-      shouldPersistMaxSignalLevel,
+      nextLineStrengthEma: lineStrengthEma,
+      shouldPersistMaxSignalLevel: false,
       spectrogramColumn: null,
       spectrogramCapture: nextSpectrogramCapture,
     };
   }
 
-  const noiseResult = applyNoiseProfileToSpectrum({
-    spectrumNormalized,
-    spectrogramNoiseState,
-    spectrogramCapture: nextSpectrogramCapture,
+  const pitchResult = processHopPitchAndSignals({
+    activeView,
+    pitchRange,
+    spectrogramRange,
+    signalLevel,
+    minSignalThreshold,
+    signalTracking,
+    lineStrengthEma,
+    autoPauseOnSilence,
+    processingState,
+    audioSessionState,
+    spectrumForPitchDetection,
   });
-  didFrameDataChange = true;
+  const spectrogramOutput = buildSpectrogramOutput({
+    isSilencePaused: pitchResult.isSilencePaused,
+  });
+  const didFrameDataChange = pitchResult.didFrameDataChange || spectrogramOutput.didFrameDataChange;
 
   return {
     didFrameDataChange,
     nextSkipNextSpectrumFrame,
-    nextSpectrumIntensityEma,
-    shouldPersistMaxSignalLevel,
-    spectrogramColumn: noiseResult.spectrumFiltered,
-    spectrogramCapture: noiseResult.spectrogramCapture,
+    nextLineStrengthEma: pitchResult.nextLineStrengthEma,
+    shouldPersistMaxSignalLevel: pitchResult.shouldPersistMaxSignalLevel,
+    spectrogramColumn: spectrogramOutput.spectrogramColumn,
+    spectrogramCapture: spectrogramOutput.spectrogramCapture,
   };
 }

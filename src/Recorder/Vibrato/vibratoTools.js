@@ -6,7 +6,7 @@ import {
   VIBRATO_RATE_MAX_HZ,
   VIBRATO_RATE_MIN_HZ,
 } from "../config.js";
-import {mapWaveformIntensityToStrokeColor} from "../waveformColor.js";
+import {mapWaveformIntensityToStrokeColor} from "../colorTools.js";
 
 const WAVEFORM_LINE_COLOR = colors.blue[400];
 const Y_RANGE = 405; // in cents
@@ -15,25 +15,20 @@ const PLOT_LEFT = 21;
 const PLOT_Y_INSET = 5;
 const DEFAULT_CENTER_CENTS = 1200 * Math.log2(220);
 
-function contiguousFiniteTail(values, maxSamples) {
-  const tail = [];
-  for (let i = values.length - 1; i >= 0 && tail.length < maxSamples; i -= 1) {
-    const value = values[i];
-    if (!Number.isFinite(value)) break;
-    tail.push(value);
-  }
-  tail.reverse();
-  return tail;
-}
-
 function centeredFiniteTail({
   ring,
   samplesPerSecond,
 }) {
   if (!ring || ring.sampleCount <= 0 || samplesPerSecond <= 0) return null;
-  const values = ring.values();
   const maxSamples = Math.max(1, Math.floor(samplesPerSecond * VIBRATO_ANALYSIS_WINDOW_SECONDS));
-  const tail = contiguousFiniteTail(values, maxSamples);
+  const tailNewestToOldest = [];
+  const tailLimit = Math.min(ring.sampleCount, maxSamples);
+  for (let offset = 1; offset <= tailLimit; offset += 1) {
+    const value = ring.at(-offset);
+    if (!Number.isFinite(value)) break;
+    tailNewestToOldest.push(value);
+  }
+  const tail = tailNewestToOldest.reverse();
   const minSamples = Math.max(8, Math.floor(samplesPerSecond * VIBRATO_MIN_CONTIGUOUS_SECONDS));
   if (tail.length < minSamples) return null;
 
@@ -277,8 +272,7 @@ export class VibratoChartRenderer {
 
   draw({
     smoothedPitchCentsRing,
-    rawPitchCentsRing,
-    signalStrengthRing,
+    lineStrengthRing,
     vibratoRateHzRing,
   }) {
     const canvas = this.canvas;
@@ -295,7 +289,7 @@ export class VibratoChartRenderer {
       this.detectionAlphas[i] = Number.isFinite(rate) ? 1 : 0.25;
     }
     const centerFromVibrato = estimateTimelineCenterCents({
-      ring: rawPitchCentsRing,
+      ring: smoothedPitchCentsRing,
       detectionAlphas: this.detectionAlphas,
     });
     if (centerFromVibrato !== null) {
@@ -313,7 +307,7 @@ export class VibratoChartRenderer {
     drawWaveformTrace({
       ctx,
       valuesRing: smoothedPitchCentsRing,
-      colorValuesRing: signalStrengthRing,
+      colorValuesRing: lineStrengthRing,
       alphaValues: this.detectionAlphas,
       yOffset: this.centerCents,
       yRange: Y_RANGE,

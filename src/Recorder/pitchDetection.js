@@ -1,17 +1,17 @@
 import {clamp} from "../tools.js";
 
-function finalizeDetection(state, {
+function finalizeDetection(detectionState, {
   hz,
   minHz,
   maxHz,
 }) {
-  const {hzBuffer} = state;
+  const {hzBuffer} = detectionState;
   const inHzRange = hz >= minHz && hz <= maxHz;
   const absCents = inHzRange ? 1200 * Math.log2(hz) : Number.NaN;
 
   if (inHzRange) {
-    hzBuffer[state.hzIndex] = hz;
-    state.hzIndex = (state.hzIndex + 1) % hzBuffer.length;
+    hzBuffer[detectionState.hzIndex] = hz;
+    detectionState.hzIndex = (detectionState.hzIndex + 1) % hzBuffer.length;
   }
 
   return {
@@ -42,9 +42,9 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
   // Once a fundamental pitch has been selected, it is refined by looking
   //  at `pRefineCount` different partials
   const pRefineCount = 4;
-  const offWeight = 0.5;
+  const offWeight = 1.25;
   const expectedP0MinRatio = 0.18;
-  const expectedP0PenaltyWeight = 2.0;
+  const expectedP0PenaltyWeight = 2;
   const downwardBiasPerP = 0.02;
   const searchRadiusBins = 2;
 
@@ -84,7 +84,7 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
     return {score, p0Magnitude};
   }
 
-  function findTopTwoSeedPeaks() {
+  function findTopSeedPeak() {
     const localPeaks = [];
     for (let bin = minBin + 1; bin < maxBin; bin += 1) {
       const left = spectrumBins[bin - 1];
@@ -94,9 +94,7 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
       localPeaks.push({bin, magnitude: center});
     }
     localPeaks.sort((a, b) => b.magnitude - a.magnitude);
-    if (localPeaks.length >= 2) return [localPeaks[0], localPeaks[1]];
-    if (localPeaks.length === 1) return [localPeaks[0]];
-    return [];
+    return localPeaks[0] ?? null;
   }
 
   function refineF0FromPartials(baseF0Bin) {
@@ -138,34 +136,26 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
     }
   }
 
-  const seedPeaks = findTopTwoSeedPeaks();
-  if (!seedPeaks.length) {
-    seedPeaks.push({bin: strongestPeakBin, magnitude: strongestPeakMagnitude});
-  }
-  if (seedPeaks.length === 1 && seedPeaks[0].bin !== strongestPeakBin) {
-    seedPeaks.push({bin: strongestPeakBin, magnitude: strongestPeakMagnitude});
-  }
+  const seedPeak = findTopSeedPeak() ?? {bin: strongestPeakBin, magnitude: strongestPeakMagnitude};
 
   let bestP = 1;
   let bestF0Bin = strongestPeakBin;
   let bestScore = Number.NEGATIVE_INFINITY;
-  for (const seedPeak of seedPeaks.slice(0, 2)) {
-    for (let p = 1; p <= maxP; p += 1) {
-      const f0Bin = seedPeak.bin / p;
-      if (f0Bin < minBin || f0Bin > maxBin) continue;
-      const {score, p0Magnitude} = scoreHypothesis(f0Bin);
-      let hypothesisScore = score;
-      if (p > 1) {
-        const expectedP0Magnitude = seedPeak.magnitude * expectedP0MinRatio;
-        const p0Deficit = Math.max(0, expectedP0Magnitude - p0Magnitude);
-        hypothesisScore -= p0Deficit * expectedP0PenaltyWeight;
-      }
-      hypothesisScore -= p * downwardBiasPerP;
-      if (hypothesisScore > bestScore) {
-        bestScore = hypothesisScore;
-        bestP = p;
-        bestF0Bin = f0Bin;
-      }
+  for (let p = 1; p <= maxP; p += 1) {
+    const f0Bin = seedPeak.bin / p;
+    if (f0Bin < minBin || f0Bin > maxBin) continue;
+    const {score, p0Magnitude} = scoreHypothesis(f0Bin);
+    let hypothesisScore = score;
+    if (p > 1) {
+      const expectedP0Magnitude = seedPeak.magnitude * expectedP0MinRatio;
+      const p0Deficit = Math.max(0, expectedP0Magnitude - p0Magnitude);
+      hypothesisScore -= p0Deficit * expectedP0PenaltyWeight;
+    }
+    hypothesisScore -= p * downwardBiasPerP;
+    if (hypothesisScore > bestScore) {
+      bestScore = hypothesisScore;
+      bestP = p;
+      bestF0Bin = f0Bin;
     }
   }
 
@@ -185,24 +175,23 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
   };
 }
 
-export function analyzeAudioWindowFftPitch(
-    state,
-    _timeData,
+export function getPitchFromSpectrum(
+    detectionState,
     spectrumBins,
     minHz,
     maxHz
 ) {
-  const {hzBuffer} = state;
+  const {hzBuffer} = detectionState;
   if (!hzBuffer || !spectrumBins || !spectrumBins.length) return null;
 
   const detection = fftBinsToPitchDetailed(
       spectrumBins,
-      state.sampleRate,
+      detectionState.sampleRate,
       minHz,
       maxHz
   );
 
-  const result = finalizeDetection(state, {
+  const result = finalizeDetection(detectionState, {
     hz: detection.hz,
     minHz,
     maxHz,

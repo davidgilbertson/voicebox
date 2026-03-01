@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 import StepperControl from "./components/StepperControl.jsx";
-import {PITCH_LINE_COLOR_MODES} from "./Recorder/waveformColor.js";
+import {PITCH_LINE_COLOR_MODES} from "./Recorder/colorTools.js";
 
 const settingsCheckboxClass = "settings-checkbox h-5 w-5 shrink-0";
 const settingsSectionHeadingClass = "font-semibold uppercase tracking-[0.18em] text-blue-400";
@@ -356,14 +356,24 @@ export default function SettingsPanel({
               <span>{batteryUsageDisplay}</span>
             </div>
             <div className="flex items-center justify-between gap-3 pt-3">
-              <a
-                  href="https://github.com/davidgilbertson/voicebox"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-slate-400 underline decoration-slate-500/80 underline-offset-4 transition hover:text-slate-200"
-              >
-                About
-              </a>
+              <div className="flex items-center gap-4">
+                <a
+                    href="/about"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm font-semibold text-blue-300 underline decoration-blue-300/90 underline-offset-4 transition hover:text-blue-200"
+                >
+                  Help
+                </a>
+                <a
+                    href="https://github.com/davidgilbertson/voicebox/issues"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm text-slate-400 underline decoration-slate-500/80 underline-offset-4 transition hover:text-slate-200"
+                >
+                  Feedback
+                </a>
+              </div>
               <div className="text-right text-xs text-slate-500">Build: {__BUILD_TIME_SYDNEY__}</div>
             </div>
           </div>

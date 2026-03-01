@@ -1,6 +1,6 @@
 import {test} from "vitest";
 import assert from "node:assert/strict";
-import {createPitchTimeline, writePitchTimeline} from "../../src/Recorder/pitchTimeline.js";
+import {createPitchProcessingState, processPitchSample} from "../../src/Recorder/pitchProcessing.js";
 
 function silencePauseStepThreshold(columnRateHz, silencePauseThresholdMs) {
   return Math.max(1, Math.round((silencePauseThresholdMs / 1000) * columnRateHz));
@@ -11,7 +11,7 @@ function orderedValues(state) {
 }
 
 function orderedIntensities(state) {
-  return Array.from(state.signalStrengthRing.slice());
+  return Array.from(state.lineStrengthRing.slice());
 }
 
 function orderedDisplayValues(state) {
@@ -22,10 +22,14 @@ function orderedVibratoRates(state) {
   return Array.from(state.vibratoRateHzRing.slice());
 }
 
+function hzToCents(hz) {
+  return 1200 * Math.log2(hz);
+}
+
 test("pitch history keeps SPS * seconds points and 60 points per 5Hz oscillation at 300 SPS", () => {
   const samplesPerSecond = 300;
   const seconds = 5;
-  const state = createPitchTimeline({
+  const state = createPitchProcessingState({
     columnRateHz: samplesPerSecond,
     seconds,
     silencePauseStepThreshold: silencePauseStepThreshold(samplesPerSecond, 300),
@@ -35,9 +39,9 @@ test("pitch history keeps SPS * seconds points and 60 points per 5Hz oscillation
   for (let i = 1; i <= totalTicks; i += 1) {
     const t = i / samplesPerSecond;
     const cents = Math.sin(2 * Math.PI * vibratoRate * t) * 50;
-    writePitchTimeline(state, {
+    processPitchSample(state, {
       cents,
-      intensity: 0.5,
+      lineStrength: 0.5,
     });
   }
 
@@ -54,7 +58,7 @@ test("columnRateHz defines pitch-history resolution when provided", () => {
   const samplesPerSecond = 1200;
   const columnRateHz = 60;
   const seconds = 5;
-  const state = createPitchTimeline({
+  const state = createPitchProcessingState({
     columnRateHz,
     seconds,
     silencePauseStepThreshold: silencePauseStepThreshold(columnRateHz, 300),
@@ -63,9 +67,9 @@ test("columnRateHz defines pitch-history resolution when provided", () => {
   for (let i = 1; i <= totalColumns; i += 1) {
     const t = i / columnRateHz;
     const cents = Math.sin(2 * Math.PI * 5 * t) * 50;
-    writePitchTimeline(state, {
+    processPitchSample(state, {
       cents,
-      intensity: 0.8,
+      lineStrength: 0.8,
     });
   }
 
@@ -76,16 +80,16 @@ test("columnRateHz defines pitch-history resolution when provided", () => {
 
 test("silence auto-pause can be disabled so pitch history keeps advancing with NaN values", () => {
   const samplesPerSecond = 100;
-  const state = createPitchTimeline({
+  const state = createPitchProcessingState({
     columnRateHz: samplesPerSecond,
     seconds: 2,
     silencePauseStepThreshold: silencePauseStepThreshold(samplesPerSecond, 300),
   });
 
   for (let i = 1; i <= samplesPerSecond; i += 1) {
-    writePitchTimeline(state, {
+    processPitchSample(state, {
       cents: Number.NaN,
-      intensity: Number.NaN,
+      lineStrength: Number.NaN,
       autoPauseOnSilence: false,
     });
   }
@@ -100,7 +104,7 @@ test("silence auto-pause can be disabled so pitch history keeps advancing with N
 
 test("silence auto-pause enabled stops pitch-history writes after threshold", () => {
   const samplesPerSecond = 100;
-  const state = createPitchTimeline({
+  const state = createPitchProcessingState({
     columnRateHz: samplesPerSecond,
     seconds: 2,
     silencePauseStepThreshold: silencePauseStepThreshold(samplesPerSecond, 300),
@@ -108,9 +112,9 @@ test("silence auto-pause enabled stops pitch-history writes after threshold", ()
   let pausedWrites = 0;
 
   for (let i = 1; i <= samplesPerSecond; i += 1) {
-    const result = writePitchTimeline(state, {
+    const result = processPitchSample(state, {
       cents: Number.NaN,
-      intensity: Number.NaN,
+      lineStrength: Number.NaN,
     });
     if (result.paused) pausedWrites += 1;
   }
@@ -120,41 +124,41 @@ test("silence auto-pause enabled stops pitch-history writes after threshold", ()
 });
 
 test("each write keeps intensity samples aligned with pitch samples", () => {
-  const state = createPitchTimeline({
+  const state = createPitchProcessingState({
     columnRateHz: 10,
     seconds: 1,
     silencePauseStepThreshold: silencePauseStepThreshold(10, 300),
   });
 
-  writePitchTimeline(state, {
+  processPitchSample(state, {
     cents: 100,
-    intensity: 0.2,
+    lineStrength: 0.2,
   });
-  writePitchTimeline(state, {
+  processPitchSample(state, {
     cents: 200,
-    intensity: 0.8,
+    lineStrength: 0.8,
   });
 
   const intensities = orderedIntensities(state);
-  assert.equal(intensities.length, state.signalStrengthRing.sampleCount);
+  assert.equal(intensities.length, state.lineStrengthRing.sampleCount);
   assert.equal(intensities.length, 2);
   assert.deepEqual(intensities.map((value) => Number(value.toFixed(3))), [0.2, 0.8]);
 });
 
 test("each write initializes vibrato rate to NaN", () => {
-  const state = createPitchTimeline({
+  const state = createPitchProcessingState({
     columnRateHz: 10,
     seconds: 1,
     silencePauseStepThreshold: silencePauseStepThreshold(10, 300),
   });
 
-  writePitchTimeline(state, {
+  processPitchSample(state, {
     cents: 100,
-    intensity: 0.2,
+    lineStrength: 0.2,
   });
-  writePitchTimeline(state, {
+  processPitchSample(state, {
     cents: 200,
-    intensity: 0.8,
+    lineStrength: 0.8,
   });
 
   const rates = orderedVibratoRates(state);
@@ -162,16 +166,16 @@ test("each write initializes vibrato rate to NaN", () => {
 });
 
 test("display smoothing finalizes index i-3 as new samples arrive", () => {
-  const state = createPitchTimeline({
+  const state = createPitchProcessingState({
     columnRateHz: 20,
     seconds: 1,
     silencePauseStepThreshold: silencePauseStepThreshold(20, 300),
   });
   const series = [0, 0, 0, 10, 0, 0, 0, 0];
   for (const cents of series) {
-    writePitchTimeline(state, {
+    processPitchSample(state, {
       cents,
-      intensity: 0.5,
+      lineStrength: 0.5,
     });
   }
 
@@ -182,20 +186,41 @@ test("display smoothing finalizes index i-3 as new samples arrive", () => {
 });
 
 test("display smoothing keeps raw value when smoothing window has NaN", () => {
-  const state = createPitchTimeline({
+  const state = createPitchProcessingState({
     columnRateHz: 20,
     seconds: 1,
     silencePauseStepThreshold: silencePauseStepThreshold(20, 300),
   });
   const series = [0, 0, 0, 10, 0, Number.NaN, 0];
   for (const cents of series) {
-    writePitchTimeline(state, {
+    processPitchSample(state, {
       cents,
-      intensity: 0.5,
+      lineStrength: 0.5,
       autoPauseOnSilence: false,
     });
   }
 
   const display = orderedDisplayValues(state);
   assert.equal(display[3], 10);
+});
+
+test("anchor outlier correction rewrites center sample (i-3) in-place", () => {
+  const state = createPitchProcessingState({
+    columnRateHz: 20,
+    seconds: 1,
+    silencePauseStepThreshold: silencePauseStepThreshold(20, 300),
+  });
+
+  const seriesHz = [100, 100, 200, 100, 100];
+  for (const hz of seriesHz) {
+    processPitchSample(state, {
+      cents: hzToCents(hz),
+      lineStrength: 0.5,
+      autoPauseOnSilence: false,
+    });
+  }
+
+  const raw = orderedValues(state);
+  assert.equal(raw.length, 5);
+  assert.ok(Math.abs(raw[2] - hzToCents(100)) < 0.1);
 });

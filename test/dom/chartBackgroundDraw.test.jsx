@@ -58,7 +58,7 @@ test("pitch renderer draws background even when there is no waveform data", () =
   });
   renderer.draw({
     smoothedPitchCentsRing: createRing([]),
-    signalStrengthRing: createRing([]),
+    lineStrengthRing: createRing([]),
   });
 
   expect(drawImage).toHaveBeenCalled();

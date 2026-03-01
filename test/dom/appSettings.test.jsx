@@ -167,3 +167,13 @@ test("invalid persisted pitch line color mode falls back to terrain", async () =
   expect(terrainRadio).toBeChecked();
   expect(readPitchLineColorMode()).toBe("terrain");
 });
+
+test("settings about link points to the local about page", async () => {
+  const user = userEvent.setup();
+  render(<AppShell/>);
+
+  await user.click(screen.getByLabelText("Open settings"));
+  const aboutLink = screen.getByRole("link", {name: "About"});
+
+  expect(aboutLink).toHaveAttribute("href", "/about");
+});

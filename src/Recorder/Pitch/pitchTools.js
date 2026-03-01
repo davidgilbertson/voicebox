@@ -1,7 +1,7 @@
 import colors from "tailwindcss/colors";
 import {createPitchGridLines} from "../../pitchScale.js";
 import {clearCanvasWithViewport, createCanvasViewportState, drawWaveformTrace, syncCanvasViewport} from "../canvasTools.js";
-import {mapWaveformIntensityToStrokeColor} from "../waveformColor.js";
+import {mapWaveformIntensityToStrokeColor} from "../colorTools.js";
 
 const GRID_COLORS = {
   octave: colors.slate[300],
@@ -107,7 +107,7 @@ export class PitchChartRenderer {
 
   draw({
     smoothedPitchCentsRing,
-    signalStrengthRing,
+    lineStrengthRing,
   }) {
     const canvas = this.canvas;
     if (!canvas) return;
@@ -127,7 +127,7 @@ export class PitchChartRenderer {
     drawWaveformTrace({
       ctx,
       valuesRing: smoothedPitchCentsRing,
-      colorValuesRing: signalStrengthRing,
+      colorValuesRing: lineStrengthRing,
       xInsetLeft: PLOT_LEFT,
       yInsetTop: PLOT_Y_INSET,
       yInsetBottom: PLOT_Y_INSET,

@@ -45,13 +45,7 @@ export class RingBuffer {
 
   newest() {
     if (this.#sampleCount <= 0) return Number.NaN;
-    return this.fromNewest(0);
-  }
-
-  fromNewest(offset) {
-    if (offset < 0 || offset >= this.#sampleCount) return undefined;
-    const rawIndex = (this.#writeIndex + this.#values.length - 1 - offset) % this.#values.length;
-    return this.#values[rawIndex];
+    return this.at(-1);
   }
 
   setAt(index, value) {
@@ -68,7 +62,7 @@ export class RingBuffer {
 
   findMostRecentFinite() {
     for (let offset = 0; offset < this.#sampleCount; offset += 1) {
-      const value = this.fromNewest(offset);
+      const value = this.at(-(offset + 1));
       if (Number.isFinite(value)) return value;
     }
     return null;

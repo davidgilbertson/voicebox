@@ -1,6 +1,7 @@
 import {createRoot} from "react-dom/client";
 import {useEffect, useState} from "react";
 import AppShell from "./AppShell.jsx";
+import AboutPage from "./AboutPage.jsx";
 import "./index.css";
 import {registerSW} from "virtual:pwa-register";
 
@@ -48,5 +49,13 @@ function Root() {
   return <AppShell downloadingUpdate={downloadingUpdate}/>;
 }
 
+function CurrentRoute() {
+  const pathname = window.location.pathname;
+  if (pathname === "/about") {
+    return <AboutPage/>;
+  }
+  return <Root/>;
+}
+
 const root = createRoot(document.getElementById("root"));
-root.render(<Root/>);
+root.render(<CurrentRoute/>);

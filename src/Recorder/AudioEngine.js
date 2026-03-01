@@ -11,17 +11,14 @@ import {
   writeMaxSignalLevel,
   writeSpectrogramNoiseProfile,
 } from "./config.js";
-import {createPitchTimeline, resizePitchTimeline, writePitchTimeline} from "./pitchTimeline.js";
-import {estimateTimelineVibratoRate} from "./Vibrato/vibratoTools.js";
-import {analyzeAudioWindowFftPitch} from "./audioSeries.js";
+import {createPitchProcessingState, resizePitchProcessingState} from "./pitchProcessing.js";
 import {createSpectrogramCaptureBuffers, processOneAudioHop} from "./hopProcessing.js";
 import {createRecorderAudioSession, destroyRecorderAudioSession} from "./audioSession.js";
 import {BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor} from "./batteryUsage.js";
 import {computeIsForeground, subscribeToForegroundChanges} from "../foreground.js";
 import {noteNameToCents, noteNameToHz} from "../pitchScale.js";
-import {findMostRecentFiniteInRing, pickPreferredAudioInputDeviceId, readNewestRingValue} from "../tools.js";
+import {pickPreferredAudioInputDeviceId} from "../tools.js";
 
-const DEFAULT_CENTER_HZ = 220;
 const MIN_SIGNAL_THRESHOLD = 0.015;
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
 
@@ -87,7 +84,7 @@ export function createAudioEngine() {
     chartWidthPx: Math.max(1, Math.floor(window.innerWidth)),
     hopSize: Math.round(48_000 / DISPLAY_PIXELS_PER_SECOND),
     signalLevel: 0,
-    spectrumIntensityEma: 0,
+    lineStrengthEma: 0,
     skipNextSpectrumFrame: false,
     frameDirty: false,
     forceRedraw: true,
@@ -102,7 +99,7 @@ export function createAudioEngine() {
     lastKnownVibratoRate: null,
   };
 
-  const audioState = {
+  const audioSessionState = {
     context: null,
     analyser: null,
     source: null,
@@ -112,9 +109,8 @@ export function createAudioEngine() {
     hzBuffer: null,
     hzIndex: 0,
     sampleRate: 48000,
-    centerHz: DEFAULT_CENTER_HZ,
   };
-  const pitchHistory = createPitchTimeline({
+  const pitchProcessingState = createPitchProcessingState({
     columnRateHz: DISPLAY_PIXELS_PER_SECOND,
     seconds: state.chartWidthPx / DISPLAY_PIXELS_PER_SECOND,
     silencePauseStepThreshold: Math.round((SILENCE_PAUSE_THRESHOLD_MS / 1000) * DISPLAY_PIXELS_PER_SECOND),
@@ -159,27 +155,28 @@ export function createAudioEngine() {
   }
 
   function processCurrentAudioHop() {
+    if (!state.ui.isWantedRunning) return;
     const result = processOneAudioHop({
-      isManuallyPaused: !state.ui.isWantedRunning,
-      activeView: state.activeView,
-      pitchRange: state.pitchRange,
-      spectrogramRange: state.spectrogramRange,
-      signalLevel: state.signalLevel,
-      minSignalThreshold: MIN_SIGNAL_THRESHOLD,
-      signalTracking,
-      spectrumIntensityEma: state.spectrumIntensityEma,
-      autoPauseOnSilence: state.autoPauseOnSilence,
-      pitchHistory,
-      audioState,
-      spectrogramNoiseState,
-      spectrogramCapture,
-      skipNextSpectrumFrame: state.skipNextSpectrumFrame,
-      analyzePitch: analyzeAudioWindowFftPitch,
-      writePitchTimeline,
-      estimateTimelineVibratoRate,
+      engineState: {
+        activeView: state.activeView,
+        pitchRange: state.pitchRange,
+        spectrogramRange: state.spectrogramRange,
+        signalLevel: state.signalLevel,
+        minSignalThreshold: MIN_SIGNAL_THRESHOLD,
+        signalTracking,
+        lineStrengthEma: state.lineStrengthEma,
+        autoPauseOnSilence: state.autoPauseOnSilence,
+        skipNextSpectrumFrame: state.skipNextSpectrumFrame,
+      },
+      hopState: {
+        audioSessionState,
+        processingState: pitchProcessingState,
+        spectrogramNoiseState,
+        spectrogramCapture,
+      },
     });
     state.skipNextSpectrumFrame = result.nextSkipNextSpectrumFrame;
-    state.spectrumIntensityEma = result.nextSpectrumIntensityEma;
+    state.lineStrengthEma = result.nextLineStrengthEma;
     spectrogramCapture = result.spectrogramCapture;
     if (result.shouldPersistMaxSignalLevel) {
       writeMaxSignalLevel(state.signalLevel);
@@ -227,20 +224,19 @@ export function createAudioEngine() {
       }
 
       const hzLength = Math.floor(CENTER_SECONDS * DISPLAY_PIXELS_PER_SECOND);
-      const hzBuffer = audioState.hzBuffer && audioState.hzBuffer.length === hzLength
-          ? audioState.hzBuffer
+      const hzBuffer = audioSessionState.hzBuffer && audioSessionState.hzBuffer.length === hzLength
+          ? audioSessionState.hzBuffer
           : createHzBuffer(hzLength);
 
       state.hopSize = session.hopSize;
-      audioState.context = session.context;
-      audioState.source = session.source;
-      audioState.stream = session.stream;
-      audioState.captureNode = session.captureNode;
-      audioState.analyser = session.analyser;
-      audioState.silentOutputGain = session.silentOutputGain;
-      audioState.sampleRate = session.sampleRate;
-      audioState.hzBuffer = hzBuffer;
-      audioState.centerHz = audioState.centerHz || DEFAULT_CENTER_HZ;
+      audioSessionState.context = session.context;
+      audioSessionState.source = session.source;
+      audioSessionState.stream = session.stream;
+      audioSessionState.captureNode = session.captureNode;
+      audioSessionState.analyser = session.analyser;
+      audioSessionState.silentOutputGain = session.silentOutputGain;
+      audioSessionState.sampleRate = session.sampleRate;
+      audioSessionState.hzBuffer = hzBuffer;
 
       setStreamListeningEnabled(session.stream, state.ui.isWantedRunning);
       spectrogramCapture = createSpectrogramCaptureBuffers(session.analyser.frequencyBinCount);
@@ -267,13 +263,13 @@ export function createAudioEngine() {
     if (spectrogramNoiseState.calibrating) {
       finishSpectrogramNoiseCalibration(false);
     }
-    destroyRecorderAudioSession(audioState);
-    audioState.context = null;
-    audioState.source = null;
-    audioState.stream = null;
-    audioState.captureNode = null;
-    audioState.analyser = null;
-    audioState.silentOutputGain = null;
+    destroyRecorderAudioSession(audioSessionState);
+    audioSessionState.context = null;
+    audioSessionState.source = null;
+    audioSessionState.stream = null;
+    audioSessionState.captureNode = null;
+    audioSessionState.analyser = null;
+    audioSessionState.silentOutputGain = null;
     state.signalLevel = 0;
     state.frameDirty = false;
     setUi({isAudioRunning: false});
@@ -294,13 +290,13 @@ export function createAudioEngine() {
       startAudio();
       return;
     }
-    if (state.ui.isAudioRunning && audioState.stream) {
-      setStreamListeningEnabled(audioState.stream, state.ui.isWantedRunning);
+    if (state.ui.isAudioRunning && audioSessionState.stream) {
+      setStreamListeningEnabled(audioSessionState.stream, state.ui.isWantedRunning);
     }
   }
 
   function beginSpectrogramNoiseCalibration() {
-    const binCount = audioState.analyser?.frequencyBinCount ?? spectrogramCapture.spectrumNormalized.length;
+    const binCount = audioSessionState.analyser?.frequencyBinCount ?? spectrogramCapture.spectrumNormalized.length;
     spectrogramNoiseState.calibrating = true;
     spectrogramNoiseState.sumBins = new Float32Array(binCount);
     spectrogramNoiseState.sampleCount = 0;
@@ -334,23 +330,22 @@ export function createAudioEngine() {
     const currentView = state.activeView;
     if (currentView === "vibrato") {
       chartRefs.vibratoChartRef?.current?.draw({
-        smoothedPitchCentsRing: pitchHistory.smoothedPitchCentsRing,
-        rawPitchCentsRing: pitchHistory.rawPitchCentsRing,
-        signalStrengthRing: pitchHistory.signalStrengthRing,
-        vibratoRateHzRing: pitchHistory.vibratoRateHzRing,
+        smoothedPitchCentsRing: pitchProcessingState.smoothedPitchCentsRing,
+        lineStrengthRing: pitchProcessingState.lineStrengthRing,
+        vibratoRateHzRing: pitchProcessingState.vibratoRateHzRing,
       });
       return;
     }
     if (currentView === "spectrogram") {
       chartRefs.spectrogramChartRef?.current?.draw({
         binCount: spectrogramCapture.spectrumNormalized.length,
-        sampleRate: audioState.sampleRate,
+        sampleRate: audioSessionState.sampleRate,
       });
       return;
     }
     chartRefs.pitchChartRef?.current?.draw({
-      smoothedPitchCentsRing: pitchHistory.smoothedPitchCentsRing,
-      signalStrengthRing: pitchHistory.signalStrengthRing,
+      smoothedPitchCentsRing: pitchProcessingState.smoothedPitchCentsRing,
+      lineStrengthRing: pitchProcessingState.lineStrengthRing,
     });
   }
 
@@ -372,8 +367,8 @@ export function createAudioEngine() {
     let displayedRate = previousDisplayedRate;
 
     if (state.activeView === "vibrato") {
-      const vibratoRateRing = pitchHistory.vibratoRateHzRing;
-      const newestRate = readNewestRingValue(vibratoRateRing);
+      const vibratoRateRing = pitchProcessingState.vibratoRateHzRing;
+      const newestRate = vibratoRateRing.newest();
       let estimatedRate = null;
       if (Number.isFinite(newestRate)) {
         estimatedRate = newestRate;
@@ -381,7 +376,7 @@ export function createAudioEngine() {
       } else if (previousDisplayedRate !== null) {
         estimatedRate = previousDisplayedRate;
       } else {
-        estimatedRate = renderState.lastKnownVibratoRate ?? findMostRecentFiniteInRing(vibratoRateRing);
+        estimatedRate = renderState.lastKnownVibratoRate ?? vibratoRateRing.findMostRecentFinite();
       }
 
       if (estimatedRate !== null) {
@@ -430,7 +425,7 @@ export function createAudioEngine() {
       const nextWidth = Math.max(1, Math.floor(container.clientWidth ?? window.innerWidth));
       if (nextWidth !== state.chartWidthPx) {
         state.chartWidthPx = nextWidth;
-        resizePitchTimeline(pitchHistory, nextWidth);
+        resizePitchProcessingState(pitchProcessingState, nextWidth);
       }
       if (!state.ui.isAudioRunning) {
         state.forceRedraw = true;
