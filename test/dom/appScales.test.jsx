@@ -20,6 +20,25 @@ test("scales page does not mount recorder controls", async () => {
   expect(screen.getByLabelText("Open settings")).toBeEnabled();
 });
 
+test("scales bpm controls use large size and desktop alignment classes", async () => {
+  writeActiveView("scales");
+  render(<AppShell/>);
+
+  const decrementBpmButton = screen.getByRole("button", {name: "Decrease scales BPM"});
+  const playButton = screen.getByRole("button", {name: "Play"});
+  const metronomeButton = screen.getByRole("button", {name: "Enable metronome"});
+  const scalePatternSelect = screen.getByRole("combobox", {name: "Scale pattern"});
+  expect(decrementBpmButton.parentElement).toHaveClass("h-16");
+  expect(screen.getByText("BPM")).toBeInTheDocument();
+  expect(scalePatternSelect).toHaveClass("h-16");
+  expect(scalePatternSelect).toHaveClass("w-full");
+  expect(metronomeButton).toHaveClass("h-16");
+  expect(metronomeButton).toHaveClass("w-16");
+  expect(metronomeButton).toHaveClass("ml-auto");
+  expect(metronomeButton).toHaveClass("md:ml-0");
+  expect(playButton).toHaveClass("h-16");
+});
+
 test("scales bpm persists", async () => {
   writeActiveView("scales");
   const user = userEvent.setup();

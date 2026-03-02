@@ -14,11 +14,12 @@ const LABEL_X = 4;
 const PLOT_LEFT = 21;
 const PLOT_Y_INSET = 5;
 const DEFAULT_CENTER_CENTS = 1200 * Math.log2(220);
+const NON_VIBRATO_ALPHA = 0.4;
 
 function centeredFiniteTail({
-  ring,
-  samplesPerSecond,
-}) {
+                              ring,
+                              samplesPerSecond,
+                            }) {
   if (!ring || ring.sampleCount <= 0 || samplesPerSecond <= 0) return null;
   const maxSamples = Math.max(1, Math.floor(samplesPerSecond * VIBRATO_ANALYSIS_WINDOW_SECONDS));
   const tailNewestToOldest = [];
@@ -116,9 +117,9 @@ function rateFromLastTwoPeaks(centered, samplesPerSecond) {
 }
 
 export function estimateTimelineVibratoRate({
-  ring,
-  samplesPerSecond,
-}) {
+                                              ring,
+                                              samplesPerSecond,
+                                            }) {
   const tailData = centeredFiniteTail({
     ring,
     samplesPerSecond,
@@ -133,10 +134,10 @@ export function estimateTimelineVibratoRate({
 }
 
 export function estimateTimelineCenterCents({
-  ring = null,
-  detectionAlphas = null,
-  recentSampleCount = 160,
-}) {
+                                              ring = null,
+                                              detectionAlphas = null,
+                                              recentSampleCount = 160,
+                                            }) {
   if (!ring || ring.sampleCount <= 0) return null;
   const start = Math.max(0, ring.sampleCount - Math.max(1, Math.floor(recentSampleCount)));
   let sum = 0;
@@ -206,6 +207,7 @@ export function drawSemitoneLabels(ctx, width, height, waveRange, options) {
   }
 }
 
+
 export class VibratoChartRenderer {
   constructor() {
     this.canvas = null;
@@ -222,9 +224,9 @@ export class VibratoChartRenderer {
   }
 
   updateOptions({
-    lineColorMode,
-    renderScale,
-  }) {
+                  lineColorMode,
+                  renderScale,
+                }) {
     this.lineColorMode = lineColorMode;
     this.renderScale = renderScale;
   }
@@ -271,10 +273,10 @@ export class VibratoChartRenderer {
   }
 
   draw({
-    smoothedPitchCentsRing,
-    lineStrengthRing,
-    vibratoRateHzRing,
-  }) {
+         smoothedPitchCentsRing,
+         lineStrengthRing,
+         vibratoRateHzRing,
+       }) {
     const canvas = this.canvas;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -286,7 +288,7 @@ export class VibratoChartRenderer {
     }
     for (let i = 0; i < visibleSamples; i += 1) {
       const rate = vibratoRateHzRing.at(i);
-      this.detectionAlphas[i] = Number.isFinite(rate) ? 1 : 0.25;
+      this.detectionAlphas[i] = Number.isFinite(rate) ? 1 : NON_VIBRATO_ALPHA;
     }
     const centerFromVibrato = estimateTimelineCenterCents({
       ring: smoothedPitchCentsRing,

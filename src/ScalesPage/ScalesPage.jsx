@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from "react";
 import {Metronome} from "lucide-react";
 import StepperControl from "../components/StepperControl.jsx";
+import Select from "../components/Select.jsx";
 import Piano from "./Piano.jsx";
 import GestureArea from "./GestureArea.jsx";
 import {readScaleBpm, readScaleGestureHelpDismissed, readScaleMaxNote, readScaleMinNote, readScaleSelectedName, SCALE_BPM_MAX, SCALE_BPM_MIN, writeScaleBpm, writeScaleGestureHelpDismissed, writeScaleSelectedName,} from "./config.js";
@@ -425,65 +426,64 @@ export default function ScalesPage({
           />
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-hidden px-4 py-4 select-none">
-          <div>
-            <div className="relative inline-flex items-center">
-              <select
+          <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-center md:gap-4 xl:flex-nowrap">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-4">
+              <Select
                   value={selectedScaleName}
                   onChange={(event) => setSelectedScaleName(event.target.value)}
-                  className="scale-select border-0 bg-transparent pr-5 text-base font-semibold text-slate-100 focus:outline-none"
-                  aria-label="Scale pattern"
+                  className="h-16 w-full rounded-md border-0 bg-slate-800/80 pl-4 pr-10 text-base font-semibold text-slate-100 focus:outline-none md:w-auto md:leading-none"
+                  containerClassName="w-full md:w-auto"
+                  ariaLabel="Scale pattern"
               >
                 {Object.keys(SCALE_PATTERNS).map((scaleName) => (
                     <option key={scaleName} value={scaleName} className="bg-slate-900 font-normal text-slate-100">
                       {scaleName}
                     </option>
                 ))}
-              </select>
-            </div>
-          </div>
+              </Select>
 
-          <section>
-            <div className="text-xs uppercase tracking-wide text-slate-400">BPM</div>
-            <div className="mt-2 flex items-center">
-              <div className="w-full max-w-40">
-                <StepperControl
-                    value={bpm}
-                    onDecrement={() => setBpm((prev) => Math.max(SCALE_BPM_MIN, prev - 10))}
-                    onIncrement={() => setBpm((prev) => Math.min(SCALE_BPM_MAX, prev + 10))}
-                    decrementDisabled={bpm <= SCALE_BPM_MIN}
-                    incrementDisabled={bpm >= SCALE_BPM_MAX}
-                    decrementAriaLabel="Decrease scales BPM"
-                    incrementAriaLabel="Increase scales BPM"
-                    valueClassName="min-w-[4ch] text-center text-base font-semibold text-slate-100"
-                    contentWidth="5ch"
-                />
+              <div className="flex items-center gap-2 md:gap-4">
+                <div className="w-full max-w-40 md:w-auto md:max-w-none">
+                  <StepperControl
+                      size="large"
+                      units="BPM"
+                      value={bpm}
+                      onDecrement={() => setBpm((prev) => Math.max(SCALE_BPM_MIN, prev - 10))}
+                      onIncrement={() => setBpm((prev) => Math.min(SCALE_BPM_MAX, prev + 10))}
+                      decrementDisabled={bpm <= SCALE_BPM_MIN}
+                      incrementDisabled={bpm >= SCALE_BPM_MAX}
+                      decrementAriaLabel="Decrease scales BPM"
+                      incrementAriaLabel="Increase scales BPM"
+                      valueClassName="min-w-[4ch] text-center text-base font-semibold text-slate-100"
+                      contentWidth="5ch"
+                  />
+                </div>
+                <button
+                    type="button"
+                    onClick={() => setIsMetronomeEnabled((prev) => !prev)}
+                    aria-pressed={isMetronomeEnabled}
+                    aria-label={isMetronomeEnabled ? "Disable metronome" : "Enable metronome"}
+                    className={`ml-auto inline-flex h-16 w-16 items-center justify-center rounded-md md:ml-0 ${
+                        isMetronomeEnabled
+                            ? "bg-amber-400 text-amber-950"
+                            : "bg-slate-800/80 text-slate-300"
+                    }`}
+                >
+                  <Metronome aria-hidden="true" className="h-6 w-6" strokeWidth={2}/>
+                </button>
               </div>
-              <button
-                  type="button"
-                  onClick={() => setIsMetronomeEnabled((prev) => !prev)}
-                  aria-pressed={isMetronomeEnabled}
-                  aria-label={isMetronomeEnabled ? "Disable metronome" : "Enable metronome"}
-                  className={`ml-auto inline-flex h-11 items-center justify-center rounded-md px-3 ${
-                      isMetronomeEnabled
-                          ? "bg-amber-400 text-amber-950"
-                          : "bg-slate-800/80 text-slate-300"
-                  }`}
-              >
-                <Metronome aria-hidden="true" className="h-5 w-5" strokeWidth={2}/>
-              </button>
             </div>
-          </section>
-
-          <button
-              type="button"
-              onClick={() => setIsPlaying((prev) => !prev)}
-              disabled={!isPianoReady}
-              className={`mt-2 rounded-md px-4 py-3 text-base font-semibold ${
-                  isPlaying ? "bg-amber-400 text-amber-950" : "bg-blue-400 text-slate-950"
-              } disabled:opacity-50`}
-          >
-            {isPlaying ? "Pause" : "Play"}
-          </button>
+            <button
+                type="button"
+                onClick={() => setIsPlaying((prev) => !prev)}
+                disabled={!isPianoReady}
+                className={`h-16 w-full rounded-md px-4 text-base font-semibold md:w-auto md:min-w-48 md:px-8 xl:ml-auto ${
+                    isPlaying ? "bg-amber-400 text-amber-950" : "bg-blue-400 text-slate-950"
+                } disabled:opacity-50`}
+            >
+              {isPlaying ? "Pause" : "Play"}
+            </button>
+          </div>
 
           <GestureArea
               testId="scales-gesture-area"

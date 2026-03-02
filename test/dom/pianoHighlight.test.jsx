@@ -34,7 +34,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test("pressing a key does not trigger sustained playback highlight", async () => {
+test("pressing a key triggers playback highlight while the note sounds", async () => {
   render(<Piano/>);
   const c4Key = screen.getByRole("button", {name: "C4"});
 
@@ -44,8 +44,13 @@ test("pressing a key does not trigger sustained playback highlight", async () =>
     fireEvent.click(c4Key);
   });
 
-  expect(playNoteMock).toHaveBeenCalledWith("C4", 0.8, {emitHighlight: false});
-  expect(c4Key).not.toHaveClass("bg-blue-400");
+  expect(playNoteMock).toHaveBeenCalledWith("C4", 0.8);
+  expect(c4Key).toHaveClass("bg-blue-400");
+
+  act(() => {
+    vi.advanceTimersByTime(200);
+  });
+  expect(c4Key).toHaveClass("bg-blue-400");
 
   act(() => {
     vi.advanceTimersByTime(1200);
