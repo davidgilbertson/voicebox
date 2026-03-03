@@ -90,6 +90,7 @@ export default function Recorder({
 
   const showStartOverlay = !engineUi.isAudioRunning && !engineUi.isWantedRunning && (engineUi.error || !engineUi.hasEverRun);
   const showPausedOverlay = !engineUi.isWantedRunning && engineUi.hasEverRun && !engineUi.error;
+  const showMicPermissionHint = showStartOverlay && engineUi.hasRejectedMicPermission;
 
   return (
     <>
@@ -131,13 +132,20 @@ export default function Recorder({
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => event.stopPropagation()}
           >
-            <button
-              type="button"
-              onClick={onStartButtonClick}
-              className="rounded-full bg-blue-400 px-6 py-3 text-base font-semibold text-slate-950 shadow-lg shadow-blue-400/30"
-            >
-              Start
-            </button>
+            <div className="flex max-w-xs flex-col items-center gap-3 px-4 text-center">
+              {showMicPermissionHint ? (
+                <p className="text-sm text-slate-200">
+                  Microphone access is blocked. Allow it in site settings, then try again.
+                </p>
+              ) : null}
+              <button
+                type="button"
+                onClick={onStartButtonClick}
+                className="rounded-full bg-blue-400 px-6 py-3 text-base font-semibold text-slate-950 shadow-lg shadow-blue-400/30"
+              >
+                {showMicPermissionHint ? "Try again" : "Start"}
+              </button>
+            </div>
           </div>
         ) : null}
         {showPausedOverlay ? (

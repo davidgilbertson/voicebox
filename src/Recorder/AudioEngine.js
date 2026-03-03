@@ -57,6 +57,7 @@ export function createAudioEngine() {
     ui: {
       isAudioRunning: false,
       error: "",
+      hasRejectedMicPermission: false,
       hasEverRun: false,
       isWantedRunning: true,
       batteryUsagePerMinute: null,
@@ -244,14 +245,17 @@ export function createAudioEngine() {
       state.forceRedraw = true;
       setUi({
         isAudioRunning: true,
+        hasRejectedMicPermission: false,
         hasEverRun: true,
       });
     } catch (error) {
       if (startAttempt !== state.startAttempt) {
         return;
       }
+      const isPermissionRejected = error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError";
       setUi({
         isWantedRunning: false,
+        hasRejectedMicPermission: isPermissionRejected || state.ui.hasRejectedMicPermission,
         error: error?.message || "Microphone access failed.",
       });
     } finally {
