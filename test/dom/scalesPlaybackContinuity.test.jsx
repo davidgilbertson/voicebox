@@ -86,6 +86,47 @@ test("pause and resume restarts the current set from the cue note", async () => 
   expect(playNoteMock.mock.calls[3][0]).toBe(48);
 });
 
+test("pressing a piano key while playing restarts the set from that root", async () => {
+  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  await waitForReady();
+
+  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1100);
+  });
+  const callsBeforePress = playNoteMock.mock.calls.length;
+
+  fireEvent.click(screen.getByRole("button", {name: "C4"}));
+
+  expect(playNoteMock.mock.calls.length).toBe(callsBeforePress + 2);
+  expect(playNoteMock.mock.calls[callsBeforePress][0]).toBe("C4");
+  expect(playNoteMock.mock.calls[callsBeforePress + 1][0]).toBe(60);
+});
+
+test("pressing a piano key too high for the selected pattern is ignored for set restart", async () => {
+  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  await waitForReady();
+
+  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1100);
+  });
+  const callsBeforePress = playNoteMock.mock.calls.length;
+
+  fireEvent.click(screen.getByRole("button", {name: "E4"}));
+
+  expect(playNoteMock.mock.calls.length).toBe(callsBeforePress + 1);
+  expect(playNoteMock.mock.calls[callsBeforePress][0]).toBe("E4");
+});
+
 test("metronome ticks while scales playback is stopped", async () => {
   render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
   await waitForReady();

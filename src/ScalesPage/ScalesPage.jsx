@@ -375,6 +375,13 @@ export default function ScalesPage({
     restartPulseLoop(false);
   }, [restartPulseLoop]);
 
+  const restartSetFromRootMidi = useCallback((rootMidi) => {
+    currentSetRootMidiRef.current = clamp(rootMidi, scaleMinMidiRef.current, scaleMaxMidiRef.current);
+    timelineIndexRef.current = 0;
+    playStepRef.current?.();
+    restartPulseLoop(false);
+  }, [restartPulseLoop]);
+
   const updateRapidVerticalSwipeState = useCallback((direction) => {
     const nowMs = performance.now();
     const rapid = rapidVerticalSwipeRef.current;
@@ -412,6 +419,12 @@ export default function ScalesPage({
     setIsPlaying((prev) => !prev);
   }, [isPianoReady]);
 
+  const onPianoKeyPress = useCallback((midi) => {
+    if (!isPlayingRef.current || typeof midi !== "number") return;
+    if (midi + patternOffsetBoundsRef.current.max > scaleMaxMidiRef.current) return;
+    restartSetFromRootMidi(midi);
+  }, [restartSetFromRootMidi]);
+
   const onDismissGestureHelp = () => {
     setShowGestureHelp(false);
     writeScaleGestureHelpDismissed(true);
@@ -423,6 +436,7 @@ export default function ScalesPage({
           <Piano
               minNote={scaleMinNote}
               maxNote={scaleMaxNote}
+              onKeyPress={onPianoKeyPress}
           />
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-hidden px-4 py-4 select-none">

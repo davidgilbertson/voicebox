@@ -11,7 +11,7 @@ const BLACK_HEIGHT_RATIO = 40 / 64;
 const BLACK_WIDTH_RATIO = 220 / 340;
 const WELL_VERTICAL_RATIO = 3 / 64;
 const WELL_RIGHT_RATIO = 3 / 340;
-const BLACK_VERTICAL_OFFSET_PX = 2;
+const BLACK_VERTICAL_OFFSET_PX = 1.5;
 
 function findWhiteMidiAtOrBelow(startMidi) {
   for (let midi = startMidi; midi >= MIDI_MIN; midi -= 1) {
@@ -89,7 +89,7 @@ function pianoKeyId(note) {
   return `piano-key-${note}`;
 }
 
-export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX_NOTE}) {
+export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX_NOTE, onKeyPress}) {
   // For audio to play, it requires a user interaction, which means onClick, not onPointerDown
   // But onClick means a slight delay, so we use that for the very first press only
   const [useClickActivation, setUseClickActivation] = useState(true);
@@ -116,6 +116,7 @@ export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX
         })
         .catch(() => {
         });
+    onKeyPress?.(noteNameToMidi(note) ?? null);
   };
 
   useEffect(() => {
@@ -160,7 +161,7 @@ export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX
                       onPointerDown={!useClickActivation ? () => handleKeyPress(key.note) : undefined}
                       className="group relative w-full flex-1 appearance-none overflow-hidden bg-blue-400 text-left"
                       style={{
-                        borderBottom: "3px solid #000",
+                        borderBottom: "2px solid #000",
                         borderTopRightRadius: "5px",
                         borderBottomRightRadius: "5px",
                       }}
