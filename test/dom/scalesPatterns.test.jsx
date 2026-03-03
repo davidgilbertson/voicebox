@@ -35,7 +35,7 @@ test.each([
   {pattern: "Semitones", firstNotes: [48, 48, 49, 50, 51, 52]},
   {pattern: "Pentatonic", firstNotes: [48, 48, 50, 52, 55, 57]},
   {pattern: "Major", firstNotes: [48, 48, 50, 52, 53, 55]},
-  {pattern: "2 Up 1 Down", firstNotes: [48, 48, 50, 49, 51, 50]},
+  {pattern: "2 Up 1 Down", firstNotes: [48, 48, 52, 50, 53, 52]},
 ])("plays expected opening notes for $pattern pattern", async ({pattern, firstNotes}) => {
   render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
   await waitForReady();

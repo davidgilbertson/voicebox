@@ -48,7 +48,6 @@ export default function Recorder({
   }, [activeView, engine]);
 
   useEffect(() => {
-    engine.setSettingsOpen(settingsOpen);
     engine.updateSettings({
       keepRunningInBackground,
       autoPauseOnSilence,
@@ -67,7 +66,6 @@ export default function Recorder({
     pitchMaxNote,
     pitchMinNote,
     runAt30Fps,
-    settingsOpen,
     highResSpectrogram,
     spectrogramMaxHz,
     spectrogramMinHz,
@@ -75,12 +73,6 @@ export default function Recorder({
 
   useEffect(() => {
     onSettingsRuntimeChange({
-      spectrogramNoiseCalibrating: engineUi.spectrogramNoiseCalibrating,
-      spectrogramNoiseProfileReady: engineUi.spectrogramNoiseProfileReady,
-      onNoiseCalibratePointerDown: engine.onNoiseCalibratePointerDown,
-      onNoiseCalibratePointerUp: engine.onNoiseCalibratePointerUp,
-      onNoiseCalibrateContextMenu: engine.onNoiseCalibrateContextMenu,
-      onClearSpectrogramNoiseProfile: engine.clearSpectrogramNoiseProfile,
       batteryUsagePerMinute: engineUi.batteryUsagePerMinute,
     });
   }, [engine, engineUi, onSettingsRuntimeChange]);

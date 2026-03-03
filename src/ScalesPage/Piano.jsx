@@ -7,9 +7,6 @@ const MIDI_MAX = 108;
 const DEFAULT_MIN_NOTE = "C2";
 const DEFAULT_MAX_NOTE = "C6";
 const NOTE_DURATION_SECONDS = 0.8;
-const HIGHLIGHT_HOLD_FALLBACK_MS = 220;
-const HIGHLIGHT_ATTACK_MS = 50;
-const HIGHLIGHT_RELEASE_MS = 320;
 const BLACK_HEIGHT_RATIO = 40 / 64;
 const BLACK_WIDTH_RATIO = 220 / 340;
 const WELL_VERTICAL_RATIO = 3 / 64;
@@ -88,14 +85,15 @@ function buildPianoKeys(minMidiInput, maxMidiInput) {
   return {whiteKeys, blackKeys};
 }
 
+function pianoKeyId(note) {
+  return `piano-key-${note}`;
+}
+
 export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX_NOTE}) {
-  const [activeMidiSet, setActiveMidiSet] = useState(() => new Set());
-  const [pressedMidiSet, setPressedMidiSet] = useState(() => new Set());
   // For audio to play, it requires a user interaction, which means onClick, not onPointerDown
   // But onClick means a slight delay, so we use that for the very first press only
   const [useClickActivation, setUseClickActivation] = useState(true);
   const useClickActivationRef = useRef(useClickActivation);
-  const clearTimeoutByMidiRef = useRef(new Map());
 
   useEffect(() => {
     useClickActivationRef.current = useClickActivation;
@@ -120,62 +118,31 @@ export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX
         });
   };
 
-  const pressMidi = (midi) => {
-    setPressedMidiSet((prev) => {
-      if (prev.has(midi)) return prev;
-      const next = new Set(prev);
-      next.add(midi);
-      return next;
-    });
-  };
-
-  const releaseMidi = (midi) => {
-    setPressedMidiSet((prev) => {
-      if (!prev.has(midi)) return prev;
-      const next = new Set(prev);
-      next.delete(midi);
-      return next;
-    });
-  };
-
   useEffect(() => {
     const unsubscribe = subscribeToPlayedNotes(({note, durationSeconds}) => {
-      const midi = typeof note === "number" ? note : noteNameToMidi(note);
-      if (!Number.isFinite(midi)) return;
+      const noteName = typeof note === "number" ? midiToNoteName(note) : note;
+      const overlayEl = document.getElementById(pianoKeyId(noteName));
+      if (!overlayEl || typeof overlayEl.animate !== "function") return;
 
-      const existingTimeout = clearTimeoutByMidiRef.current.get(midi);
-      if (existingTimeout) {
-        window.clearTimeout(existingTimeout);
-      }
-
-      setActiveMidiSet((prev) => {
-        const next = new Set(prev);
-        next.add(midi);
-        return next;
-      });
-
-      const holdMs = Number.isFinite(durationSeconds)
-          ? Math.max(0, Math.round(durationSeconds * 1000))
-          : HIGHLIGHT_HOLD_FALLBACK_MS;
-      const fadeLeadMs = Math.min(holdMs, HIGHLIGHT_RELEASE_MS);
-      const clearDelayMs = Math.max(HIGHLIGHT_ATTACK_MS, holdMs - fadeLeadMs);
-      const clearTimeoutId = window.setTimeout(() => {
-        setActiveMidiSet((prev) => {
-          const next = new Set(prev);
-          next.delete(midi);
-          return next;
-        });
-        clearTimeoutByMidiRef.current.delete(midi);
-      }, clearDelayMs);
-      clearTimeoutByMidiRef.current.set(midi, clearTimeoutId);
+      // Below controls the opacity of the white/black overlay for the key.
+      // When opacity is 0, the blue behind the overlay is visible.
+      overlayEl.animate(
+          [
+            {opacity: 1, offset: 0},
+            {opacity: 0, offset: 0.05},
+            {opacity: 0.5, offset: 0.95},
+            {opacity: 1, offset: 1},
+          ],
+          {
+            duration: durationSeconds * 1000,
+            easing: "linear",
+            fill: "none",
+          },
+      );
     });
 
     return () => {
       unsubscribe();
-      for (const timeoutId of clearTimeoutByMidiRef.current.values()) {
-        window.clearTimeout(timeoutId);
-      }
-      clearTimeoutByMidiRef.current.clear();
     };
   }, []);
 
@@ -184,43 +151,26 @@ export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX
         <div className="relative h-full w-full overflow-hidden bg-slate-300">
           <div className="absolute inset-0 flex flex-col bg-black">
             {whiteKeys.map((key) => {
-              const isHighlighted = activeMidiSet.has(key.midi) || pressedMidiSet.has(key.midi);
               return (
                   <button
                       key={key.note}
                       type="button"
                       aria-label={key.note}
                       onClick={useClickActivation ? () => handleKeyPress(key.note) : undefined}
-                      onPointerDown={() => {
-                        pressMidi(key.midi);
-                        if (!useClickActivation) {
-                          handleKeyPress(key.note);
-                        }
-                      }}
-                      onPointerUp={() => releaseMidi(key.midi)}
-                      onPointerLeave={() => releaseMidi(key.midi)}
-                      onPointerCancel={() => releaseMidi(key.midi)}
-                      className={`group relative w-full flex-1 appearance-none overflow-hidden text-left transition-colors duration-300 ${
-                          isHighlighted ? "bg-blue-400" : ""
-                      }`}
+                      onPointerDown={!useClickActivation ? () => handleKeyPress(key.note) : undefined}
+                      className="group relative w-full flex-1 appearance-none overflow-hidden bg-blue-400 text-left"
                       style={{
                         borderBottom: "3px solid #000",
                         borderTopRightRadius: "5px",
                         borderBottomRightRadius: "5px",
-                        transitionProperty: "background-color",
-                        transitionDuration: `${isHighlighted ? HIGHLIGHT_ATTACK_MS : HIGHLIGHT_RELEASE_MS}ms`,
-                        transitionTimingFunction: isHighlighted ? "linear" : "cubic-bezier(0.4, 0, 1, 1)",
                       }}
                   >
                     <span
-                        className={`pointer-events-none absolute inset-0 ${
-                            isHighlighted ? "opacity-45" : "opacity-100"
-                        }`}
+                        id={pianoKeyId(key.note)}
+                        className="pointer-events-none absolute inset-0"
                         style={{
                           background: "linear-gradient(90deg, #ffffff 0%, #f7f8fa 70%, #eef0f4 100%)",
-                          transitionProperty: "opacity",
-                          transitionDuration: `${isHighlighted ? HIGHLIGHT_ATTACK_MS : HIGHLIGHT_RELEASE_MS}ms`,
-                          transitionTimingFunction: isHighlighted ? "linear" : "cubic-bezier(0.4, 0, 1, 1)",
+                          opacity: 1,
                         }}
                     />
                     <span
@@ -228,7 +178,7 @@ export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX
                         style={{
                           background:
                               "linear-gradient(90deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.06) 30%, rgba(255,255,255,0) 55%)",
-                          opacity: isHighlighted ? 0.3 : 0.22,
+                          opacity: 0.22,
                         }}
                     />
                     {key.note.startsWith("C") && (
@@ -256,46 +206,29 @@ export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX
           ))}
 
           {blackKeys.map((key) => {
-            const isHighlighted = activeMidiSet.has(key.midi) || pressedMidiSet.has(key.midi);
             return (
                 <button
                     key={key.note}
                     type="button"
                     aria-label={key.note}
                     onClick={useClickActivation ? () => handleKeyPress(key.note) : undefined}
-                    onPointerDown={() => {
-                      pressMidi(key.midi);
-                      if (!useClickActivation) {
-                        handleKeyPress(key.note);
-                      }
-                    }}
-                    onPointerUp={() => releaseMidi(key.midi)}
-                    onPointerLeave={() => releaseMidi(key.midi)}
-                    onPointerCancel={() => releaseMidi(key.midi)}
-                    className={`group absolute left-0 z-10 appearance-none overflow-hidden ${
-                        isHighlighted ? "bg-blue-600" : ""
-                    }`}
+                    onPointerDown={!useClickActivation ? () => handleKeyPress(key.note) : undefined}
+                    className="group absolute left-0 z-10 appearance-none overflow-hidden bg-blue-600"
                     style={{
                       top: `calc(${key.topPercent}% - ${BLACK_VERTICAL_OFFSET_PX}px)`,
                       height: `${key.heightPercent}%`,
                       width: `${BLACK_WIDTH_RATIO * 100}%`,
                       borderTopRightRadius: "4px",
                       borderBottomRightRadius: "4px",
-                      boxShadow: "-5px 7px 12px rgba(0, 0, 0, 0.36), -2px 3px 6px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -8px 12px rgba(0,0,0,0.55)",
-                      transitionProperty: "background-color",
-                      transitionDuration: `${isHighlighted ? HIGHLIGHT_ATTACK_MS : HIGHLIGHT_RELEASE_MS}ms`,
-                      transitionTimingFunction: isHighlighted ? "linear" : "cubic-bezier(0.4, 0, 1, 1)",
+                      boxShadow: "-4px 6px 10px rgba(0, 0, 0, 0.28), -2px 2px 5px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -8px 12px rgba(0,0,0,0.55)",
                     }}
                 >
                   <span
-                      className={`pointer-events-none absolute inset-0 ${
-                          isHighlighted ? "opacity-20" : "opacity-100"
-                      }`}
+                      id={pianoKeyId(key.note)}
+                      className="pointer-events-none absolute inset-0"
                       style={{
                         background: "linear-gradient(90deg, #1a1c22 0%, #0c0e14 60%, #07080c 100%)",
-                        transitionProperty: "opacity",
-                        transitionDuration: `${isHighlighted ? HIGHLIGHT_ATTACK_MS : HIGHLIGHT_RELEASE_MS}ms`,
-                        transitionTimingFunction: isHighlighted ? "linear" : "cubic-bezier(0.4, 0, 1, 1)",
+                        opacity: 1,
                       }}
                   />
                   <>
@@ -304,7 +237,7 @@ export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX
                         style={{
                           background:
                               "linear-gradient(180deg, rgba(255,255,255,0.58) 0px, rgba(255,255,255,0.22) 1px, rgba(255,255,255,0.08) 2px, rgba(255,255,255,0) 7px)",
-                          opacity: isHighlighted ? 0.42 : 0.55,
+                          opacity: 0.55,
                           mixBlendMode: "screen",
                         }}
                     />
@@ -313,7 +246,7 @@ export default function Piano({minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX
                         style={{
                           background:
                               "linear-gradient(90deg, rgba(255,255,255,0) calc(100% - 7px), rgba(255,255,255,0.10) calc(100% - 3px), rgba(255,255,255,0.28) calc(100% - 1px), rgba(255,255,255,0) 100%)",
-                          opacity: isHighlighted ? 0.32 : 0.45,
+                          opacity: 0.45,
                           mixBlendMode: "screen",
                         }}
                     />

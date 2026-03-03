@@ -22,7 +22,7 @@ import {ensurePianoLoaded, playMetronomeTick, playNote} from "./piano.js";
 const SEMITONE_PATTERN = [0, 1, 2, 3, 4, 3, 2, 1, 0, 1, 2, 3, 4, 3, 2, 1, 0];
 const PENTATONIC_PATTERN = [0, 2, 4, 7, 9, 7, 4, 2, 0, 2, 4, 7, 9, 7, 4, 2, 0];
 const MAJOR_PATTERN = [0, 2, 4, 5, 7, 9, 11, 12, 11, 9, 7, 5, 4, 2, 0];
-const TWO_UP_ONE_DOWN_PATTERN = [0, 2, 1, 3, 2, 4, 3, 5, 4, 6, 5, 7, 5, 6, 4, 5, 3, 4, 2, 3, 1, 2, 0];
+const TWO_UP_ONE_DOWN_PATTERN = [0, 4, 2, 5, 4, 7, 5, 9, 7, 11, 9, 12, 9, 11, 7, 9, 5, 7, 4, 5, 2, 4, 0];
 const SCALE_PATTERNS = {
   Semitones: SEMITONE_PATTERN,
   Pentatonic: PENTATONIC_PATTERN,
@@ -469,7 +469,7 @@ export default function ScalesPage({
                             : "bg-slate-800/80 text-slate-300"
                     }`}
                 >
-                  <Metronome aria-hidden="true" className="h-6 w-6" strokeWidth={2}/>
+                  <Metronome aria-hidden="true" className="size-7"/>
                 </button>
               </div>
             </div>
@@ -477,7 +477,7 @@ export default function ScalesPage({
                 type="button"
                 onClick={() => setIsPlaying((prev) => !prev)}
                 disabled={!isPianoReady}
-                className={`h-16 w-full rounded-md px-4 text-base font-semibold md:w-auto md:min-w-48 md:px-8 xl:ml-auto ${
+                className={`h-16 w-full rounded-md px-4 text-lg font-semibold md:w-auto md:min-w-48 md:px-8 xl:ml-auto ${
                     isPlaying ? "bg-amber-400 text-amber-950" : "bg-blue-400 text-slate-950"
                 } disabled:opacity-50`}
             >

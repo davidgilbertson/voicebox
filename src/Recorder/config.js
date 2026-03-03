@@ -1,5 +1,5 @@
 import {PITCH_NOTE_OPTIONS} from "../pitchScale.js";
-import {clamp, ls} from "../tools.js";
+import {ls} from "../tools.js";
 import {PITCH_LINE_COLOR_MODES} from "./colorTools.js";
 
 // User-changeable preferences persisted in localStorage.
@@ -14,7 +14,6 @@ const PITCH_LINE_COLOR_MODE_STORAGE_KEY = "voicebox.pitchLineColorMode";
 const MAX_SIGNAL_LEVEL_STORAGE_KEY = "voicebox.maxSignalLevel";
 const SPECTROGRAM_MIN_HZ_STORAGE_KEY = "voicebox.spectrogramMinHz";
 const SPECTROGRAM_MAX_HZ_STORAGE_KEY = "voicebox.spectrogramMaxHz";
-const SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY = "voicebox.spectrogramNoiseProfile";
 
 // Developer-changeable tuning and defaults.
 // The FFT_SIZE trade-off:
@@ -150,22 +149,4 @@ export function writeSpectrogramMinHz(value) {
 
 export function writeSpectrogramMaxHz(value) {
   ls.set(SPECTROGRAM_MAX_HZ_STORAGE_KEY, value);
-}
-
-export function readSpectrogramNoiseProfile() {
-  const stored = ls.get(SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY, null);
-  if (!Array.isArray(stored) || stored.length === 0) return null;
-  const profile = new Float32Array(stored.length);
-  for (let i = 0; i < stored.length; i += 1) {
-    const value = Number(stored[i]);
-    profile[i] = Number.isFinite(value) ? clamp(value, 0, 1) : 0;
-  }
-  return profile;
-}
-
-export function writeSpectrogramNoiseProfile(profile) {
-  ls.set(
-      SPECTROGRAM_NOISE_PROFILE_STORAGE_KEY,
-      profile === null ? null : Array.from(profile)
-  );
 }

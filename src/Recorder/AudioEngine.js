@@ -7,9 +7,7 @@ import {
   SILENCE_PAUSE_THRESHOLD_MS,
   SPECTROGRAM_BIN_COUNT,
   readMaxSignalLevel,
-  readSpectrogramNoiseProfile,
   writeMaxSignalLevel,
-  writeSpectrogramNoiseProfile,
 } from "./config.js";
 import {createPitchProcessingState, resizePitchProcessingState} from "./pitchProcessing.js";
 import {
@@ -52,7 +50,6 @@ export function createAudioEngine() {
   };
   let resizeObserver = null;
   const batteryUsageMonitor = createBatteryUsageMonitor();
-  const initialNoiseProfile = readSpectrogramNoiseProfile();
   const initialMaxSignalLevel = readMaxSignalLevel() * 0.9;
   writeMaxSignalLevel(initialMaxSignalLevel);
 
@@ -62,8 +59,6 @@ export function createAudioEngine() {
       error: "",
       hasEverRun: false,
       isWantedRunning: true,
-      spectrogramNoiseCalibrating: false,
-      spectrogramNoiseProfileReady: initialNoiseProfile !== null,
       batteryUsagePerMinute: null,
       vibratoRate: null,
     },
@@ -72,7 +67,6 @@ export function createAudioEngine() {
     isForeground: computeIsForeground(),
     keepRunningInBackground: false,
     activeView: "spectrogram",
-    settingsOpen: false,
     autoPauseOnSilence: true,
     runAt30Fps: false,
     highResSpectrogram: false,
@@ -123,12 +117,6 @@ export function createAudioEngine() {
   });
   let spectrogramBuffers = createSpectrogramBuffers(SPECTROGRAM_BIN_COUNT);
   let highResSpectrogramBuffers = null;
-  const spectrogramNoiseState = {
-    profile: initialNoiseProfile,
-    calibrating: false,
-    sumBins: null,
-    sampleCount: 0,
-  };
   const signalTracking = {
     maxHeardSignalLevel: initialMaxSignalLevel,
   };
@@ -178,7 +166,6 @@ export function createAudioEngine() {
       hopState: {
         audioSessionState,
         processingState: pitchProcessingState,
-        spectrogramNoiseState,
         spectrogramBuffers,
         highResSpectrogramBuffers,
       },
@@ -274,9 +261,6 @@ export function createAudioEngine() {
 
   function stopAudio() {
     state.startAttempt += 1;
-    if (spectrogramNoiseState.calibrating) {
-      finishSpectrogramNoiseCalibration(false);
-    }
     destroyRecorderAudioSession(audioSessionState);
     audioSessionState.context = null;
     audioSessionState.source = null;
@@ -309,38 +293,6 @@ export function createAudioEngine() {
     if (state.ui.isAudioRunning && audioSessionState.stream) {
       setStreamListeningEnabled(audioSessionState.stream, state.ui.isWantedRunning);
     }
-  }
-
-  function beginSpectrogramNoiseCalibration() {
-    const binCount = (audioSessionState.highResAnalyser ?? audioSessionState.analyser)?.frequencyBinCount
-      ?? spectrogramBuffers.spectrumNormalized.length;
-    spectrogramNoiseState.calibrating = true;
-    spectrogramNoiseState.sumBins = new Float32Array(binCount);
-    spectrogramNoiseState.sampleCount = 0;
-    setUi({spectrogramNoiseCalibrating: true});
-  }
-
-  function finishSpectrogramNoiseCalibration(commitProfile) {
-    const hasSamples = spectrogramNoiseState.sampleCount > 0 && spectrogramNoiseState.sumBins;
-    if (commitProfile && hasSamples) {
-      const profile = new Float32Array(spectrogramNoiseState.sumBins.length);
-      for (let i = 0; i < profile.length; i += 1) {
-        profile[i] = spectrogramNoiseState.sumBins[i] / spectrogramNoiseState.sampleCount;
-      }
-      spectrogramNoiseState.profile = profile;
-      writeSpectrogramNoiseProfile(profile);
-      setUi({spectrogramNoiseProfileReady: true});
-    }
-    spectrogramNoiseState.calibrating = false;
-    spectrogramNoiseState.sumBins = null;
-    spectrogramNoiseState.sampleCount = 0;
-    setUi({spectrogramNoiseCalibrating: false});
-  }
-
-  function clearNoiseProfile() {
-    spectrogramNoiseState.profile = null;
-    writeSpectrogramNoiseProfile(null);
-    setUi({spectrogramNoiseProfileReady: false});
   }
 
   function drawActiveChart() {
@@ -521,13 +473,6 @@ export function createAudioEngine() {
       state.activeView = view;
       state.forceRedraw = true;
     },
-    setSettingsOpen(isOpen) {
-      const wasOpen = state.settingsOpen;
-      state.settingsOpen = Boolean(isOpen);
-      if (wasOpen && !state.settingsOpen) {
-        state.forceRedraw = true;
-      }
-    },
     setWantsToRun(isWanted) {
       setUi({isWantedRunning: Boolean(isWanted)});
       syncAudioState();
@@ -562,25 +507,6 @@ export function createAudioEngine() {
     },
     getUiSnapshot() {
       return state.ui;
-    },
-    onNoiseCalibratePointerDown(event) {
-      event.preventDefault();
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-      beginSpectrogramNoiseCalibration();
-    },
-    onNoiseCalibratePointerUp(event) {
-      event.preventDefault();
-      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-      if (!spectrogramNoiseState.calibrating) return;
-      finishSpectrogramNoiseCalibration(true);
-    },
-    onNoiseCalibrateContextMenu(event) {
-      event.preventDefault();
-    },
-    clearSpectrogramNoiseProfile() {
-      clearNoiseProfile();
     },
   };
 

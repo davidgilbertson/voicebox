@@ -18,7 +18,7 @@ Chart progression is driven by audio sample counts, not wall-clock time.
    2. Foreground/background policy for recorder pages.
    3. Per-hop processing and pitch-history updates.
    4. Render scheduling (`requestAnimationFrame`) and chart drawing dispatch.
-   5. Runtime UI state publication (`isAudioRunning`, `error`, `vibratoRate`, noise-profile status, battery usage).
+   5. Runtime UI state publication (`isAudioRunning`, `error`, `vibratoRate`, battery usage).
 2. `Recorder.jsx` is a thin adapter:
    1. Attaches chart refs and container ref to `AudioEngine`.
    2. Forwards page/settings changes into engine APIs.
@@ -67,7 +67,7 @@ Chart progression is driven by audio sample counts, not wall-clock time.
    5. Update running `maxSignalLevel` from `signalLevel` after warmup.
    6. Compute `lineStrength` from `signalLevel` using a fixed floor + running max (with EMA smoothing).
    7. Write pitch/lineStrength into shared pitch-history rings.
-   8. Append spectrogram column (`spectrumNormalized`, optionally noise-filtered) unless silence-paused.
+   8. Append spectrogram column (`spectrumNormalized`) unless silence-paused.
 4. `AudioEngine` `renderLoop` draws when dirty:
    1. Pitch and vibrato read from shared pitch-history rings.
    2. Spectrogram draws from retained bitmap + pending columns queue in `SpectrogramChart`.
@@ -83,7 +83,6 @@ Chart progression is driven by audio sample counts, not wall-clock time.
    1. `spectrogramCapture.spectrumDb`
    2. `spectrogramCapture.spectrumNormalized`
    3. `spectrogramCapture.spectrumForPitchDetection`
-   4. `spectrogramCapture.spectrumFiltered`
 3. Spectrogram pending queue (inside chart component):
    1. `pendingColumnsRef.current`
 

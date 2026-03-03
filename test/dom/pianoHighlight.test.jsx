@@ -37,41 +37,53 @@ afterEach(() => {
 test("pressing a key triggers playback highlight while the note sounds", async () => {
   render(<Piano/>);
   const c4Key = screen.getByRole("button", {name: "C4"});
-
-  expect(c4Key).not.toHaveClass("bg-blue-400");
+  const c4Overlay = document.getElementById("piano-key-C4");
+  expect(c4Overlay).toBeTruthy();
+  const overlayAnimate = vi.fn();
+  c4Overlay.animate = overlayAnimate;
 
   act(() => {
     fireEvent.click(c4Key);
   });
 
   expect(playNoteMock).toHaveBeenCalledWith("C4", 0.8);
-  expect(c4Key).toHaveClass("bg-blue-400");
-
-  act(() => {
-    vi.advanceTimersByTime(200);
-  });
-  expect(c4Key).toHaveClass("bg-blue-400");
-
-  act(() => {
-    vi.advanceTimersByTime(1200);
-  });
-  expect(c4Key).not.toHaveClass("bg-blue-400");
+  expect(overlayAnimate).toHaveBeenCalledWith(
+      [
+        {opacity: 1, offset: 0},
+        {opacity: 0, offset: 0.05},
+        {opacity: 0.5, offset: 0.95},
+        {opacity: 1, offset: 1},
+      ],
+      {
+        duration: 800,
+        easing: "linear",
+        fill: "none",
+      },
+  );
 });
 
 test("programmatic played MIDI notes highlight matching piano keys", async () => {
   render(<Piano/>);
-  const d2Key = screen.getByRole("button", {name: "D2"});
-
-  expect(d2Key).not.toHaveClass("bg-blue-400");
+  const d2Overlay = document.getElementById("piano-key-D2");
+  expect(d2Overlay).toBeTruthy();
+  const overlayAnimate = vi.fn();
+  d2Overlay.animate = overlayAnimate;
 
   await act(async () => {
     await playNote(38, 0.25);
   });
 
-  expect(d2Key).toHaveClass("bg-blue-400");
-
-  act(() => {
-    vi.advanceTimersByTime(300);
-  });
-  expect(d2Key).not.toHaveClass("bg-blue-400");
+  expect(overlayAnimate).toHaveBeenCalledWith(
+      [
+        {opacity: 1, offset: 0},
+        {opacity: 0, offset: 0.05},
+        {opacity: 0.5, offset: 0.95},
+        {opacity: 1, offset: 1},
+      ],
+      {
+        duration: 250,
+        easing: "linear",
+        fill: "none",
+      },
+  );
 });

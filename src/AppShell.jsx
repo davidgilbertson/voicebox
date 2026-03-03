@@ -53,16 +53,6 @@ export default function AppShell({downloadingUpdate = false}) {
   const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => readSpectrogramMaxHz());
   const [isForeground, setIsForeground] = useState(() => computeIsForeground());
   const [runtimeSettings, setRuntimeSettings] = useState({
-    spectrogramNoiseCalibrating: false,
-    spectrogramNoiseProfileReady: false,
-    onNoiseCalibratePointerDown: () => {
-    },
-    onNoiseCalibratePointerUp: () => {
-    },
-    onNoiseCalibrateContextMenu: () => {
-    },
-    onClearSpectrogramNoiseProfile: () => {
-    },
     batteryUsagePerMinute: null,
   });
   const showingScales = activeView === "scales";
@@ -348,14 +338,7 @@ export default function AppShell({downloadingUpdate = false}) {
                   spectrogramMaxHz={spectrogramMaxHz}
                   onSpectrogramMinHzChange={onSpectrogramMinHzChange}
                   onSpectrogramMaxHzChange={onSpectrogramMaxHzChange}
-                  spectrogramNoiseCalibrating={runtimeSettings.spectrogramNoiseCalibrating}
-                  spectrogramNoiseProfileReady={runtimeSettings.spectrogramNoiseProfileReady}
-                  onNoiseCalibratePointerDown={runtimeSettings.onNoiseCalibratePointerDown}
-                  onNoiseCalibratePointerUp={runtimeSettings.onNoiseCalibratePointerUp}
-                  onNoiseCalibrateContextMenu={runtimeSettings.onNoiseCalibrateContextMenu}
-                  onClearSpectrogramNoiseProfile={runtimeSettings.onClearSpectrogramNoiseProfile}
                   batteryUsagePerMinute={runtimeSettings.batteryUsagePerMinute}
-                  disableNoiseSampling={activeView === "scales"}
               />
           ) : null}
         </div>

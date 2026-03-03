@@ -1,7 +1,6 @@
 import {expect, test} from "vitest";
 import {createPitchProcessingState} from "../../src/Recorder/pitchProcessing.js";
 import {
-  applyNoiseProfileToSpectrum,
   createHighResSpectrogramBuffers,
   createSpectrogramBuffers,
   processOneAudioHop,
@@ -46,7 +45,6 @@ test("processOneAudioHop does not write pitch history when silence gating pauses
     hopState: {
       processingState,
       audioSessionState,
-      spectrogramNoiseState: {profile: null, calibrating: false, sumBins: null, sampleCount: 0},
       spectrogramBuffers,
     },
   });
@@ -84,7 +82,6 @@ test("processOneAudioHop writes one pitch-history step for valid signal and retu
     hopState: {
       processingState,
       audioSessionState,
-      spectrogramNoiseState: {profile: null, calibrating: false, sumBins: null, sampleCount: 0},
       spectrogramBuffers,
     },
   });
@@ -129,30 +126,11 @@ test("processOneAudioHop uses pitch range for detection even on spectrogram view
     hopState: {
       processingState,
       audioSessionState,
-      spectrogramNoiseState: {profile: null, calibrating: false, sumBins: null, sampleCount: 0},
       spectrogramBuffers,
     },
   });
 
   expect(Number.isFinite(processingState.rawPitchCentsRing.newest())).toBe(true);
-});
-
-test("applyNoiseProfileToSpectrum clamps filtered values at zero", () => {
-  const spectrogramNoiseState = {
-    profile: new Float32Array([0.9]),
-    calibrating: false,
-    sumBins: null,
-    sampleCount: 0,
-  };
-  const spectrogramBuffers = {
-    spectrumFiltered: new Float32Array(1),
-  };
-  const {spectrumFiltered} = applyNoiseProfileToSpectrum({
-    spectrumNormalized: new Float32Array([0.1]),
-    spectrogramNoiseState,
-    spectrogramBuffers,
-  });
-  expect(spectrumFiltered[0]).toBe(0);
 });
 
 test("processOneAudioHop can use separate analysers for pitch and spectrogram paths", () => {
@@ -190,7 +168,6 @@ test("processOneAudioHop can use separate analysers for pitch and spectrogram pa
     hopState: {
       processingState,
       audioSessionState,
-      spectrogramNoiseState: {profile: null, calibrating: false, sumBins: null, sampleCount: 0},
       spectrogramBuffers: createSpectrogramBuffers(pitchSpectrumDb.length),
       highResSpectrogramBuffers: createHighResSpectrogramBuffers(spectrogramSpectrumDb.length),
     },

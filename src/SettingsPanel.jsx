@@ -43,14 +43,7 @@ export default function SettingsPanel({
                                         spectrogramMaxHz,
                                         onSpectrogramMinHzChange,
                                         onSpectrogramMaxHzChange,
-                                        spectrogramNoiseCalibrating,
-                                        spectrogramNoiseProfileReady,
-                                        onNoiseCalibratePointerDown,
-                                        onNoiseCalibratePointerUp,
-                                        onNoiseCalibrateContextMenu,
-                                        onClearSpectrogramNoiseProfile,
                                         batteryUsagePerMinute,
-                                        disableNoiseSampling,
                                       }) {
   const dialogRef = useRef(null);
   const [spectrogramMinHzDraft, setSpectrogramMinHzDraft] = useState(() => String(spectrogramMinHz));
@@ -224,39 +217,6 @@ export default function SettingsPanel({
                       aria-label="Spectrogram maximum frequency (Hz)"
                   />
                 </div>
-              </div>
-            </div>
-            <div className="rounded-md bg-slate-800/80 p-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                    type="button"
-                    onPointerDown={onNoiseCalibratePointerDown}
-                    onPointerUp={onNoiseCalibratePointerUp}
-                    onPointerCancel={onNoiseCalibratePointerUp}
-                    onContextMenu={onNoiseCalibrateContextMenu}
-                    disabled={disableNoiseSampling}
-                    className={`rounded-md px-2 py-1 text-xs font-semibold ${
-                        spectrogramNoiseCalibrating
-                            ? "bg-amber-400 text-amber-950"
-                            : "bg-slate-600 text-slate-100"
-                    } select-none touch-manipulation disabled:opacity-40`}
-                >
-                  Hold to sample
-                </button>
-                <button
-                    type="button"
-                    onClick={onClearSpectrogramNoiseProfile}
-                    disabled={disableNoiseSampling || !spectrogramNoiseProfileReady}
-                    className="rounded-md bg-slate-700 px-2 py-1 text-xs font-semibold text-slate-100 disabled:opacity-40"
-                >
-                  Clear
-                </button>
-                <div className="text-[11px] text-slate-300">
-                  {spectrogramNoiseProfileReady ? "Noise profile on" : "Noise profile off"}
-                </div>
-              </div>
-              <div className="mt-2 text-xs text-slate-400">
-                Hold to record background noise to subtract from chart.
               </div>
             </div>
             <div className="h-2 border-t border-slate-700/80"/>

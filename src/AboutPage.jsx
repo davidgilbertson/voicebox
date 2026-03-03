@@ -128,11 +128,7 @@ export default function AboutPage() {
               <ul className="list-disc space-y-1 pl-5 leading-relaxed text-slate-300 lg:flex-1">
                 <li>Shows a live frequency heatmap of your voice.</li>
                 <li>Useful for seeing harmonics, noise, and overall tone energy over time.</li>
-                <li>You can limit the displayed frequency range and apply background-noise subtraction in settings.</li>
-                <li>
-                  If you have a constant background noise (e.g. air conditioner) you can record a noise profile in settings which will be
-                  subtracted from your voice.
-                </li>
+                <li>You can limit the displayed frequency range in settings.</li>
                 <li>Tap the screen to pause/resume.</li>
               </ul>
             </div>
@@ -197,12 +193,6 @@ export default function AboutPage() {
                 <ul className="list-disc space-y-1 pl-5 leading-relaxed text-slate-300">
                   <li>
                     <strong>Min / Max</strong>: frequency range shown on the spectrogram (Hz).
-                  </li>
-                  <li>
-                    <strong>Hold to sample</strong>: captures background noise profile.
-                  </li>
-                  <li>
-                    <strong>Clear</strong>: removes saved noise profile.
                   </li>
                 </ul>
 

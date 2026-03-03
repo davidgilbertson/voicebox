@@ -7,7 +7,6 @@ export function createSpectrogramBuffers(binCount) {
     spectrumNormalized: new Float32Array(binCount),
     spectrumDb: new Float32Array(binCount),
     spectrumForPitchDetection: new Float32Array(binCount),
-    spectrumFiltered: new Float32Array(binCount),
   };
 }
 
@@ -15,7 +14,6 @@ export function createHighResSpectrogramBuffers(binCount) {
   return {
     spectrumNormalized: new Float32Array(binCount),
     spectrumDb: new Float32Array(binCount),
-    spectrumFiltered: new Float32Array(binCount),
   };
 }
 
@@ -100,51 +98,11 @@ export function captureSpectrumForHop({
   };
 }
 
-export function applyNoiseProfileToSpectrum({
-                                              spectrumNormalized,
-                                              spectrogramNoiseState,
-                                              spectrogramBuffers,
-                                            }) {
-  if (spectrogramNoiseState.calibrating && spectrogramNoiseState.sumBins) {
-    const captureCount = Math.min(spectrogramNoiseState.sumBins.length, spectrumNormalized.length);
-    for (let i = 0; i < captureCount; i += 1) {
-      spectrogramNoiseState.sumBins[i] += spectrumNormalized[i];
-    }
-    spectrogramNoiseState.sampleCount += 1;
-  }
-
-  if (!spectrogramNoiseState.profile) {
-    return {
-      spectrumFiltered: spectrumNormalized,
-      spectrogramBuffers,
-    };
-  }
-
-  if (spectrogramBuffers.spectrumFiltered.length !== spectrumNormalized.length) {
-    spectrogramBuffers.spectrumFiltered = new Float32Array(spectrumNormalized.length);
-  }
-  const spectrumFiltered = spectrogramBuffers.spectrumFiltered;
-  const profileCount = Math.min(spectrogramNoiseState.profile.length, spectrumNormalized.length);
-  for (let i = 0; i < profileCount; i += 1) {
-    const value = spectrumNormalized[i];
-    const weightedNoise = spectrogramNoiseState.profile[i] * (1 - value);
-    spectrumFiltered[i] = Math.max(0, value - weightedNoise);
-  }
-  for (let i = profileCount; i < spectrumNormalized.length; i += 1) {
-    spectrumFiltered[i] = spectrumNormalized[i];
-  }
-  return {
-    spectrumFiltered,
-    spectrogramBuffers,
-  };
-}
-
 function processHopSpectrogram({
                                  audioSessionState,
                                  spectrogramBuffers,
                                  highResSpectrogramBuffers,
                                  skipNextSpectrumFrame,
-                                 spectrogramNoiseState,
                                }) {
   const analyser = audioSessionState.analyser;
   const highResAnalyser = audioSessionState.highResAnalyser;
@@ -182,14 +140,9 @@ function processHopSpectrogram({
         didFrameDataChange: false,
       };
     }
-    const noiseResult = applyNoiseProfileToSpectrum({
-      spectrumNormalized,
-      spectrogramNoiseState,
-      spectrogramBuffers: activeSpectrogramBuffers,
-    });
     return {
-      spectrogramColumn: noiseResult.spectrumFiltered,
-      spectrogramBuffers: noiseResult.spectrogramBuffers,
+      spectrogramColumn: spectrumNormalized,
+      spectrogramBuffers: activeSpectrogramBuffers,
       didFrameDataChange: true,
     };
   };
@@ -280,7 +233,6 @@ export function processOneAudioHop({
   const {
     audioSessionState,
     processingState,
-    spectrogramNoiseState,
     spectrogramBuffers,
     highResSpectrogramBuffers,
   } = hopState;
@@ -289,7 +241,6 @@ export function processOneAudioHop({
     spectrogramBuffers,
     highResSpectrogramBuffers,
     skipNextSpectrumFrame,
-    spectrogramNoiseState,
   });
   const {
     spectrumForPitchDetection,
@@ -326,11 +277,6 @@ export function processOneAudioHop({
     isSilencePaused: pitchResult.isSilencePaused,
   });
   const didFrameDataChange = pitchResult.didFrameDataChange || spectrogramOutput.didFrameDataChange;
-  const nextHighResCaptureAfterNoise = audioSessionState.highResAnalyser
-      // Noise filtering may resize/replace filtered output buffer; retain that updated reference.
-      ? spectrogramOutput.spectrogramBuffers
-      : nextHighResSpectrogramBuffers;
-
   return {
     didFrameDataChange,
     nextSkipNextSpectrumFrame,
@@ -338,6 +284,6 @@ export function processOneAudioHop({
     shouldPersistMaxSignalLevel: pitchResult.shouldPersistMaxSignalLevel,
     spectrogramColumn: spectrogramOutput.spectrogramColumn,
     spectrogramBuffers: nextSpectrogramBuffers,
-    highResSpectrogramBuffers: nextHighResCaptureAfterNoise,
+    highResSpectrogramBuffers: nextHighResSpectrogramBuffers,
   };
 }
