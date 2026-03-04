@@ -3,7 +3,8 @@ import {useEffect, useState} from "react";
 import Recorder from "./Recorder/Recorder.jsx";
 import ScalesPage from "./ScalesPage/ScalesPage.jsx";
 import SettingsPanel from "./SettingsPanel.jsx";
-import {ensureMetronomeTickLoaded, ensurePianoLoaded} from "./ScalesPage/piano.js";
+import {getRecordingEngine} from "./Recorder/RecordingEngine.js";
+import {getPlaybackEngine} from "./ScalesPage/PlaybackEngine.js";
 import {readActiveView, writeActiveView} from "./AppShell/config.js";
 import {PITCH_NOTE_OPTIONS} from "./pitchScale.js";
 import {computeIsForeground, subscribeToForegroundChanges} from "./foreground.js";
@@ -37,6 +38,8 @@ import {
 } from "./Recorder/config.js";
 
 export default function AppShell({downloadingUpdate = false}) {
+  const recorderEngine = getRecordingEngine();
+  const scalesPlaybackEngine = getPlaybackEngine();
   const [activeView, setActiveView] = useState(() => readActiveView());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scaleMinNote, setScaleMinNote] = useState(() => readScaleMinNote());
@@ -62,14 +65,6 @@ export default function AppShell({downloadingUpdate = false}) {
   }, [activeView]);
 
   useEffect(() => subscribeToForegroundChanges(setIsForeground), []);
-
-  useEffect(() => {
-    // We pre-fetch here so these are available offline as soon as possible.
-    ensurePianoLoaded().catch(() => {
-    });
-    ensureMetronomeTickLoaded().catch(() => {
-    });
-  }, []);
 
   useEffect(() => {
     writeScaleMinNote(scaleMinNote);
@@ -109,6 +104,30 @@ export default function AppShell({downloadingUpdate = false}) {
     writeSpectrogramMinHz(spectrogramMinHz);
     writeSpectrogramMaxHz(spectrogramMaxHz);
   }, [spectrogramMaxHz, spectrogramMinHz]);
+
+  useEffect(() => {
+    if (showingScales) {
+      recorderEngine.setWantsToRun(false);
+      return;
+    }
+    recorderEngine.setWantsToRun(true);
+    recorderEngine.startIfNeeded();
+  }, [recorderEngine, showingScales]);
+
+  useEffect(() => {
+    scalesPlaybackEngine.updateSettings({
+      scaleMinNote,
+      scaleMaxNote,
+      keepRunningInBackground,
+      isForeground,
+    });
+  }, [
+    isForeground,
+    keepRunningInBackground,
+    scaleMaxNote,
+    scaleMinNote,
+    scalesPlaybackEngine,
+  ]);
 
   const onViewChange = (nextView) => {
     setActiveView(nextView);
@@ -215,6 +234,7 @@ export default function AppShell({downloadingUpdate = false}) {
                     scaleMaxNote={scaleMaxNote}
                     keepRunningInBackground={keepRunningInBackground}
                     isForeground={isForeground}
+                    engine={scalesPlaybackEngine}
                 />
             ) : (
                 <Recorder
@@ -231,6 +251,7 @@ export default function AppShell({downloadingUpdate = false}) {
                     spectrogramMinHz={spectrogramMinHz}
                     spectrogramMaxHz={spectrogramMaxHz}
                     onSettingsRuntimeChange={setRuntimeSettings}
+                    engine={recorderEngine}
                 />
             )}
             <footer className="relative flex h-12 items-stretch gap-2 pr-2 pt-0 pb-0 pl-0 text-xs text-slate-300">

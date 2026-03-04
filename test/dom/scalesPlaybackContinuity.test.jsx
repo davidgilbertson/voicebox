@@ -2,12 +2,14 @@ import React from "react";
 import {act, fireEvent, render, screen} from "@testing-library/react";
 import {beforeEach, expect, test, vi} from "vitest";
 import ScalesPage from "../../src/ScalesPage/ScalesPage.jsx";
+import {PlaybackEngine} from "../../src/ScalesPage/PlaybackEngine.js";
 
 const playNoteMock = vi.fn(async () => ({stop: vi.fn()}));
 const playMetronomeTickMock = vi.fn(async () => {});
 
 vi.mock("../../src/ScalesPage/piano.js", () => ({
   ensurePianoLoaded: vi.fn(async () => ({})),
+  ensureMetronomeTickLoaded: vi.fn(async () => null),
   ensurePianoReadyForPlayback: vi.fn(async () => true),
   playNote: (...args) => playNoteMock(...args),
   playMetronomeTick: (...args) => playMetronomeTickMock(...args),
@@ -34,8 +36,12 @@ async function waitForReady() {
   expect(screen.getByRole("button", {name: "Play"})).toBeEnabled();
 }
 
+function renderScales(props) {
+  return render(<ScalesPage engine={new PlaybackEngine()} {...props}/>);
+}
+
 test("changing BPM while playing applies on the next pulse", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
 
   fireEvent.click(screen.getByRole("button", {name: "Play"}));
@@ -61,7 +67,7 @@ test("changing BPM while playing applies on the next pulse", async () => {
 });
 
 test("pause and resume restarts the current set from the cue note", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
 
   fireEvent.click(screen.getByRole("button", {name: "Play"}));
@@ -87,7 +93,7 @@ test("pause and resume restarts the current set from the cue note", async () => 
 });
 
 test("pressing a piano key while playing restarts the set from that root", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
 
   fireEvent.click(screen.getByRole("button", {name: "Play"}));
@@ -108,7 +114,7 @@ test("pressing a piano key while playing restarts the set from that root", async
 });
 
 test("pressing a piano key too high for the selected pattern is ignored for set restart", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
 
   fireEvent.click(screen.getByRole("button", {name: "Play"}));
@@ -128,7 +134,7 @@ test("pressing a piano key too high for the selected pattern is ignored for set 
 });
 
 test("metronome ticks while scales playback is stopped", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
 
   fireEvent.click(screen.getByRole("button", {name: "Enable metronome"}));
@@ -151,7 +157,7 @@ test("slow first metronome tick does not trigger immediate catch-up tick", async
             window.setTimeout(resolve, 500);
           })
   );
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
 
   fireEvent.click(screen.getByRole("button", {name: "Enable metronome"}));
@@ -168,7 +174,7 @@ test("slow first metronome tick does not trigger immediate catch-up tick", async
 });
 
 test("metronome shares the scales pulse loop and ducks on simultaneous notes", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
 
   fireEvent.click(screen.getByRole("button", {name: "Play"}));
@@ -197,8 +203,10 @@ test("metronome shares the scales pulse loop and ducks on simultaneous notes", a
 });
 
 test("scales playback and metronome pause in background and resume in foreground", async () => {
+  const engine = new PlaybackEngine();
   const {rerender} = render(
       <ScalesPage
+          engine={engine}
           scaleMinNote="C3"
           scaleMaxNote="E4"
           keepRunningInBackground={false}
@@ -223,6 +231,7 @@ test("scales playback and metronome pause in background and resume in foreground
 
   rerender(
       <ScalesPage
+          engine={engine}
           scaleMinNote="C3"
           scaleMaxNote="E4"
           keepRunningInBackground={false}
@@ -238,6 +247,7 @@ test("scales playback and metronome pause in background and resume in foreground
 
   rerender(
       <ScalesPage
+          engine={engine}
           scaleMinNote="C3"
           scaleMaxNote="E4"
           keepRunningInBackground={false}
@@ -253,7 +263,7 @@ test("scales playback and metronome pause in background and resume in foreground
 });
 
 test("repeat-up bounces before a set would exceed the top note", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E3"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E3"});
   await waitForReady();
 
   fireEvent.click(screen.getByRole("button", {name: "Play"}));

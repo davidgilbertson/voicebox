@@ -2,11 +2,13 @@ import React from "react";
 import {act, fireEvent, render, screen} from "@testing-library/react";
 import {beforeEach, expect, test, vi} from "vitest";
 import ScalesPage from "../../src/ScalesPage/ScalesPage.jsx";
+import {PlaybackEngine} from "../../src/ScalesPage/PlaybackEngine.js";
 
 const playNoteMock = vi.fn(async () => ({stop: vi.fn()}));
 
 vi.mock("../../src/ScalesPage/piano.js", () => ({
   ensurePianoLoaded: vi.fn(async () => ({})),
+  ensureMetronomeTickLoaded: vi.fn(async () => null),
   ensurePianoReadyForPlayback: vi.fn(async () => true),
   playNote: (...args) => playNoteMock(...args),
   playMetronomeTick: vi.fn(async () => {}),
@@ -42,8 +44,12 @@ async function waitForReady() {
   expect(screen.getByRole("button", {name: "Play"})).toBeEnabled();
 }
 
+function renderScales(props) {
+  return render(<ScalesPage engine={new PlaybackEngine()} {...props}/>);
+}
+
 test("right swipe shows right-direction gesture feedback", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
   fireEvent.click(screen.getByRole("button", {name: "Got it"}));
@@ -53,7 +59,7 @@ test("right swipe shows right-direction gesture feedback", async () => {
 });
 
 test("up swipe shows up-direction gesture feedback", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
   fireEvent.click(screen.getByRole("button", {name: "Got it"}));
@@ -63,7 +69,7 @@ test("up swipe shows up-direction gesture feedback", async () => {
 });
 
 test("down swipe shows down-direction gesture feedback", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
   fireEvent.click(screen.getByRole("button", {name: "Got it"}));
@@ -73,7 +79,7 @@ test("down swipe shows down-direction gesture feedback", async () => {
 });
 
 test("auto reversal at top of range shows down-direction gesture feedback", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="C#3"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "C#3"});
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
   fireEvent.click(screen.getByRole("button", {name: "Got it"}));
@@ -89,7 +95,7 @@ test("auto reversal at top of range shows down-direction gesture feedback", asyn
 });
 
 test("left swipe does nothing and tap on empty area toggles play/pause", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
 
@@ -121,7 +127,7 @@ test("left swipe does nothing and tap on empty area toggles play/pause", async (
 });
 
 test("swiping the same vertical direction twice mid-set starts a new set immediately", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
   fireEvent.click(screen.getByRole("button", {name: "Play"}));
@@ -146,7 +152,7 @@ test("swiping the same vertical direction twice mid-set starts a new set immedia
 });
 
 test("fast pointer swipe without move event does not toggle play", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
 
@@ -161,7 +167,7 @@ test("fast pointer swipe without move event does not toggle play", async () => {
 });
 
 test("tap on help button does not toggle play", async () => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
 
   fireEvent.pointerDown(screen.getByRole("button", {name: "Got it"}), {pointerId: 1, clientX: 100, clientY: 200});

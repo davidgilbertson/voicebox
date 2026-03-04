@@ -2,11 +2,13 @@ import React from "react";
 import {act, fireEvent, render, screen} from "@testing-library/react";
 import {beforeEach, expect, test, vi} from "vitest";
 import ScalesPage from "../../src/ScalesPage/ScalesPage.jsx";
+import {PlaybackEngine} from "../../src/ScalesPage/PlaybackEngine.js";
 
 const playNoteMock = vi.fn(async () => ({stop: vi.fn()}));
 
 vi.mock("../../src/ScalesPage/piano.js", () => ({
   ensurePianoLoaded: vi.fn(async () => ({})),
+  ensureMetronomeTickLoaded: vi.fn(async () => null),
   ensurePianoReadyForPlayback: vi.fn(async () => true),
   playNote: (...args) => playNoteMock(...args),
   playMetronomeTick: vi.fn(async () => {}),
@@ -31,13 +33,17 @@ async function waitForReady() {
   expect(screen.getByRole("button", {name: "Play"})).toBeEnabled();
 }
 
+function renderScales(props) {
+  return render(<ScalesPage engine={new PlaybackEngine()} {...props}/>);
+}
+
 test.each([
   {pattern: "Semitones", firstNotes: [48, 48, 49, 50, 51, 52]},
   {pattern: "Pentatonic", firstNotes: [48, 48, 50, 52, 55, 57]},
   {pattern: "Major", firstNotes: [48, 48, 50, 52, 53, 55]},
   {pattern: "2 Up 1 Down", firstNotes: [48, 48, 52, 50, 53, 52]},
 ])("plays expected opening notes for $pattern pattern", async ({pattern, firstNotes}) => {
-  render(<ScalesPage scaleMinNote="C3" scaleMaxNote="E4"/>);
+  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
   await waitForReady();
 
   fireEvent.change(screen.getByRole("combobox", {name: "Scale pattern"}), {

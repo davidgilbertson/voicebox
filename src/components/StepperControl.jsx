@@ -42,8 +42,8 @@ export default function StepperControl({
         >
           {units ? (
               <div className={`flex flex-col items-center justify-center leading-none ${isLarge ? "gap-1" : "gap-0.5"}`}>
-                <span>{value}</span>
-                <span className={`${isLarge ? "text-xs" : "text-[10px]"} font-semibold uppercase tracking-wide text-slate-500`}>
+                <span className={isLarge ? "text-xl leading-4" : undefined}>{value}</span>
+                <span className={`${isLarge ? "text-sm" : "text-[10px]"} font-semibold uppercase tracking-wide text-slate-500`}>
                   {units}
                 </span>
               </div>

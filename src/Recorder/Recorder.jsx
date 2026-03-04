@@ -1,9 +1,8 @@
-import {useEffect, useMemo, useRef, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 import {Pause} from "lucide-react";
 import VibratoChart from "./Vibrato/VibratoChart.jsx";
 import PitchChart from "./Pitch/PitchChart.jsx";
 import SpectrogramChart from "./Spectrogram/SpectrogramChart.jsx";
-import {createAudioEngine} from "./AudioEngine.js";
 import {noteNameToCents} from "../pitchScale.js";
 
 export default function Recorder({
@@ -20,12 +19,12 @@ export default function Recorder({
   spectrogramMinHz,
   spectrogramMaxHz,
   onSettingsRuntimeChange,
+  engine,
 }) {
   const vibratoChartRef = useRef(null);
   const pitchChartRef = useRef(null);
   const spectrogramChartRef = useRef(null);
   const chartContainerRef = useRef(null);
-  const engine = useMemo(() => createAudioEngine(), []);
   const [engineUi, setEngineUi] = useState(() => engine.getUiSnapshot());
 
   useEffect(() => engine.subscribeUi(setEngineUi), [engine]);
@@ -39,7 +38,6 @@ export default function Recorder({
     });
     return () => {
       engine.detachCharts();
-      engine.destroy();
     };
   }, [engine]);
 
@@ -75,7 +73,7 @@ export default function Recorder({
     onSettingsRuntimeChange({
       batteryUsagePerMinute: engineUi.batteryUsagePerMinute,
     });
-  }, [engine, engineUi, onSettingsRuntimeChange]);
+  }, [engineUi, onSettingsRuntimeChange]);
 
   const onStartButtonClick = () => {
     engine.setWantsToRun(true);

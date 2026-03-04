@@ -13,14 +13,14 @@ Chart progression is driven by audio sample counts, not wall-clock time.
 
 ## Ownership
 
-1. `AudioEngine` owns recorder runtime behavior:
+1. `RecordingEngine` owns recorder runtime behavior:
    1. Audio session lifecycle (`getUserMedia`, `AudioContext`, worklet, analyser, teardown).
    2. Foreground/background policy for recorder pages.
    3. Per-hop processing and pitch-history updates.
    4. Render scheduling (`requestAnimationFrame`) and chart drawing dispatch.
    5. Runtime UI state publication (`isAudioRunning`, `error`, `vibratoRate`, battery usage).
 2. `Recorder.jsx` is a thin adapter:
-   1. Attaches chart refs and container ref to `AudioEngine`.
+   1. Attaches chart refs and container ref to `RecordingEngine`.
    2. Forwards page/settings changes into engine APIs.
    3. Renders overlays and chart components from engine-provided state.
 
@@ -59,7 +59,7 @@ Chart progression is driven by audio sample counts, not wall-clock time.
 2. Every full `hopSize` samples, it posts one message containing:
    1. `sampleCount` (expected to equal `hopSize`)
    2. `signalLevel` (hop RMS, `[0..1]`)
-3. On each message (`captureNode.port.onmessage` in `src/Recorder/AudioEngine.js`):
+3. On each message (`captureNode.port.onmessage` in `src/Recorder/RecordingEngine.js`):
    1. Capture analyser spectrum once.
    2. Build `spectrumDb`, `spectrumNormalized`, `spectrumForPitchDetection`.
    3. Silence-gate pitch detection from `signalLevel` threshold.
@@ -68,7 +68,7 @@ Chart progression is driven by audio sample counts, not wall-clock time.
    6. Compute `lineStrength` from `signalLevel` using a fixed floor + running max (with EMA smoothing).
    7. Write pitch/lineStrength into shared pitch-history rings.
    8. Append spectrogram column (`spectrumNormalized`) unless silence-paused.
-4. `AudioEngine` `renderLoop` draws when dirty:
+4. `RecordingEngine` `renderLoop` draws when dirty:
    1. Pitch and vibrato read from shared pitch-history rings.
    2. Spectrogram draws from retained bitmap + pending columns queue in `SpectrogramChart`.
 

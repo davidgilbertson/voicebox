@@ -301,7 +301,7 @@ export default function SettingsPanel({
               <div className="flex flex-col gap-1">
                 <span>Half-resolution canvas</span>
                 <span className="text-xs text-slate-400">
-                  Render charts at 50% pixel density to reduce GPU/CPU cost.
+                  Render all charts at 50% pixel density.
                 </span>
               </div>
               <input
@@ -313,9 +313,9 @@ export default function SettingsPanel({
             </label>
             <label className="flex items-start justify-between gap-4 text-sm">
               <div className="flex flex-col gap-1">
-                <span>Lower-resolution spectrogram</span>
+                <span>Half-resolution spectrogram</span>
                 <span className="text-xs text-slate-400">
-                  Halve the spectrogram resolution
+                  Halve the spectrogram vertical resolution
                 </span>
               </div>
               <input
@@ -334,7 +334,6 @@ export default function SettingsPanel({
               <div className="flex items-center gap-4">
                 <a
                     href="/about"
-                    target="_blank"
                     rel="noreferrer"
                     className="text-sm font-semibold text-blue-300 underline decoration-blue-300/90 underline-offset-4 transition hover:text-blue-200"
                 >

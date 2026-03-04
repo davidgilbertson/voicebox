@@ -213,7 +213,7 @@ export default function AboutPage() {
                     <strong>Half-resolution canvas</strong>: lowers chart render resolution for lower CPU/GPU use.
                   </li>
                   <li>
-                    <strong>Lower-resolution spectrogram</strong>: halves spectrogram resolution to reduce processing cost. This doesn't affect the pitch detection algorithm.
+                    <strong>Half-resolution spectrogram</strong>: halves spectrogram resolution to reduce processing cost. This doesn't affect the pitch detection algorithm.
                   </li>
                   <li>
                     <strong>Battery use</strong>: estimated battery drain rate (<code>%/min</code>). Shows <code>NA</code> when battery stats

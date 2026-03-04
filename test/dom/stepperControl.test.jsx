@@ -59,5 +59,5 @@ test("stepper control can show units below the value", () => {
   expect(screen.getByText("300")).toBeInTheDocument();
   const units = screen.getByText("BPM");
   expect(units).toHaveClass("text-slate-500");
-  expect(units).toHaveClass("text-xs");
+  expect(units).toHaveClass("text-sm");
 });

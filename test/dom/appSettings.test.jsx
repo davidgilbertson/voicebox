@@ -21,19 +21,19 @@ test("settings defaults and persistence work via localStorage", async () => {
   const autoPauseCheckbox = screen.getByRole("checkbox", {name: /Auto pause on silence/i});
   const runAt30FpsCheckbox = screen.getByRole("checkbox", {name: /Run at 30 FPS/i});
   const halfResolutionCanvasCheckbox = screen.getByRole("checkbox", {name: /Half-resolution canvas/i});
-  const lowerResolutionSpectrogramCheckbox = screen.getByRole("checkbox", {name: /Lower-resolution spectrogram/i});
+  const halfResolutionSpectrogramCheckbox = screen.getByRole("checkbox", {name: /Half-resolution spectrogram/i});
 
   expect(autoPauseCheckbox).toBeChecked();
   expect(runAt30FpsCheckbox).not.toBeChecked();
   expect(halfResolutionCanvasCheckbox).not.toBeChecked();
-  expect(lowerResolutionSpectrogramCheckbox).not.toBeChecked();
+  expect(halfResolutionSpectrogramCheckbox).not.toBeChecked();
 
   await user.click(runAt30FpsCheckbox);
   expect(runAt30FpsCheckbox).toBeChecked();
   await user.click(halfResolutionCanvasCheckbox);
   expect(halfResolutionCanvasCheckbox).toBeChecked();
-  await user.click(lowerResolutionSpectrogramCheckbox);
-  expect(lowerResolutionSpectrogramCheckbox).toBeChecked();
+  await user.click(halfResolutionSpectrogramCheckbox);
+  expect(halfResolutionSpectrogramCheckbox).toBeChecked();
 
   await waitFor(() => {
     expect(readAutoPauseOnSilence()).toBe(true);

@@ -237,6 +237,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  globalThis.__resetRecordingEngineSingletonForTests?.();
+  globalThis.__resetPlaybackEngineSingletonForTests?.();
   cleanup();
   vi.restoreAllMocks();
   vi.useRealTimers();

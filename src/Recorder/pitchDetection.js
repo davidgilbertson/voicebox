@@ -33,17 +33,18 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
   }
 
   // Set max P to the highest likely partial that the biggest peak could be.
-  // With subharmonics this can easily be 7 or 8.
+  // With subharmonics I've seen 13.
   // Linear-ish effect on performance
-  const maxP = 10;
+  const maxP = 15;
   // P count defines how many peaks to simulate for each hypothesis spectrum
   // That hypothesis spectrum is then compared to the real spectrum
-  const pCount = 12;
+  // Logically this should be >= maxP (think about it!)
+  const pCount = 17;
   // Once a fundamental pitch has been selected, it is refined by looking
   //  at `pRefineCount` different partials
   const pRefineCount = 4;
   const offWeight = 1.25;
-  const expectedP0MinRatio = 0.18;
+  const expectedP0MinRatio = 0.05;
   const expectedP0PenaltyWeight = 2;
   const downwardBiasPerP = 0.02;
   const searchRadiusBins = 2;
