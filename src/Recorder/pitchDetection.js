@@ -1,36 +1,45 @@
-import {clamp} from "../tools.js";
+import { clamp } from "../tools.js";
 
-function finalizeDetection(detectionState, {
-  hz,
-  minHz,
-  maxHz,
-}) {
-  const {hzBuffer} = detectionState;
+function finalizeDetection(detectionState, { hz, minHz, maxHz }) {
+  const { hzBuffer } = detectionState;
   const inHzRange = hz >= minHz && hz <= maxHz;
-  const absCents = inHzRange ? 1200 * Math.log2(hz) : Number.NaN;
+  const cents = inHzRange ? 1200 * Math.log2(hz) : Number.NaN;
 
   if (inHzRange) {
     hzBuffer[detectionState.hzIndex] = hz;
     detectionState.hzIndex = (detectionState.hzIndex + 1) % hzBuffer.length;
   }
 
-  return {
-    hz,
-    cents: absCents,
-  };
+  return cents;
 }
 
-function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
+function fftBinsToPitch(spectrumBins, sampleRate, minHz, maxHz) {
   if (!spectrumBins || spectrumBins.length < 8) {
-    return {hz: 0, confidence: 0};
+    return Number.NaN;
   }
   const nyquistBin = spectrumBins.length - 1;
-  const binSizeHz = (sampleRate / 2) / spectrumBins.length;
+  const binSizeHz = sampleRate / 2 / spectrumBins.length;
   const minBin = Math.max(1, Math.floor(minHz / binSizeHz));
   const maxBin = Math.min(nyquistBin, Math.floor(maxHz / binSizeHz));
-  if (maxBin <= minBin) {
-    return {hz: 0, confidence: 0};
+  if (maxBin <= minBin) return Number.NaN;
+
+  function detectPeakiness() {
+    const epsilon = 1e-12;
+    const count = spectrumBins.length - 1;
+    const invCount = 1 / count;
+    let logSum = 0;
+    let linearSum = 0;
+    for (let i = 1; i < spectrumBins.length; i += 1) {
+      const magnitude = spectrumBins[i];
+      const safeMagnitude = magnitude > epsilon ? magnitude : epsilon;
+      logSum += Math.log(safeMagnitude);
+      linearSum += safeMagnitude;
+    }
+    const flatness = Math.exp(logSum * invCount) / (linearSum * invCount);
+    return 1 - flatness;
   }
+
+  if (detectPeakiness() < 0.8) return Number.NaN;
 
   // Set max P to the highest likely partial that the biggest peak could be.
   // With subharmonics I've seen 13.
@@ -57,45 +66,42 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
     if (mid < left || mid < right) {
       return clampedBin;
     }
-    const denominator = left - (2 * mid) + right;
+    const denominator = left - 2 * mid + right;
     if (!Number.isFinite(denominator) || denominator === 0) {
       return clampedBin;
     }
-    const offset = 0.5 * (left - right) / denominator;
+    const offset = (0.5 * (left - right)) / denominator;
     return clampedBin + clamp(offset, -1, 1);
+  }
+
+  function sampleMagnitude3Bin(binPosition) {
+    if (!Number.isFinite(binPosition)) return 0;
+    const centerBin = clamp(Math.round(binPosition), 1, nyquistBin - 1);
+    const frac = clamp(binPosition - centerBin, -1, 1);
+    const left = spectrumBins[centerBin - 1];
+    const mid = spectrumBins[centerBin];
+    const right = spectrumBins[centerBin + 1];
+    return mid + 0.5 * frac * (right - left) + 0.5 * frac * frac * (left - 2 * mid + right);
   }
 
   function scoreHypothesis(f0Bin) {
     if (!Number.isFinite(f0Bin) || f0Bin < minBin || f0Bin > maxBin) {
-      return {score: Number.NEGATIVE_INFINITY, p0Magnitude: 0};
+      return { score: Number.NEGATIVE_INFINITY, p0Magnitude: 0 };
     }
     let score = 0;
     let p0Magnitude = 0;
     for (let p = 1; p <= pCount; p += 1) {
-      const pBin = Math.round(f0Bin * p);
+      const pBin = f0Bin * p;
       if (pBin < minBin || pBin > maxBin) break;
-      const onMagnitude = spectrumBins[pBin];
+      const onMagnitude = sampleMagnitude3Bin(pBin);
       if (p === 1) {
         p0Magnitude = onMagnitude;
       }
-      const offBin = Math.round(f0Bin * (p + 0.5));
-      const offMagnitude = offBin >= minBin && offBin <= maxBin ? spectrumBins[offBin] : 0;
-      score += onMagnitude - (offWeight * offMagnitude);
+      const offBin = f0Bin * (p + 0.5);
+      const offMagnitude = offBin >= minBin && offBin <= maxBin ? sampleMagnitude3Bin(offBin) : 0;
+      score += onMagnitude - offWeight * offMagnitude;
     }
-    return {score, p0Magnitude};
-  }
-
-  function findTopSeedPeak() {
-    const localPeaks = [];
-    for (let bin = minBin + 1; bin < maxBin; bin += 1) {
-      const left = spectrumBins[bin - 1];
-      const center = spectrumBins[bin];
-      const right = spectrumBins[bin + 1];
-      if (!(center >= left && center > right)) continue;
-      localPeaks.push({bin, magnitude: center});
-    }
-    localPeaks.sort((a, b) => b.magnitude - a.magnitude);
-    return localPeaks[0] ?? null;
+    return { score, p0Magnitude };
   }
 
   function refineF0FromPartials(baseF0Bin) {
@@ -117,7 +123,9 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
       }
       const refinedPBin = refineLocalPeakBinParabolic(bestBin);
       const f0FromPBin = refinedPBin / p;
-      const localBaseline = (spectrumBins[Math.max(0, bestBin - 1)] + spectrumBins[Math.min(nyquistBin, bestBin + 1)]) / 2;
+      const localBaseline =
+        (spectrumBins[Math.max(0, bestBin - 1)] + spectrumBins[Math.min(nyquistBin, bestBin + 1)]) /
+        2;
       const peakiness = Math.max(0, bestMagnitude - localBaseline);
       const weight = bestMagnitude * peakiness;
       if (!(weight > 0) || !Number.isFinite(f0FromPBin)) continue;
@@ -128,34 +136,39 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
     return weightedSum / totalWeight;
   }
 
-  let strongestPeakBin = minBin;
-  let strongestPeakMagnitude = Number.NEGATIVE_INFINITY;
+  // We look for a 'peak' - a bin with larger magnitude than the bins on either side
+  // In the unlikely event we don't find one, we return the largest value
+  let topLocalPeakBin = -1;
+  let topLocalPeakMagnitude = Number.NEGATIVE_INFINITY;
   for (let bin = minBin; bin <= maxBin; bin += 1) {
-    if (spectrumBins[bin] > strongestPeakMagnitude) {
-      strongestPeakMagnitude = spectrumBins[bin];
-      strongestPeakBin = bin;
+    const magnitude = spectrumBins[bin];
+    if (bin <= minBin || bin >= maxBin) continue;
+    const left = spectrumBins[bin - 1];
+    const right = spectrumBins[bin + 1];
+    // Plateau tie-break: >= on the left and > on the right selects the rightmost bin.
+    if (!(magnitude >= left && magnitude > right)) continue;
+    if (magnitude > topLocalPeakMagnitude) {
+      topLocalPeakMagnitude = magnitude;
+      topLocalPeakBin = bin;
     }
   }
+  if (topLocalPeakBin < 0) return Number.NaN;
 
-  const seedPeak = findTopSeedPeak() ?? {bin: strongestPeakBin, magnitude: strongestPeakMagnitude};
-
-  let bestP = 1;
-  let bestF0Bin = strongestPeakBin;
+  let bestF0Bin = topLocalPeakBin;
   let bestScore = Number.NEGATIVE_INFINITY;
   for (let p = 1; p <= maxP; p += 1) {
-    const f0Bin = seedPeak.bin / p;
+    const f0Bin = topLocalPeakBin / p;
     if (f0Bin < minBin || f0Bin > maxBin) continue;
-    const {score, p0Magnitude} = scoreHypothesis(f0Bin);
+    const { score, p0Magnitude } = scoreHypothesis(f0Bin);
     let hypothesisScore = score;
     if (p > 1) {
-      const expectedP0Magnitude = seedPeak.magnitude * expectedP0MinRatio;
+      const expectedP0Magnitude = topLocalPeakMagnitude * expectedP0MinRatio;
       const p0Deficit = Math.max(0, expectedP0Magnitude - p0Magnitude);
       hypothesisScore -= p0Deficit * expectedP0PenaltyWeight;
     }
     hypothesisScore -= p * downwardBiasPerP;
     if (hypothesisScore > bestScore) {
       bestScore = hypothesisScore;
-      bestP = p;
       bestF0Bin = f0Bin;
     }
   }
@@ -164,41 +177,21 @@ function fftBinsToPitchDetailed(spectrumBins, sampleRate, minHz, maxHz) {
   const finalF0Bin = Number.isFinite(refinedF0Bin) ? refinedF0Bin : bestF0Bin;
   const hz = finalF0Bin * binSizeHz;
   if (!Number.isFinite(hz) || hz < minHz || hz > maxHz) {
-    return {hz: 0, confidence: 0};
+    return Number.NaN;
   }
 
-  const confidence = clamp(strongestPeakMagnitude, 0, 1);
-  return {
-    hz,
-    confidence,
-    bestP,
-    strongestPeakBin,
-  };
+  return hz;
 }
 
-export function getPitchFromSpectrum(
-    detectionState,
-    spectrumBins,
-    minHz,
-    maxHz
-) {
-  const {hzBuffer} = detectionState;
-  if (!hzBuffer || !spectrumBins || !spectrumBins.length) return null;
+export function getPitchFromSpectrum(detectionState, spectrumBins, minHz, maxHz) {
+  const { hzBuffer } = detectionState;
+  if (!hzBuffer || !spectrumBins || !spectrumBins.length) return Number.NaN;
 
-  const detection = fftBinsToPitchDetailed(
-      spectrumBins,
-      detectionState.sampleRate,
-      minHz,
-      maxHz
-  );
+  const hz = fftBinsToPitch(spectrumBins, detectionState.sampleRate, minHz, maxHz);
 
-  const result = finalizeDetection(detectionState, {
-    hz: detection.hz,
+  return finalizeDetection(detectionState, {
+    hz,
     minHz,
     maxHz,
   });
-  return {
-    ...result,
-    confidence: detection.confidence,
-  };
 }

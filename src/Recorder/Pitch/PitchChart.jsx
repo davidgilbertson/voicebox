@@ -1,12 +1,10 @@
-import {forwardRef, useEffect, useImperativeHandle, useRef} from "react";
-import {PitchChartRenderer} from "./pitchTools.js";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { PitchChartRenderer } from "./pitchTools.js";
 
-const PitchChart = forwardRef(function PitchChart({
-  minCents,
-  maxCents,
-  lineColorMode,
-  renderScale,
-}, ref) {
+const PitchChart = forwardRef(function PitchChart(
+  { minCents, maxCents, lineColorMode, renderScale },
+  ref,
+) {
   const canvasRef = useRef(null);
   const rendererRef = useRef(new PitchChartRenderer());
 
@@ -23,21 +21,21 @@ const PitchChart = forwardRef(function PitchChart({
     });
   }, [lineColorMode, maxCents, minCents, renderScale]);
 
-  useImperativeHandle(ref, () => ({
-    draw(data) {
-      rendererRef.current.setCanvas(canvasRef.current);
-      rendererRef.current.draw(data);
-    },
-  }), []);
+  useImperativeHandle(
+    ref,
+    () => ({
+      draw(data) {
+        rendererRef.current.setCanvas(canvasRef.current);
+        rendererRef.current.draw(data);
+      },
+    }),
+    [],
+  );
 
   return (
-      <div className="relative min-h-0 flex-[2] p-0">
-        <canvas
-            ref={canvasRef}
-            className="h-full w-full"
-            style={{imageRendering: "auto"}}
-        />
-      </div>
+    <div className="relative min-h-0 flex-[2] p-0">
+      <canvas ref={canvasRef} className="h-full w-full" style={{ imageRendering: "auto" }} />
+    </div>
   );
 });
 

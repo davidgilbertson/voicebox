@@ -25,11 +25,12 @@ async function ensureAudioReady() {
   ensureAudioContext();
   if (audioContext.state === "suspended") {
     if (!resumeAudioPromise) {
-      resumeAudioPromise = audioContext.resume()
-          .catch(() => false)
-          .finally(() => {
-            resumeAudioPromise = null;
-          });
+      resumeAudioPromise = audioContext
+        .resume()
+        .catch(() => false)
+        .finally(() => {
+          resumeAudioPromise = null;
+        });
     }
     const resumed = await resumeAudioPromise;
     if (resumed === false || audioContext.state === "suspended") {
@@ -61,7 +62,6 @@ function computePeakNormalizationGain(instrument) {
   return globalPeak > 0 ? 1 / globalPeak : 1;
 }
 
-
 export async function ensurePianoLoaded() {
   if (piano) return piano;
   ensureAudioContext();
@@ -72,14 +72,14 @@ export async function ensurePianoLoaded() {
         return Soundfont.nameToUrl(name);
       },
     })
-        .then((instrument) => {
-          piano = instrument;
-          pianoGain = computePeakNormalizationGain(instrument);
-          return piano;
-        })
-        .finally(() => {
-          loadingPianoPromise = null;
-        });
+      .then((instrument) => {
+        piano = instrument;
+        pianoGain = computePeakNormalizationGain(instrument);
+        return piano;
+      })
+      .finally(() => {
+        loadingPianoPromise = null;
+      });
   }
   return loadingPianoPromise;
 }
@@ -96,24 +96,26 @@ export async function ensureMetronomeTickLoaded() {
   if (metronomeTickBuffer) return metronomeTickBuffer;
   ensureAudioContext();
   if (!loadingMetronomeTickPromise) {
-    loadingMetronomeTickPromise = fetch(METRONOME_TICK_URL, {cache: "force-cache"})
-        .then((response) => {
-          if (!response.ok) throw new Error("Failed to load metronome sample");
-          return response.arrayBuffer();
-        })
-        .then((bytes) => audioContext.decodeAudioData(bytes))
-        .then((decoded) => {
-          metronomeTickBuffer = decoded;
-          return metronomeTickBuffer;
-        })
-        .finally(() => {
-          loadingMetronomeTickPromise = null;
-        });
+    loadingMetronomeTickPromise = fetch(METRONOME_TICK_URL, {
+      cache: "force-cache",
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error("Failed to load metronome sample");
+        return response.arrayBuffer();
+      })
+      .then((bytes) => audioContext.decodeAudioData(bytes))
+      .then((decoded) => {
+        metronomeTickBuffer = decoded;
+        return metronomeTickBuffer;
+      })
+      .finally(() => {
+        loadingMetronomeTickPromise = null;
+      });
   }
   return loadingMetronomeTickPromise;
 }
 
-export async function playMetronomeTick({duck = false} = {}) {
+export async function playMetronomeTick({ duck = false } = {}) {
   const ready = await ensureAudioReady();
   if (!ready) return;
   const sampleBuffer = await ensureMetronomeTickLoaded();
@@ -129,17 +131,21 @@ export async function playMetronomeTick({duck = false} = {}) {
   source.connect(gainNode);
   source.start(audioContext.currentTime);
 
-  source.addEventListener("ended", () => {
-    source.disconnect();
-    gainNode.disconnect();
-  }, {once: true});
+  source.addEventListener(
+    "ended",
+    () => {
+      source.disconnect();
+      gainNode.disconnect();
+    },
+    { once: true },
+  );
 }
 
 /**
  * Play a note on the loaded piano instrument.
  * `note` can be either a MIDI note number (e.g. 60) or a note name string (e.g. "C4").
  */
-export async function playNote(note, durationSeconds, {emitHighlight = true} = {}) {
+export async function playNote(note, durationSeconds, { emitHighlight = true } = {}) {
   const ready = await ensurePianoReadyForPlayback();
   if (!ready) return null;
   const instrument = await ensurePianoLoaded();
@@ -150,7 +156,7 @@ export async function playNote(note, durationSeconds, {emitHighlight = true} = {
   });
   if (emitHighlight) {
     for (const listener of playedNoteListeners) {
-      listener({note, durationSeconds});
+      listener({ note, durationSeconds });
     }
   }
   return startedNote;

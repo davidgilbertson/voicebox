@@ -1,14 +1,14 @@
 import colors from "tailwindcss/colors";
-import {clamp} from "../tools.js";
+import { clamp } from "../tools.js";
 
 export const PITCH_LINE_COLOR_MODES = [
-  {value: "terrain", label: "Terrain"},
-  {value: "gist_rainbow", label: "Gist Rainbow"},
-  {value: "cool", label: "Cool"},
-  {value: "autumn", label: "Autumn"},
-  {value: "blue", label: "Blue"},
-  {value: "orange", label: "Orange"},
-  {value: "green", label: "Green"},
+  { value: "terrain", label: "Terrain" },
+  { value: "gist_rainbow", label: "Gist Rainbow" },
+  { value: "cool", label: "Cool" },
+  { value: "autumn", label: "Autumn" },
+  { value: "blue", label: "Blue" },
+  { value: "orange", label: "Orange" },
+  { value: "green", label: "Green" },
 ];
 
 const WAVEFORM_COLOR_MODE_SET = new Set(PITCH_LINE_COLOR_MODES.map((item) => item.value));
@@ -98,7 +98,7 @@ function getColorStringsForMode(mode) {
     return colorStringsByMode.get(resolved);
   }
   const palette = getPaletteForMode(resolved);
-  const colors = Array.from({length: 256}, (_, index) => {
+  const colors = Array.from({ length: 256 }, (_, index) => {
     const offset = index * 3;
     return `rgb(${palette[offset]}, ${palette[offset + 1]}, ${palette[offset + 2]})`;
   });
@@ -116,17 +116,13 @@ function mapWaveformIntensityToPaletteIndex(intensity, mode) {
   const normalized = mapWaveformIntensityToNormalized(intensity);
   if (!Number.isFinite(normalized)) return null;
   return clamp(
-      Math.round(MIN_WAVEFORM_COLOR_INDEX + normalized * (255 - MIN_WAVEFORM_COLOR_INDEX)),
-      MIN_WAVEFORM_COLOR_INDEX,
-      255
+    Math.round(MIN_WAVEFORM_COLOR_INDEX + normalized * (255 - MIN_WAVEFORM_COLOR_INDEX)),
+    MIN_WAVEFORM_COLOR_INDEX,
+    255,
   );
 }
 
-export function mapWaveformIntensityToStrokeColor(
-    intensity,
-    fallbackColor,
-    mode
-) {
+export function mapWaveformIntensityToStrokeColor(intensity, fallbackColor, mode) {
   const resolved = resolvePitchLineColorMode(mode);
   if (isFixedColorMode(resolved)) return FIXED_COLOR_BY_MODE[resolved] ?? fallbackColor;
   const colorIndex = mapWaveformIntensityToPaletteIndex(intensity, resolved);

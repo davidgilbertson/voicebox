@@ -1,13 +1,16 @@
-import {createRoot} from "react-dom/client";
-import {useEffect, useState} from "react";
+import { createRoot } from "react-dom/client";
+import { useEffect, useState } from "react";
 import AppShell from "./AppShell.jsx";
 import AboutPage from "./AboutPage.jsx";
 import "./index.css";
-import {registerSW} from "virtual:pwa-register";
+import { registerSW } from "virtual:pwa-register";
 
 // Keep --app-height synced to the current visual viewport so fullscreen layout height stays correct.
 const updateViewportHeight = () => {
-  document.documentElement.style.setProperty("--app-height", `${Math.round(window.visualViewport.height)}px`);
+  document.documentElement.style.setProperty(
+    "--app-height",
+    `${Math.round(window.visualViewport.height)}px`,
+  );
 };
 
 const updateNextFrame = () => {
@@ -16,18 +19,26 @@ const updateNextFrame = () => {
 
 updateViewportHeight();
 
-window.addEventListener("pageshow", updateNextFrame, {passive: true});
+window.addEventListener("pageshow", updateNextFrame, { passive: true });
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) updateNextFrame();
 });
-window.visualViewport.addEventListener("resize", updateViewportHeight, {passive: true});
-window.visualViewport.addEventListener("scroll", updateViewportHeight, {passive: true});
+window.visualViewport.addEventListener("resize", updateViewportHeight, {
+  passive: true,
+});
+window.visualViewport.addEventListener("scroll", updateViewportHeight, {
+  passive: true,
+});
 
 // iOS Safari can still fire gesture events even with user-scalable=no.
 const preventGestureZoom = (event) => event.preventDefault();
-document.addEventListener("gesturestart", preventGestureZoom, {passive: false});
-document.addEventListener("gesturechange", preventGestureZoom, {passive: false});
-document.addEventListener("gestureend", preventGestureZoom, {passive: false});
+document.addEventListener("gesturestart", preventGestureZoom, {
+  passive: false,
+});
+document.addEventListener("gesturechange", preventGestureZoom, {
+  passive: false,
+});
+document.addEventListener("gestureend", preventGestureZoom, { passive: false });
 
 function Root() {
   const [downloadingUpdate, setDownloadingUpdate] = useState(false);
@@ -46,16 +57,16 @@ function Root() {
     });
   }, []);
 
-  return <AppShell downloadingUpdate={downloadingUpdate}/>;
+  return <AppShell downloadingUpdate={downloadingUpdate} />;
 }
 
 function CurrentRoute() {
   const pathname = window.location.pathname;
   if (pathname === "/about") {
-    return <AboutPage/>;
+    return <AboutPage />;
   }
-  return <Root/>;
+  return <Root />;
 }
 
 const root = createRoot(document.getElementById("root"));
-root.render(<CurrentRoute/>);
+root.render(<CurrentRoute />);

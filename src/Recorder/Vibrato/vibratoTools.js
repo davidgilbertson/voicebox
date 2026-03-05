@@ -1,12 +1,17 @@
 import colors from "tailwindcss/colors";
-import {clearCanvasWithViewport, createCanvasViewportState, drawWaveformTrace, syncCanvasViewport} from "../canvasTools.js";
+import {
+  clearCanvasWithViewport,
+  createCanvasViewportState,
+  drawWaveformTrace,
+  syncCanvasViewport,
+} from "../canvasTools.js";
 import {
   VIBRATO_ANALYSIS_WINDOW_SECONDS,
   VIBRATO_MIN_CONTIGUOUS_SECONDS,
   VIBRATO_RATE_MAX_HZ,
   VIBRATO_RATE_MIN_HZ,
 } from "../config.js";
-import {mapWaveformIntensityToStrokeColor} from "../colorTools.js";
+import { mapWaveformIntensityToStrokeColor } from "../colorTools.js";
 
 const WAVEFORM_LINE_COLOR = colors.blue[400];
 const Y_RANGE = 405; // in cents
@@ -16,10 +21,7 @@ const PLOT_Y_INSET = 5;
 const DEFAULT_CENTER_CENTS = 1200 * Math.log2(220);
 const NON_VIBRATO_ALPHA = 0.4;
 
-function centeredFiniteTail({
-                              ring,
-                              samplesPerSecond,
-                            }) {
+function centeredFiniteTail({ ring, samplesPerSecond }) {
   if (!ring || ring.sampleCount <= 0 || samplesPerSecond <= 0) return null;
   const maxSamples = Math.max(1, Math.floor(samplesPerSecond * VIBRATO_ANALYSIS_WINDOW_SECONDS));
   const tailNewestToOldest = [];
@@ -56,7 +58,8 @@ function centeredFiniteTail({
 function rateFromLastTwoPeaks(centered, samplesPerSecond) {
   if (!centered || centered.length < 5) return null;
   // Keep slope probe aligned with the first extrema candidate index (length - 3).
-  let expectedType = centered[centered.length - 2] - centered[centered.length - 3] >= 0 ? "trough" : "peak";
+  let expectedType =
+    centered[centered.length - 2] - centered[centered.length - 3] >= 0 ? "trough" : "peak";
   const extrema = [];
   let peakCount = 0;
   let troughCount = 0;
@@ -68,13 +71,14 @@ function rateFromLastTwoPeaks(centered, samplesPerSecond) {
     const right1 = centered[index + 1];
     const right2 = centered[index + 2];
     if (expectedType === "trough") {
-      const isTrough = value <= left2
-          && value <= left1
-          && value <= right1
-          && value <= right2
-          && (value < left2 || value < left1 || value < right1 || value < right2);
+      const isTrough =
+        value <= left2 &&
+        value <= left1 &&
+        value <= right1 &&
+        value <= right2 &&
+        (value < left2 || value < left1 || value < right1 || value < right2);
       if (isTrough) {
-        extrema.push({type: "trough", index});
+        extrema.push({ type: "trough", index });
         troughCount += 1;
         expectedType = "peak";
         // Skip one sample to avoid duplicate detections on flat bottoms.
@@ -82,13 +86,14 @@ function rateFromLastTwoPeaks(centered, samplesPerSecond) {
         continue;
       }
     } else {
-      const isPeak = value >= left2
-          && value >= left1
-          && value >= right1
-          && value >= right2
-          && (value > left2 || value > left1 || value > right1 || value > right2);
+      const isPeak =
+        value >= left2 &&
+        value >= left1 &&
+        value >= right1 &&
+        value >= right2 &&
+        (value > left2 || value > left1 || value > right1 || value > right2);
       if (isPeak) {
-        extrema.push({type: "peak", index});
+        extrema.push({ type: "peak", index });
         peakCount += 1;
         expectedType = "trough";
         // Skip one sample to avoid duplicate detections on flat tops.
@@ -111,15 +116,12 @@ function rateFromLastTwoPeaks(centered, samplesPerSecond) {
     if (value < minInWindow) minInWindow = value;
     if (value > maxInWindow) maxInWindow = value;
   }
-  if ((maxInWindow - minInWindow) < 12) return null;
+  if (maxInWindow - minInWindow < 12) return null;
   const rateHz = samplesPerSecond / (legSamples * 2);
   return Number.isFinite(rateHz) ? rateHz : null;
 }
 
-export function estimateTimelineVibratoRate({
-                                              ring,
-                                              samplesPerSecond,
-                                            }) {
+export function estimateTimelineVibratoRate({ ring, samplesPerSecond }) {
   const tailData = centeredFiniteTail({
     ring,
     samplesPerSecond,
@@ -134,10 +136,10 @@ export function estimateTimelineVibratoRate({
 }
 
 export function estimateTimelineCenterCents({
-                                              ring = null,
-                                              detectionAlphas = null,
-                                              recentSampleCount = 160,
-                                            }) {
+  ring = null,
+  detectionAlphas = null,
+  recentSampleCount = 160,
+}) {
   if (!ring || ring.sampleCount <= 0) return null;
   const start = Math.max(0, ring.sampleCount - Math.max(1, Math.floor(recentSampleCount)));
   let sum = 0;
@@ -163,14 +165,10 @@ function getSemitoneSteps(waveRange) {
 }
 
 function drawGrid(ctx, width, height, waveRange, options) {
-  const {
-    gridLeft = 0,
-    gridTop = 0,
-    gridBottom = height,
-  } = options;
+  const { gridLeft = 0, gridTop = 0, gridBottom = height } = options;
   const plotHeight = Math.max(1, gridBottom - gridTop);
-  const midY = gridTop + (plotHeight / 2);
-  const scaleY = (plotHeight / 2) / waveRange;
+  const midY = gridTop + plotHeight / 2;
+  const scaleY = plotHeight / 2 / waveRange;
   const steps = getSemitoneSteps(waveRange);
 
   ctx.strokeStyle = colors.slate[700];
@@ -186,18 +184,14 @@ function drawGrid(ctx, width, height, waveRange, options) {
 }
 
 export function drawSemitoneLabels(ctx, width, height, waveRange, options) {
-  const {
-    labelX = 8,
-    labelTop = 0,
-    labelBottom = height,
-  } = options;
+  const { labelX = 8, labelTop = 0, labelBottom = height } = options;
   ctx.fillStyle = colors.slate[300];
   ctx.font = "12px system-ui";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
   const plotHeight = Math.max(1, labelBottom - labelTop);
-  const midY = labelTop + (plotHeight / 2);
-  const scaleY = (plotHeight / 2) / waveRange;
+  const midY = labelTop + plotHeight / 2;
+  const scaleY = plotHeight / 2 / waveRange;
   const steps = getSemitoneSteps(waveRange);
   for (const step of steps) {
     const cents = step * 100;
@@ -206,7 +200,6 @@ export function drawSemitoneLabels(ctx, width, height, waveRange, options) {
     ctx.fillText(label, labelX, y);
   }
 }
-
 
 export class VibratoChartRenderer {
   constructor() {
@@ -223,20 +216,15 @@ export class VibratoChartRenderer {
     this.canvas = canvas;
   }
 
-  updateOptions({
-                  lineColorMode,
-                  renderScale,
-                }) {
+  updateOptions({ lineColorMode, renderScale }) {
     this.lineColorMode = lineColorMode;
     this.renderScale = renderScale;
   }
 
   drawBackground(ctx, width, height) {
     const cached = this.backgroundCache;
-    const cacheValid = cached
-        && cached.width === width
-        && cached.height === height
-        && cached.yRange === Y_RANGE;
+    const cacheValid =
+      cached && cached.width === width && cached.height === height && cached.yRange === Y_RANGE;
     if (cacheValid) {
       ctx.drawImage(cached.canvas, 0, 0);
       return;
@@ -272,11 +260,7 @@ export class VibratoChartRenderer {
     ctx.drawImage(bgCanvas, 0, 0);
   }
 
-  draw({
-         smoothedPitchCentsRing,
-         lineStrengthRing,
-         vibratoRateHzRing,
-       }) {
+  draw({ smoothedPitchCentsRing, lineStrengthRing, vibratoRateHzRing }) {
     const canvas = this.canvas;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -316,7 +300,8 @@ export class VibratoChartRenderer {
       xInsetLeft: PLOT_LEFT,
       yInsetTop: PLOT_Y_INSET,
       yInsetBottom: PLOT_Y_INSET,
-      mapColorValueToStroke: (intensity) => mapWaveformIntensityToStrokeColor(intensity, WAVEFORM_LINE_COLOR, this.lineColorMode),
+      mapColorValueToStroke: (intensity) =>
+        mapWaveformIntensityToStrokeColor(intensity, WAVEFORM_LINE_COLOR, this.lineColorMode),
       plotWidth: viewport.cssWidth,
       plotHeight: viewport.cssHeight,
     });

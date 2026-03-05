@@ -1,13 +1,12 @@
 import "@testing-library/jest-dom/vitest";
-import {afterEach, beforeEach, vi} from "vitest";
-import {cleanup} from "@testing-library/react";
+import { afterEach, beforeEach, vi } from "vitest";
+import { cleanup } from "@testing-library/react";
 
 vi.mock("soundfont-player", () => ({
   default: {
     instrument: vi.fn(async () => ({
       play: () => ({
-        stop: () => {
-        },
+        stop: () => {},
       }),
       buffers: {},
     })),
@@ -25,7 +24,7 @@ Object.defineProperty(document, "visibilityState", {
 
 document.hasFocus = () => hasFocus;
 
-window.__setForegroundForTests = ({visible, focused}) => {
+window.__setForegroundForTests = ({ visible, focused }) => {
   if (typeof visible === "boolean") {
     visibilityState = visible ? "visible" : "hidden";
   }
@@ -49,31 +48,28 @@ Object.defineProperty(window, "devicePixelRatio", {
   value: 1,
 });
 
-window.matchMedia = window.matchMedia || ((query) => ({
-  matches: false,
-  media: query,
-  onchange: null,
-  addEventListener: () => {
-  },
-  removeEventListener: () => {
-  },
-  addListener: () => {
-  },
-  removeListener: () => {
-  },
-  dispatchEvent: () => false,
-}));
+window.matchMedia =
+  window.matchMedia ||
+  ((query) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  }));
 
-window.ResizeObserver = window.ResizeObserver || class ResizeObserver {
-  observe() {
-  }
+window.ResizeObserver =
+  window.ResizeObserver ||
+  class ResizeObserver {
+    observe() {}
 
-  unobserve() {
-  }
+    unobserve() {}
 
-  disconnect() {
-  }
-};
+    disconnect() {}
+  };
 
 const rafHandles = new Map();
 let rafId = 1;
@@ -95,31 +91,21 @@ window.cancelAnimationFrame = (id) => {
 };
 
 const canvasCtx = {
-  setTransform: () => {
-  },
-  clearRect: () => {
-  },
-  beginPath: () => {
-  },
-  moveTo: () => {
-  },
-  lineTo: () => {
-  },
-  stroke: () => {
-  },
-  strokeText: () => {
-  },
-  fillText: () => {
-  },
-  drawImage: () => {
-  },
+  setTransform: () => {},
+  clearRect: () => {},
+  beginPath: () => {},
+  moveTo: () => {},
+  lineTo: () => {},
+  stroke: () => {},
+  strokeText: () => {},
+  fillText: () => {},
+  drawImage: () => {},
   createImageData: (width, height) => ({
     width,
     height,
     data: new Uint8ClampedArray(width * height * 4),
   }),
-  putImageData: () => {
-  },
+  putImageData: () => {},
   lineWidth: 1,
   strokeStyle: "",
   fillStyle: "",
@@ -141,30 +127,24 @@ class FakeAudioContext {
     this.state = "running";
     this.destination = {};
     this.audioWorklet = {
-      addModule: async () => {
-      },
+      addModule: async () => {},
     };
   }
 
-  async resume() {
-  }
+  async resume() {}
 
   createMediaStreamSource() {
     return {
-      connect: () => {
-      },
-      disconnect: () => {
-      },
+      connect: () => {},
+      disconnect: () => {},
     };
   }
 
   createGain() {
     return {
-      gain: {value: 0},
-      connect: () => {
-      },
-      disconnect: () => {
-      },
+      gain: { value: 0 },
+      connect: () => {},
+      disconnect: () => {},
     };
   }
 
@@ -184,10 +164,8 @@ class FakeAudioContext {
       getFloatFrequencyData: (array) => {
         array.fill(-120);
       },
-      connect: () => {
-      },
-      disconnect: () => {
-      },
+      connect: () => {},
+      disconnect: () => {},
     };
   }
 
@@ -203,11 +181,9 @@ class FakeAudioWorkletNode {
     };
   }
 
-  connect() {
-  }
+  connect() {}
 
-  disconnect() {
-  }
+  disconnect() {}
 }
 
 window.AudioContext = FakeAudioContext;
@@ -217,10 +193,11 @@ if (!navigator.mediaDevices) {
   navigator.mediaDevices = {};
 }
 navigator.mediaDevices.getUserMedia = vi.fn(async () => ({
-  getTracks: () => [{
-    stop: () => {
-    }
-  }],
+  getTracks: () => [
+    {
+      stop: () => {},
+    },
+  ],
 }));
 
 Object.defineProperty(navigator, "getBattery", {

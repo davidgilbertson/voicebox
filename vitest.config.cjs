@@ -3,7 +3,7 @@ module.exports = {
   esbuild: {
     jsx: "automatic",
     define: {
-      __BUILD_TIME_SYDNEY__: "\"Jan 1, 1970, 12:00 AM\"",
+      __BUILD_TIME_SYDNEY__: '"Jan 1, 1970, 12:00 AM"',
     },
   },
   test: {

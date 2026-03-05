@@ -1,17 +1,17 @@
 import React from "react";
-import {act, fireEvent, render, screen} from "@testing-library/react";
-import {afterEach, beforeEach, expect, test, vi} from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import Piano from "../../src/ScalesPage/Piano.jsx";
-import {playNote} from "../../src/ScalesPage/piano.js";
+import { playNote } from "../../src/ScalesPage/piano.js";
 
 const listeners = new Set();
 const playNoteMock = vi.fn(async (note, durationSeconds, options = {}) => {
   if (options.emitHighlight !== false) {
     for (const listener of listeners) {
-      listener({note, durationSeconds});
+      listener({ note, durationSeconds });
     }
   }
-  return {stop: vi.fn()};
+  return { stop: vi.fn() };
 });
 
 vi.mock("../../src/ScalesPage/piano.js", () => ({
@@ -35,8 +35,8 @@ afterEach(() => {
 });
 
 test("pressing a key triggers playback highlight while the note sounds", async () => {
-  render(<Piano/>);
-  const c4Key = screen.getByRole("button", {name: "C4"});
+  render(<Piano />);
+  const c4Key = screen.getByRole("button", { name: "C4" });
   const c4Overlay = document.getElementById("piano-key-C4");
   expect(c4Overlay).toBeTruthy();
   const overlayAnimate = vi.fn();
@@ -48,22 +48,22 @@ test("pressing a key triggers playback highlight while the note sounds", async (
 
   expect(playNoteMock).toHaveBeenCalledWith("C4", 0.8);
   expect(overlayAnimate).toHaveBeenCalledWith(
-      [
-        {opacity: 1, offset: 0},
-        {opacity: 0, offset: 0.05},
-        {opacity: 0.5, offset: 0.95},
-        {opacity: 1, offset: 1},
-      ],
-      {
-        duration: 800,
-        easing: "linear",
-        fill: "none",
-      },
+    [
+      { opacity: 1, offset: 0 },
+      { opacity: 0, offset: 0.05 },
+      { opacity: 0.5, offset: 0.95 },
+      { opacity: 1, offset: 1 },
+    ],
+    {
+      duration: 800,
+      easing: "linear",
+      fill: "none",
+    },
   );
 });
 
 test("programmatic played MIDI notes highlight matching piano keys", async () => {
-  render(<Piano/>);
+  render(<Piano />);
   const d2Overlay = document.getElementById("piano-key-D2");
   expect(d2Overlay).toBeTruthy();
   const overlayAnimate = vi.fn();
@@ -74,16 +74,16 @@ test("programmatic played MIDI notes highlight matching piano keys", async () =>
   });
 
   expect(overlayAnimate).toHaveBeenCalledWith(
-      [
-        {opacity: 1, offset: 0},
-        {opacity: 0, offset: 0.05},
-        {opacity: 0.5, offset: 0.95},
-        {opacity: 1, offset: 1},
-      ],
-      {
-        duration: 250,
-        easing: "linear",
-        fill: "none",
-      },
+    [
+      { opacity: 1, offset: 0 },
+      { opacity: 0, offset: 0.05 },
+      { opacity: 0.5, offset: 0.95 },
+      { opacity: 1, offset: 1 },
+    ],
+    {
+      duration: 250,
+      easing: "linear",
+      fill: "none",
+    },
   );
 });

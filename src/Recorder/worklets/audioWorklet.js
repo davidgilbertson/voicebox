@@ -10,7 +10,8 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (event) => {
       if (event?.data?.type !== "set-batch-size") return;
       const nextBatchSize = Math.floor(event.data.batchSize);
-      if (!Number.isFinite(nextBatchSize) || nextBatchSize <= 0 || nextBatchSize === this.batchSize) return;
+      if (!Number.isFinite(nextBatchSize) || nextBatchSize <= 0 || nextBatchSize === this.batchSize)
+        return;
       this.batchSize = nextBatchSize;
       this.pendingSampleCount = 0;
       this.pendingSumSquares = 0;

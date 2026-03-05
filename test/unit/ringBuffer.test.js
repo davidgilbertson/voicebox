@@ -1,6 +1,6 @@
-import {test} from "vitest";
+import { test } from "vitest";
 import assert from "node:assert/strict";
-import {RingBuffer} from "../../src/Recorder/ringBuffer.js";
+import { RingBuffer } from "../../src/Recorder/ringBuffer.js";
 
 function orderedValues(ring) {
   return Array.from(ring.slice());

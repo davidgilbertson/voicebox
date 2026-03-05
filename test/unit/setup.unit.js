@@ -1,4 +1,4 @@
-import {afterEach, beforeEach, vi} from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 
 if (typeof globalThis.navigator === "undefined") {
   Object.defineProperty(globalThis, "navigator", {

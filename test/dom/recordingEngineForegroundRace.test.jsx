@@ -1,5 +1,5 @@
-import {afterEach, expect, test, vi} from "vitest";
-import {RecordingEngine} from "../../src/Recorder/RecordingEngine.js";
+import { afterEach, expect, test, vi } from "vitest";
+import { RecordingEngine } from "../../src/Recorder/RecordingEngine.js";
 
 function deferred() {
   let resolve;
@@ -8,7 +8,7 @@ function deferred() {
     resolve = res;
     reject = rej;
   });
-  return {promise, resolve, reject};
+  return { promise, resolve, reject };
 }
 
 async function flushMicrotasks() {
@@ -18,11 +18,11 @@ async function flushMicrotasks() {
 }
 
 afterEach(() => {
-  window.__setForegroundForTests({visible: true, focused: true});
+  window.__setForegroundForTests({ visible: true, focused: true });
 });
 
 test("pending audio start is cancelled if app backgrounds before start completes", async () => {
-  window.__setForegroundForTests({visible: true, focused: true});
+  window.__setForegroundForTests({ visible: true, focused: true });
   const getUserMediaDeferred = deferred();
   const stopTrack = vi.fn();
   const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
@@ -41,12 +41,12 @@ test("pending audio start is cancelled if app backgrounds before start completes
     engine.setWantsToRun(true);
     engine.startIfNeeded();
 
-    window.__setForegroundForTests({visible: false, focused: false});
+    window.__setForegroundForTests({ visible: false, focused: false });
     window.dispatchEvent(new Event("blur"));
     document.dispatchEvent(new Event("visibilitychange"));
 
     getUserMediaDeferred.resolve({
-      getTracks: () => [{stop: stopTrack}],
+      getTracks: () => [{ stop: stopTrack }],
     });
     await flushMicrotasks();
 

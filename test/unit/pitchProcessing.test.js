@@ -1,6 +1,9 @@
-import {test} from "vitest";
+import { test } from "vitest";
 import assert from "node:assert/strict";
-import {createPitchProcessingState, processPitchSample} from "../../src/Recorder/pitchProcessing.js";
+import {
+  createPitchProcessingState,
+  processPitchSample,
+} from "../../src/Recorder/pitchProcessing.js";
 
 function silencePauseStepThreshold(columnRateHz, silencePauseThresholdMs) {
   return Math.max(1, Math.round((silencePauseThresholdMs / 1000) * columnRateHz));
@@ -142,7 +145,10 @@ test("each write keeps intensity samples aligned with pitch samples", () => {
   const intensities = orderedIntensities(state);
   assert.equal(intensities.length, state.lineStrengthRing.sampleCount);
   assert.equal(intensities.length, 2);
-  assert.deepEqual(intensities.map((value) => Number(value.toFixed(3))), [0.2, 0.8]);
+  assert.deepEqual(
+    intensities.map((value) => Number(value.toFixed(3))),
+    [0.2, 0.8],
+  );
 });
 
 test("each write initializes vibrato rate to NaN", () => {

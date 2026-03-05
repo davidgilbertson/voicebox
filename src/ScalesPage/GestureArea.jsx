@@ -1,5 +1,5 @@
-import {useCallback, useEffect, useRef, useState} from "react";
-import {ArrowDown, ArrowRight, ArrowUp} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowDown, ArrowRight, ArrowUp } from "lucide-react";
 
 const TAP_GESTURE_MAX_PX = 10;
 const SWIPE_GESTURE_THRESHOLD_PX = 100;
@@ -7,7 +7,11 @@ const SWIPE_FLASH_HOLD_MS = 140;
 const SWIPE_FLASH_TOTAL_MS = 700;
 
 function isGestureTapTarget(element) {
-  return element?.closest?.("button,input,select,textarea,a,label,[role='button'],[data-no-gesture-tap]") !== null;
+  return (
+    element?.closest?.(
+      "button,input,select,textarea,a,label,[role='button'],[data-no-gesture-tap]",
+    ) !== null
+  );
 }
 
 function classifyGesture(deltaX, deltaY) {
@@ -22,20 +26,28 @@ function classifyGesture(deltaX, deltaY) {
 
 function swipeDirection(deltaX, deltaY) {
   if (Math.abs(deltaX) >= Math.abs(deltaY)) {
-    return deltaX >= SWIPE_GESTURE_THRESHOLD_PX ? "right" : deltaX <= -SWIPE_GESTURE_THRESHOLD_PX ? "left" : null;
+    return deltaX >= SWIPE_GESTURE_THRESHOLD_PX
+      ? "right"
+      : deltaX <= -SWIPE_GESTURE_THRESHOLD_PX
+        ? "left"
+        : null;
   }
-  return deltaY <= -SWIPE_GESTURE_THRESHOLD_PX ? "up" : deltaY >= SWIPE_GESTURE_THRESHOLD_PX ? "down" : null;
+  return deltaY <= -SWIPE_GESTURE_THRESHOLD_PX
+    ? "up"
+    : deltaY >= SWIPE_GESTURE_THRESHOLD_PX
+      ? "down"
+      : null;
 }
 
 export default function GestureArea({
-                                      onTap,
-                                      onSwipe,
-                                      externalFlashSignal = null,
-                                      showHelp = false,
-                                      helpContent = null,
-                                      className = "",
-                                      testId,
-                                    }) {
+  onTap,
+  onSwipe,
+  externalFlashSignal = null,
+  showHelp = false,
+  helpContent = null,
+  className = "",
+  testId,
+}) {
   const gestureRef = useRef({
     pointerId: null,
     startX: 0,
@@ -60,7 +72,7 @@ export default function GestureArea({
 
   const showSwipeFlash = useCallback((direction) => {
     if (direction !== "up" && direction !== "down" && direction !== "right") return;
-    setSwipeFlash((prev) => ({direction, id: (prev?.id ?? 0) + 1}));
+    setSwipeFlash((prev) => ({ direction, id: (prev?.id ?? 0) + 1 }));
     setSwipeFlashFading(false);
     if (swipeFlashFadeTimeoutRef.current) {
       window.clearTimeout(swipeFlashFadeTimeoutRef.current);
@@ -86,8 +98,8 @@ export default function GestureArea({
     const gesture = gestureRef.current;
     if (gesture.handled) return true;
     if (
-        Math.abs(deltaX) < SWIPE_GESTURE_THRESHOLD_PX &&
-        Math.abs(deltaY) < SWIPE_GESTURE_THRESHOLD_PX
+      Math.abs(deltaX) < SWIPE_GESTURE_THRESHOLD_PX &&
+      Math.abs(deltaY) < SWIPE_GESTURE_THRESHOLD_PX
     ) {
       return false;
     }
@@ -139,28 +151,34 @@ export default function GestureArea({
     gestureRef.current.handled = false;
   };
 
-  const SwipeFlashIcon = swipeFlash?.direction === "up" ? ArrowUp
-      : swipeFlash?.direction === "down" ? ArrowDown
-          : swipeFlash?.direction === "right" ? ArrowRight
-              : null;
+  const SwipeFlashIcon =
+    swipeFlash?.direction === "up"
+      ? ArrowUp
+      : swipeFlash?.direction === "down"
+        ? ArrowDown
+        : swipeFlash?.direction === "right"
+          ? ArrowRight
+          : null;
 
   return (
-      <div
-          data-testid={testId}
-          className={className}
-          onPointerDownCapture={onPointerDownCapture}
-          onPointerMoveCapture={onPointerMoveCapture}
-          onPointerUpCapture={onPointerUpCapture}
-          onPointerCancelCapture={onPointerCancelCapture}
-      >
-        {showHelp ? helpContent : SwipeFlashIcon ? (
-            <SwipeFlashIcon
-                key={swipeFlash.id}
-                className={`h-24 w-24 text-blue-300 transition-opacity duration-500 ${
-                    swipeFlashFading ? "opacity-0" : "opacity-100"
-                }`}
-            />
-        ) : null}
-      </div>
+    <div
+      data-testid={testId}
+      className={className}
+      onPointerDownCapture={onPointerDownCapture}
+      onPointerMoveCapture={onPointerMoveCapture}
+      onPointerUpCapture={onPointerUpCapture}
+      onPointerCancelCapture={onPointerCancelCapture}
+    >
+      {showHelp ? (
+        helpContent
+      ) : SwipeFlashIcon ? (
+        <SwipeFlashIcon
+          key={swipeFlash.id}
+          className={`h-24 w-24 text-blue-300 transition-opacity duration-500 ${
+            swipeFlashFading ? "opacity-0" : "opacity-100"
+          }`}
+        />
+      ) : null}
+    </div>
   );
 }

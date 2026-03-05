@@ -1,10 +1,10 @@
-import {expect, test, vi} from "vitest";
-import {createBatteryUsageMonitor} from "../../src/Recorder/batteryUsage.js";
+import { expect, test, vi } from "vitest";
+import { createBatteryUsageMonitor } from "../../src/Recorder/batteryUsage.js";
 
 test("returns -- until at least one minute has elapsed", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(1_000);
-  const battery = {level: 0.8, charging: false};
+  const battery = { level: 0.8, charging: false };
   navigator.getBattery = vi.fn(async () => battery);
   const monitor = createBatteryUsageMonitor();
 
@@ -18,7 +18,7 @@ test("returns -- until at least one minute has elapsed", async () => {
 test("computes %/min from app-open baseline to current charge", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(5_000);
-  const battery = {level: 0.8, charging: false};
+  const battery = { level: 0.8, charging: false };
   navigator.getBattery = vi.fn(async () => battery);
   const monitor = createBatteryUsageMonitor();
 
@@ -36,7 +36,7 @@ test("computes %/min from app-open baseline to current charge", async () => {
 test("returns null when charging or battery info is unavailable", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(10_000);
-  const battery = {level: 0.7, charging: false};
+  const battery = { level: 0.7, charging: false };
   navigator.getBattery = vi.fn(async () => battery);
   const monitor = createBatteryUsageMonitor();
 
@@ -47,8 +47,8 @@ test("returns null when charging or battery info is unavailable", async () => {
   expect(await monitor.readUsagePerMinute()).toBeNull();
 
   navigator.getBattery = vi.fn(async () => ({
-      level: undefined,
-      charging: false,
+    level: undefined,
+    charging: false,
   }));
   const unavailableMonitor = createBatteryUsageMonitor();
   expect(await unavailableMonitor.readUsagePerMinute()).toBeNull();

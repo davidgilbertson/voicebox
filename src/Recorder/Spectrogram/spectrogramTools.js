@@ -1,15 +1,19 @@
 import colors from "tailwindcss/colors";
-import {clamp, getColorPalette} from "../../tools.js";
-import {clearCanvasWithViewport, createCanvasViewportState, syncCanvasViewport} from "../canvasTools.js";
+import { clamp, getColorPalette } from "../../tools.js";
+import {
+  clearCanvasWithViewport,
+  createCanvasViewportState,
+  syncCanvasViewport,
+} from "../canvasTools.js";
 
 const LABEL_X = 4;
 const PLOT_LEFT = 0;
 const PLOT_Y_INSET = 0;
 const C1_HZ = 32.7031956626;
 const EXTRA_HZ_LABELS = [
-  {hz: 3000, label: "3k"},
-  {hz: 5000, label: "5k"},
-  {hz: 10000, label: "10k"},
+  { hz: 3000, label: "3k" },
+  { hz: 5000, label: "5k" },
+  { hz: 10000, label: "10k" },
 ];
 const LABEL_FONT = "12px system-ui";
 const LABEL_STROKE_WIDTH = 3;
@@ -46,7 +50,7 @@ function drawColumnImage({
     const value = lowValue + (highValue - lowValue) * mix;
     const valueIndex = clamp(Math.round(value * 255), 0, 255);
     const colorOffset = valueIndex * 3;
-    const pixelOffset = ((y * imageWidth) + xOffset) * 4;
+    const pixelOffset = (y * imageWidth + xOffset) * 4;
     pixels[pixelOffset] = palette[colorOffset];
     pixels[pixelOffset + 1] = palette[colorOffset + 1];
     pixels[pixelOffset + 2] = palette[colorOffset + 2];
@@ -87,11 +91,7 @@ export class SpectrogramChartRenderer {
     this.canvas = canvas;
   }
 
-  updateOptions({
-    minHz,
-    maxHz,
-    renderScale,
-  }) {
+  updateOptions({ minHz, maxHz, renderScale }) {
     this.minHz = minHz;
     this.maxHz = maxHz;
     this.renderScale = renderScale;
@@ -139,10 +139,7 @@ export class SpectrogramChartRenderer {
     };
   }
 
-  draw({
-    binCount,
-    sampleRate,
-  }) {
+  draw({ binCount, sampleRate }) {
     const canvas = this.canvas;
     if (!canvas || !binCount || !sampleRate) return;
     const ctx = canvas.getContext("2d");
@@ -167,7 +164,8 @@ export class SpectrogramChartRenderer {
       this.renderCanvas = document.createElement("canvas");
     }
     const renderCanvas = this.renderCanvas;
-    const renderResized = renderCanvas.width !== renderWidth || renderCanvas.height !== renderHeight;
+    const renderResized =
+      renderCanvas.width !== renderWidth || renderCanvas.height !== renderHeight;
     let previousCanvas = null;
     if (renderResized && renderCanvas.width > 0 && renderCanvas.height > 0) {
       previousCanvas = document.createElement("canvas");
@@ -193,12 +191,13 @@ export class SpectrogramChartRenderer {
 
     const clampedMinHz = clamp(this.minHz, 1e-3, this.maxHz);
     const clampedMaxHz = Math.max(clampedMinHz + 1e-3, Math.max(this.minHz, this.maxHz));
-    const hzPerBin = (sampleRate / 2) / Math.max(1, binCount - 1);
+    const hzPerBin = sampleRate / 2 / Math.max(1, binCount - 1);
     const frameState = this.frameState;
-    const mappingChanged = frameState.binCount !== binCount
-        || frameState.minHz !== clampedMinHz
-        || frameState.maxHz !== clampedMaxHz
-        || frameState.sampleRate !== sampleRate;
+    const mappingChanged =
+      frameState.binCount !== binCount ||
+      frameState.minHz !== clampedMinHz ||
+      frameState.maxHz !== clampedMaxHz ||
+      frameState.sampleRate !== sampleRate;
     if (mappingChanged) {
       renderCtx.clearRect(0, 0, renderWidth, renderHeight);
       const filteredPending = [];
@@ -216,15 +215,15 @@ export class SpectrogramChartRenderer {
         const sourceX = previousWidth - sourceWidth;
         const targetX = renderWidth - sourceWidth;
         renderCtx.drawImage(
-            previousCanvas,
-            sourceX,
-            0,
-            sourceWidth,
-            previousHeight,
-            targetX,
-            0,
-            sourceWidth,
-            renderHeight
+          previousCanvas,
+          sourceX,
+          0,
+          sourceWidth,
+          previousHeight,
+          targetX,
+          0,
+          sourceWidth,
+          renderHeight,
         );
       } else {
         renderCtx.clearRect(0, 0, renderWidth, renderHeight);
@@ -232,12 +231,13 @@ export class SpectrogramChartRenderer {
     }
 
     const yCache = this.yBinCache;
-    const needsYCache = !yCache
-        || yCache.height !== renderHeight
-        || yCache.binCount !== binCount
-        || yCache.minHz !== clampedMinHz
-        || yCache.maxHz !== clampedMaxHz
-        || yCache.sampleRate !== sampleRate;
+    const needsYCache =
+      !yCache ||
+      yCache.height !== renderHeight ||
+      yCache.binCount !== binCount ||
+      yCache.minHz !== clampedMinHz ||
+      yCache.maxHz !== clampedMaxHz ||
+      yCache.sampleRate !== sampleRate;
     if (needsYCache) {
       const low = new Uint16Array(renderHeight);
       const mix = new Float32Array(renderHeight);
@@ -269,15 +269,15 @@ export class SpectrogramChartRenderer {
       const tailColumns = this.collectTailColumns(columnsToDraw);
       if (columnsToDraw < renderWidth) {
         renderCtx.drawImage(
-            renderCanvas,
-            columnsToDraw,
-            0,
-            renderWidth - columnsToDraw,
-            renderHeight,
-            0,
-            0,
-            renderWidth - columnsToDraw,
-            renderHeight
+          renderCanvas,
+          columnsToDraw,
+          0,
+          renderWidth - columnsToDraw,
+          renderHeight,
+          0,
+          0,
+          renderWidth - columnsToDraw,
+          renderHeight,
         );
       }
       const strip = renderCtx.createImageData(columnsToDraw, renderHeight);
@@ -313,18 +313,20 @@ export class SpectrogramChartRenderer {
       this.labelCanvas = document.createElement("canvas");
     }
     const labelCanvas = this.labelCanvas;
-    const labelResized = labelCanvas.width !== viewport.width || labelCanvas.height !== viewport.height;
+    const labelResized =
+      labelCanvas.width !== viewport.width || labelCanvas.height !== viewport.height;
     if (labelResized) {
       labelCanvas.width = viewport.width;
       labelCanvas.height = viewport.height;
     }
     const labelState = this.labelState;
-    const needsLabelRedraw = labelResized
-        || viewport.changed
-        || labelState.cssWidth !== viewport.cssWidth
-        || labelState.cssHeight !== viewport.cssHeight
-        || labelState.minHz !== clampedMinHz
-        || labelState.maxHz !== clampedMaxHz;
+    const needsLabelRedraw =
+      labelResized ||
+      viewport.changed ||
+      labelState.cssWidth !== viewport.cssWidth ||
+      labelState.cssHeight !== viewport.cssHeight ||
+      labelState.minHz !== clampedMinHz ||
+      labelState.maxHz !== clampedMaxHz;
     if (needsLabelRedraw) {
       const labelCtx = labelCanvas.getContext("2d");
       if (labelCtx) {

@@ -1,7 +1,7 @@
 import React from "react";
-import {fireEvent, render, screen, waitFor} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import {test, expect, vi} from "vitest";
+import { test, expect, vi } from "vitest";
 import AppShell from "../../src/AppShell.jsx";
 import {
   readAutoPauseOnSilence,
@@ -15,13 +15,21 @@ import {
 
 test("settings defaults and persistence work via localStorage", async () => {
   const user = userEvent.setup();
-  render(<AppShell/>);
+  render(<AppShell />);
 
   await user.click(screen.getByLabelText("Open settings"));
-  const autoPauseCheckbox = screen.getByRole("checkbox", {name: /Auto pause on silence/i});
-  const runAt30FpsCheckbox = screen.getByRole("checkbox", {name: /Run at 30 FPS/i});
-  const halfResolutionCanvasCheckbox = screen.getByRole("checkbox", {name: /Half-resolution canvas/i});
-  const halfResolutionSpectrogramCheckbox = screen.getByRole("checkbox", {name: /Half-resolution spectrogram/i});
+  const autoPauseCheckbox = screen.getByRole("checkbox", {
+    name: /Auto pause on silence/i,
+  });
+  const runAt30FpsCheckbox = screen.getByRole("checkbox", {
+    name: /Run at 30 FPS/i,
+  });
+  const halfResolutionCanvasCheckbox = screen.getByRole("checkbox", {
+    name: /Half-resolution canvas/i,
+  });
+  const halfResolutionSpectrogramCheckbox = screen.getByRole("checkbox", {
+    name: /Half-resolution spectrogram/i,
+  });
 
   expect(autoPauseCheckbox).toBeChecked();
   expect(runAt30FpsCheckbox).not.toBeChecked();
@@ -44,7 +52,7 @@ test("settings defaults and persistence work via localStorage", async () => {
 });
 
 test("spectrogram frequency settings are editable and persisted", async () => {
-  render(<AppShell/>);
+  render(<AppShell />);
   fireEvent.click(screen.getByLabelText("Open settings"));
   const minInput = screen.getByLabelText("Spectrogram minimum frequency (Hz)");
   const maxInput = screen.getByLabelText("Spectrogram maximum frequency (Hz)");
@@ -56,8 +64,8 @@ test("spectrogram frequency settings are editable and persisted", async () => {
   expect(maxInput).not.toHaveAttribute("min");
   expect(maxInput).not.toHaveAttribute("max");
 
-  fireEvent.change(minInput, {target: {value: "55"}});
-  fireEvent.change(maxInput, {target: {value: "7200"}});
+  fireEvent.change(minInput, { target: { value: "55" } });
+  fireEvent.change(maxInput, { target: { value: "7200" } });
   fireEvent.blur(minInput);
   fireEvent.blur(maxInput);
 
@@ -69,15 +77,15 @@ test("spectrogram frequency settings are editable and persisted", async () => {
 
 test("spectrogram frequency inputs can be cleared while editing and commit on blur", async () => {
   const user = userEvent.setup();
-  render(<AppShell/>);
+  render(<AppShell />);
 
   await user.click(screen.getByLabelText("Open settings"));
   const minInput = screen.getByLabelText("Spectrogram minimum frequency (Hz)");
 
-  fireEvent.change(minInput, {target: {value: ""}});
+  fireEvent.change(minInput, { target: { value: "" } });
   expect(minInput).toHaveValue(null);
 
-  fireEvent.change(minInput, {target: {value: "65"}});
+  fireEvent.change(minInput, { target: { value: "65" } });
   fireEvent.blur(minInput);
 
   await waitFor(() => {
@@ -87,20 +95,20 @@ test("spectrogram frequency inputs can be cleared while editing and commit on bl
 
 test("temporary pitch detector overlay buttons are removed", async () => {
   const user = userEvent.setup();
-  render(<AppShell/>);
+  render(<AppShell />);
 
-  await user.click(screen.getByRole("button", {name: "Pitch"}));
-  expect(screen.queryByRole("button", {name: "FFT residual"})).toBeNull();
-  expect(screen.queryByRole("button", {name: "FFT raw"})).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Pitch" }));
+  expect(screen.queryByRole("button", { name: "FFT residual" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "FFT raw" })).toBeNull();
 });
 
 test("temporary window/bin overlay buttons are removed", async () => {
   const user = userEvent.setup();
-  render(<AppShell/>);
+  render(<AppShell />);
 
-  await user.click(screen.getByRole("button", {name: "Pitch"}));
-  expect(screen.queryByRole("button", {name: "WINDOW_SIZE 4096"})).toBeNull();
-  expect(screen.queryByRole("button", {name: "SPECTROGRAM_BINS 8192"})).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Pitch" }));
+  expect(screen.queryByRole("button", { name: "WINDOW_SIZE 4096" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "SPECTROGRAM_BINS 8192" })).toBeNull();
 });
 
 test("battery use shows -- in the first minute", async () => {
@@ -111,7 +119,7 @@ test("battery use shows -- in the first minute", async () => {
   navigator.getBattery = vi.fn(async () => battery);
 
   const user = userEvent.setup();
-  render(<AppShell/>);
+  render(<AppShell />);
 
   await user.click(screen.getByLabelText("Open settings"));
   expect(await screen.findByText("Battery use")).toBeInTheDocument();
@@ -125,7 +133,7 @@ test("battery use shows NA while charging", async () => {
   }));
 
   const user = userEvent.setup();
-  render(<AppShell/>);
+  render(<AppShell />);
 
   await user.click(screen.getByLabelText("Open settings"));
   await waitFor(() => {
@@ -141,7 +149,7 @@ test("battery use shows NA when battery level is unavailable", async () => {
   }));
 
   const user = userEvent.setup();
-  render(<AppShell/>);
+  render(<AppShell />);
 
   await user.click(screen.getByLabelText("Open settings"));
   await waitFor(() => {
@@ -152,10 +160,10 @@ test("battery use shows NA when battery level is unavailable", async () => {
 
 test("pitch line color mode persists from settings", async () => {
   const user = userEvent.setup();
-  render(<AppShell/>);
+  render(<AppShell />);
 
   await user.click(screen.getByLabelText("Open settings"));
-  const orangeRadio = screen.getByRole("radio", {name: "Orange"});
+  const orangeRadio = screen.getByRole("radio", { name: "Orange" });
   await user.click(orangeRadio);
 
   await waitFor(() => {
@@ -165,11 +173,13 @@ test("pitch line color mode persists from settings", async () => {
 
 test("pitch line color options are ordered and inferno is removed", async () => {
   const user = userEvent.setup();
-  render(<AppShell/>);
+  render(<AppShell />);
 
   await user.click(screen.getByLabelText("Open settings"));
-  const radios = screen.getAllByRole("radio", {name: /.+/});
-  const colorModeLabels = radios.map((radio) => radio.closest("label")?.textContent?.trim()).filter(Boolean);
+  const radios = screen.getAllByRole("radio", { name: /.+/ });
+  const colorModeLabels = radios
+    .map((radio) => radio.closest("label")?.textContent?.trim())
+    .filter(Boolean);
 
   expect(colorModeLabels).toEqual([
     "Terrain",
@@ -180,26 +190,26 @@ test("pitch line color options are ordered and inferno is removed", async () => 
     "Orange",
     "Green",
   ]);
-  expect(screen.queryByRole("radio", {name: "Inferno"})).toBeNull();
+  expect(screen.queryByRole("radio", { name: "Inferno" })).toBeNull();
 });
 
 test("invalid persisted pitch line color mode falls back to terrain", async () => {
   localStorage.setItem("voicebox.pitchLineColorMode", "red");
   const user = userEvent.setup();
-  render(<AppShell/>);
+  render(<AppShell />);
 
   await user.click(screen.getByLabelText("Open settings"));
-  const terrainRadio = screen.getByRole("radio", {name: "Terrain"});
+  const terrainRadio = screen.getByRole("radio", { name: "Terrain" });
   expect(terrainRadio).toBeChecked();
   expect(readPitchLineColorMode()).toBe("terrain");
 });
 
 test("settings about link points to the local about page", async () => {
   const user = userEvent.setup();
-  render(<AppShell/>);
+  render(<AppShell />);
 
   await user.click(screen.getByLabelText("Open settings"));
-  const aboutLink = screen.getByRole("link", {name: "Help"});
+  const aboutLink = screen.getByRole("link", { name: "Help" });
 
   expect(aboutLink).toHaveAttribute("href", "/about");
 });

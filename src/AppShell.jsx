@@ -1,13 +1,13 @@
-import {Settings} from "lucide-react";
-import {useEffect, useState} from "react";
+import { Settings } from "lucide-react";
+import { useEffect, useState } from "react";
 import Recorder from "./Recorder/Recorder.jsx";
 import ScalesPage from "./ScalesPage/ScalesPage.jsx";
 import SettingsPanel from "./SettingsPanel.jsx";
-import {getRecordingEngine} from "./Recorder/RecordingEngine.js";
-import {getPlaybackEngine} from "./ScalesPage/PlaybackEngine.js";
-import {readActiveView, writeActiveView} from "./AppShell/config.js";
-import {PITCH_NOTE_OPTIONS} from "./pitchScale.js";
-import {computeIsForeground, subscribeToForegroundChanges} from "./foreground.js";
+import { getRecordingEngine } from "./Recorder/RecordingEngine.js";
+import { getPlaybackEngine } from "./ScalesPage/PlaybackEngine.js";
+import { readActiveView, writeActiveView } from "./AppShell/config.js";
+import { PITCH_NOTE_OPTIONS } from "./pitchScale.js";
+import { computeIsForeground, subscribeToForegroundChanges } from "./foreground.js";
 import {
   readScaleMaxNote,
   readScaleMinNote,
@@ -37,17 +37,21 @@ import {
   writeSpectrogramMinHz,
 } from "./Recorder/config.js";
 
-export default function AppShell({downloadingUpdate = false}) {
+export default function AppShell({ downloadingUpdate = false }) {
   const recorderEngine = getRecordingEngine();
   const scalesPlaybackEngine = getPlaybackEngine();
   const [activeView, setActiveView] = useState(() => readActiveView());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scaleMinNote, setScaleMinNote] = useState(() => readScaleMinNote());
   const [scaleMaxNote, setScaleMaxNote] = useState(() => readScaleMaxNote());
-  const [keepRunningInBackground, setKeepRunningInBackground] = useState(() => readKeepRunningInBackground());
+  const [keepRunningInBackground, setKeepRunningInBackground] = useState(() =>
+    readKeepRunningInBackground(),
+  );
   const [autoPauseOnSilence, setAutoPauseOnSilence] = useState(() => readAutoPauseOnSilence());
   const [runAt30Fps, setRunAt30Fps] = useState(() => readRunAt30Fps());
-  const [halfResolutionCanvas, setHalfResolutionCanvas] = useState(() => readHalfResolutionCanvas());
+  const [halfResolutionCanvas, setHalfResolutionCanvas] = useState(() =>
+    readHalfResolutionCanvas(),
+  );
   const [highResSpectrogram, setHighResSpectrogram] = useState(() => readHighResSpectrogram());
   const [pitchMinNote, setPitchMinNote] = useState(() => readPitchMinNote());
   const [pitchMaxNote, setPitchMaxNote] = useState(() => readPitchMaxNote());
@@ -121,13 +125,7 @@ export default function AppShell({downloadingUpdate = false}) {
       keepRunningInBackground,
       isForeground,
     });
-  }, [
-    isForeground,
-    keepRunningInBackground,
-    scaleMaxNote,
-    scaleMinNote,
-    scalesPlaybackEngine,
-  ]);
+  }, [isForeground, keepRunningInBackground, scaleMaxNote, scaleMinNote, scalesPlaybackEngine]);
 
   const onViewChange = (nextView) => {
     setActiveView(nextView);
@@ -214,155 +212,155 @@ export default function AppShell({downloadingUpdate = false}) {
   };
 
   return (
-      <div className="h-[var(--app-height)] w-full overflow-hidden bg-black text-slate-100 select-none">
-        <div
-            data-testid="sw-update-banner"
-            aria-live="polite"
-            className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center px-2 transition-all duration-200 ${
-                downloadingUpdate ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0"
-            }`}
-        >
-          <div className="mt-1 flex h-7 items-center rounded-md bg-green-500 px-3 text-[11px] font-semibold uppercase tracking-wide text-green-950">
-            Downloading a new version
-          </div>
-        </div>
-        <div className="flex h-full w-full items-stretch">
-          <main className="relative flex min-h-0 flex-1 flex-col bg-black md:h-full md:w-full md:flex-none">
-            {showingScales ? (
-                <ScalesPage
-                    scaleMinNote={scaleMinNote}
-                    scaleMaxNote={scaleMaxNote}
-                    keepRunningInBackground={keepRunningInBackground}
-                    isForeground={isForeground}
-                    engine={scalesPlaybackEngine}
-                />
-            ) : (
-                <Recorder
-                    activeView={activeView}
-                    settingsOpen={settingsOpen}
-                    keepRunningInBackground={keepRunningInBackground}
-                    autoPauseOnSilence={autoPauseOnSilence}
-                    runAt30Fps={runAt30Fps}
-                    halfResolutionCanvas={halfResolutionCanvas}
-                    highResSpectrogram={highResSpectrogram}
-                    pitchMinNote={pitchMinNote}
-                    pitchMaxNote={pitchMaxNote}
-                    pitchLineColorMode={pitchLineColorMode}
-                    spectrogramMinHz={spectrogramMinHz}
-                    spectrogramMaxHz={spectrogramMaxHz}
-                    onSettingsRuntimeChange={setRuntimeSettings}
-                    engine={recorderEngine}
-                />
-            )}
-            <footer className="relative flex h-12 items-stretch gap-2 pr-2 pt-0 pb-0 pl-0 text-xs text-slate-300">
-              <div className="flex flex-1 items-stretch">
-                <button
-                    type="button"
-                    onClick={() => onViewChange("scales")}
-                    aria-pressed={activeView === "scales"}
-                    className={`relative h-full flex-1 rounded-none px-1 text-[15px] font-semibold transition-colors ${
-                        activeView === "scales"
-                            ? "text-blue-400"
-                            : "text-slate-300 hover:text-slate-100 active:text-slate-200"
-                    }`}
-                >
-                  Scales
-                  {activeView === "scales" ? (
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-blue-400"/>
-                  ) : null}
-                </button>
-                <button
-                    type="button"
-                    onClick={() => onViewChange("spectrogram")}
-                    aria-pressed={activeView === "spectrogram"}
-                    className={`relative h-full flex-[1.25] rounded-none px-1 text-[15px] font-semibold transition-colors ${
-                        activeView === "spectrogram"
-                            ? "text-blue-400"
-                            : "text-slate-300 hover:text-slate-100 active:text-slate-200"
-                    }`}
-                >
-                  Spectrogram
-                  {activeView === "spectrogram" ? (
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-blue-400"/>
-                  ) : null}
-                </button>
-                <button
-                    type="button"
-                    onClick={() => onViewChange("pitch")}
-                    aria-pressed={activeView === "pitch"}
-                    className={`relative h-full flex-1 rounded-none px-1 text-[15px] font-semibold transition-colors ${
-                        activeView === "pitch"
-                            ? "text-blue-400"
-                            : "text-slate-300 hover:text-slate-100 active:text-slate-200"
-                    }`}
-                >
-                  Pitch
-                  {activeView === "pitch" ? (
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-blue-400"/>
-                  ) : null}
-                </button>
-                <button
-                    type="button"
-                    onClick={() => onViewChange("vibrato")}
-                    aria-pressed={activeView === "vibrato"}
-                    className={`relative h-full flex-1 rounded-none px-1 text-[15px] font-semibold transition-colors ${
-                        activeView === "vibrato"
-                            ? "text-blue-400"
-                            : "text-slate-300 hover:text-slate-100 active:text-slate-200"
-                    }`}
-                >
-                  Vibrato
-                  {activeView === "vibrato" ? (
-                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-blue-400"/>
-                  ) : null}
-                </button>
-              </div>
-              <div className="flex w-9 items-stretch justify-end sm:w-10">
-                <button
-                    type="button"
-                    onClick={onOpenSettings}
-                    className="inline-flex h-full w-full items-center justify-center rounded-none text-slate-400 transition-colors hover:text-slate-100 active:text-white disabled:opacity-40 disabled:hover:text-slate-400"
-                    aria-label="Open settings"
-                >
-                  <Settings aria-hidden="true" className="h-5 w-5" strokeWidth={1.8}/>
-                </button>
-              </div>
-            </footer>
-          </main>
-          {settingsOpen ? (
-              <SettingsPanel
-                  open={settingsOpen}
-                  onClose={() => setSettingsOpen(false)}
-                  scaleMinNote={scaleMinNote}
-                  scaleMaxNote={scaleMaxNote}
-                  scaleNoteOptions={PITCH_NOTE_OPTIONS}
-                  onScaleMinNoteChange={onScaleMinNoteChange}
-                  onScaleMaxNoteChange={onScaleMaxNoteChange}
-                  keepRunningInBackground={keepRunningInBackground}
-                  onKeepRunningInBackgroundChange={setKeepRunningInBackground}
-                  autoPauseOnSilence={autoPauseOnSilence}
-                  onAutoPauseOnSilenceChange={setAutoPauseOnSilence}
-                  runAt30Fps={runAt30Fps}
-                  onRunAt30FpsChange={setRunAt30Fps}
-                  halfResolutionCanvas={halfResolutionCanvas}
-                  onHalfResolutionCanvasChange={setHalfResolutionCanvas}
-                  highResSpectrogram={highResSpectrogram}
-                  onHighResSpectrogramChange={setHighResSpectrogram}
-                  pitchMinNote={pitchMinNote}
-                  pitchMaxNote={pitchMaxNote}
-                  pitchLineColorMode={pitchLineColorMode}
-                  onPitchLineColorModeChange={setPitchLineColorMode}
-                  pitchNoteOptions={PITCH_NOTE_OPTIONS}
-                  onPitchMinNoteChange={onPitchMinNoteChange}
-                  onPitchMaxNoteChange={onPitchMaxNoteChange}
-                  spectrogramMinHz={spectrogramMinHz}
-                  spectrogramMaxHz={spectrogramMaxHz}
-                  onSpectrogramMinHzChange={onSpectrogramMinHzChange}
-                  onSpectrogramMaxHzChange={onSpectrogramMaxHzChange}
-                  batteryUsagePerMinute={runtimeSettings.batteryUsagePerMinute}
-              />
-          ) : null}
+    <div className="h-[var(--app-height)] w-full overflow-hidden bg-black text-slate-100 select-none">
+      <div
+        data-testid="sw-update-banner"
+        aria-live="polite"
+        className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center px-2 transition-all duration-200 ${
+          downloadingUpdate ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0"
+        }`}
+      >
+        <div className="mt-1 flex h-7 items-center rounded-md bg-green-500 px-3 text-[11px] font-semibold tracking-wide text-green-950 uppercase">
+          Downloading a new version
         </div>
       </div>
+      <div className="flex h-full w-full items-stretch">
+        <main className="relative flex min-h-0 flex-1 flex-col bg-black md:h-full md:w-full md:flex-none">
+          {showingScales ? (
+            <ScalesPage
+              scaleMinNote={scaleMinNote}
+              scaleMaxNote={scaleMaxNote}
+              keepRunningInBackground={keepRunningInBackground}
+              isForeground={isForeground}
+              engine={scalesPlaybackEngine}
+            />
+          ) : (
+            <Recorder
+              activeView={activeView}
+              settingsOpen={settingsOpen}
+              keepRunningInBackground={keepRunningInBackground}
+              autoPauseOnSilence={autoPauseOnSilence}
+              runAt30Fps={runAt30Fps}
+              halfResolutionCanvas={halfResolutionCanvas}
+              highResSpectrogram={highResSpectrogram}
+              pitchMinNote={pitchMinNote}
+              pitchMaxNote={pitchMaxNote}
+              pitchLineColorMode={pitchLineColorMode}
+              spectrogramMinHz={spectrogramMinHz}
+              spectrogramMaxHz={spectrogramMaxHz}
+              onSettingsRuntimeChange={setRuntimeSettings}
+              engine={recorderEngine}
+            />
+          )}
+          <footer className="relative flex h-12 items-stretch gap-2 pt-0 pr-2 pb-0 pl-0 text-xs text-slate-300">
+            <div className="flex flex-1 items-stretch">
+              <button
+                type="button"
+                onClick={() => onViewChange("scales")}
+                aria-pressed={activeView === "scales"}
+                className={`relative h-full flex-1 rounded-none px-1 text-[15px] font-semibold transition-colors ${
+                  activeView === "scales"
+                    ? "text-blue-400"
+                    : "text-slate-300 hover:text-slate-100 active:text-slate-200"
+                }`}
+              >
+                Scales
+                {activeView === "scales" ? (
+                  <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-blue-400" />
+                ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewChange("spectrogram")}
+                aria-pressed={activeView === "spectrogram"}
+                className={`relative h-full flex-[1.25] rounded-none px-1 text-[15px] font-semibold transition-colors ${
+                  activeView === "spectrogram"
+                    ? "text-blue-400"
+                    : "text-slate-300 hover:text-slate-100 active:text-slate-200"
+                }`}
+              >
+                Spectrogram
+                {activeView === "spectrogram" ? (
+                  <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-blue-400" />
+                ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewChange("pitch")}
+                aria-pressed={activeView === "pitch"}
+                className={`relative h-full flex-1 rounded-none px-1 text-[15px] font-semibold transition-colors ${
+                  activeView === "pitch"
+                    ? "text-blue-400"
+                    : "text-slate-300 hover:text-slate-100 active:text-slate-200"
+                }`}
+              >
+                Pitch
+                {activeView === "pitch" ? (
+                  <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-blue-400" />
+                ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewChange("vibrato")}
+                aria-pressed={activeView === "vibrato"}
+                className={`relative h-full flex-1 rounded-none px-1 text-[15px] font-semibold transition-colors ${
+                  activeView === "vibrato"
+                    ? "text-blue-400"
+                    : "text-slate-300 hover:text-slate-100 active:text-slate-200"
+                }`}
+              >
+                Vibrato
+                {activeView === "vibrato" ? (
+                  <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-blue-400" />
+                ) : null}
+              </button>
+            </div>
+            <div className="flex w-9 items-stretch justify-end sm:w-10">
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                className="inline-flex h-full w-full items-center justify-center rounded-none text-slate-400 transition-colors hover:text-slate-100 active:text-white disabled:opacity-40 disabled:hover:text-slate-400"
+                aria-label="Open settings"
+              >
+                <Settings aria-hidden="true" className="h-5 w-5" strokeWidth={1.8} />
+              </button>
+            </div>
+          </footer>
+        </main>
+        {settingsOpen ? (
+          <SettingsPanel
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            scaleMinNote={scaleMinNote}
+            scaleMaxNote={scaleMaxNote}
+            scaleNoteOptions={PITCH_NOTE_OPTIONS}
+            onScaleMinNoteChange={onScaleMinNoteChange}
+            onScaleMaxNoteChange={onScaleMaxNoteChange}
+            keepRunningInBackground={keepRunningInBackground}
+            onKeepRunningInBackgroundChange={setKeepRunningInBackground}
+            autoPauseOnSilence={autoPauseOnSilence}
+            onAutoPauseOnSilenceChange={setAutoPauseOnSilence}
+            runAt30Fps={runAt30Fps}
+            onRunAt30FpsChange={setRunAt30Fps}
+            halfResolutionCanvas={halfResolutionCanvas}
+            onHalfResolutionCanvasChange={setHalfResolutionCanvas}
+            highResSpectrogram={highResSpectrogram}
+            onHighResSpectrogramChange={setHighResSpectrogram}
+            pitchMinNote={pitchMinNote}
+            pitchMaxNote={pitchMaxNote}
+            pitchLineColorMode={pitchLineColorMode}
+            onPitchLineColorModeChange={setPitchLineColorMode}
+            pitchNoteOptions={PITCH_NOTE_OPTIONS}
+            onPitchMinNoteChange={onPitchMinNoteChange}
+            onPitchMaxNoteChange={onPitchMaxNoteChange}
+            spectrogramMinHz={spectrogramMinHz}
+            spectrogramMaxHz={spectrogramMaxHz}
+            onSpectrogramMinHzChange={onSpectrogramMinHzChange}
+            onSpectrogramMaxHzChange={onSpectrogramMaxHzChange}
+            batteryUsagePerMinute={runtimeSettings.batteryUsagePerMinute}
+          />
+        ) : null}
+      </div>
+    </div>
   );
 }

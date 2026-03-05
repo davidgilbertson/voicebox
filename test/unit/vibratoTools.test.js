@@ -1,10 +1,10 @@
-import {test} from "vitest";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import {
   estimateTimelineCenterCents,
   estimateTimelineVibratoRate,
 } from "../../src/Recorder/Vibrato/vibratoTools.js";
-import {RingBuffer} from "../../src/Recorder/ringBuffer.js";
+import { RingBuffer } from "../../src/Recorder/ringBuffer.js";
 
 function createRingFromSeries(series) {
   const ring = new RingBuffer(series.length);
@@ -55,10 +55,7 @@ function assertOutOfRangeReturnsNull(estimate) {
 
 function assertSilentGapReturnsNull(estimate) {
   const samplesPerSecond = 200;
-  const series = [
-    ...new Array(700).fill(Number.NaN),
-    ...new Array(300).fill(0),
-  ];
+  const series = [...new Array(700).fill(Number.NaN), ...new Array(300).fill(0)];
   const ring = createRingFromSeries(series);
   const rateHz = estimate({
     ring,

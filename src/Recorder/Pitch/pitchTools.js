@@ -1,7 +1,12 @@
 import colors from "tailwindcss/colors";
-import {createPitchGridLines} from "../../pitchScale.js";
-import {clearCanvasWithViewport, createCanvasViewportState, drawWaveformTrace, syncCanvasViewport} from "../canvasTools.js";
-import {mapWaveformIntensityToStrokeColor} from "../colorTools.js";
+import { createPitchGridLines } from "../../pitchScale.js";
+import {
+  clearCanvasWithViewport,
+  createCanvasViewportState,
+  drawWaveformTrace,
+  syncCanvasViewport,
+} from "../canvasTools.js";
+import { mapWaveformIntensityToStrokeColor } from "../colorTools.js";
 
 const GRID_COLORS = {
   octave: colors.slate[300],
@@ -29,12 +34,7 @@ export class PitchChartRenderer {
     this.canvas = canvas;
   }
 
-  updateOptions({
-    minCents,
-    maxCents,
-    lineColorMode,
-    renderScale,
-  }) {
+  updateOptions({ minCents, maxCents, lineColorMode, renderScale }) {
     if (Number.isFinite(minCents) && this.minCents !== minCents) {
       this.minCents = minCents;
       this.backgroundCache = null;
@@ -49,11 +49,12 @@ export class PitchChartRenderer {
 
   drawBackground(ctx, width, height, centsSpan) {
     const cached = this.backgroundCache;
-    const cacheValid = cached
-        && cached.width === width
-        && cached.height === height
-        && cached.minCents === this.minCents
-        && cached.maxCents === this.maxCents;
+    const cacheValid =
+      cached &&
+      cached.width === width &&
+      cached.height === height &&
+      cached.minCents === this.minCents &&
+      cached.maxCents === this.maxCents;
     if (cacheValid) {
       ctx.drawImage(cached.canvas, 0, 0);
       return;
@@ -71,12 +72,12 @@ export class PitchChartRenderer {
       maxCents: this.maxCents,
     });
     if (lines.length) {
-      const plotHeight = height - (PLOT_Y_INSET * 2);
+      const plotHeight = height - PLOT_Y_INSET * 2;
       bgCtx.lineWidth = 1;
       bgCtx.beginPath();
       for (const line of lines) {
         const normalized = (line.cents - this.minCents) / centsSpan;
-        const y = PLOT_Y_INSET + plotHeight - (normalized * plotHeight);
+        const y = PLOT_Y_INSET + plotHeight - normalized * plotHeight;
         bgCtx.strokeStyle = GRID_COLORS[line.tier];
         bgCtx.moveTo(PLOT_LEFT, y);
         bgCtx.lineTo(width, y);
@@ -89,7 +90,7 @@ export class PitchChartRenderer {
       for (const line of lines) {
         if (!line.showLabel) continue;
         const normalized = (line.cents - this.minCents) / centsSpan;
-        const y = PLOT_Y_INSET + plotHeight - (normalized * plotHeight);
+        const y = PLOT_Y_INSET + plotHeight - normalized * plotHeight;
         bgCtx.fillStyle = GRID_COLORS[line.tier];
         bgCtx.fillText(line.noteName.replace("#", ""), LABEL_X, y);
       }
@@ -105,10 +106,7 @@ export class PitchChartRenderer {
     ctx.drawImage(bgCanvas, 0, 0);
   }
 
-  draw({
-    smoothedPitchCentsRing,
-    lineStrengthRing,
-  }) {
+  draw({ smoothedPitchCentsRing, lineStrengthRing }) {
     const canvas = this.canvas;
     if (!canvas) return;
     const centsSpan = this.maxCents - this.minCents;
@@ -133,9 +131,10 @@ export class PitchChartRenderer {
       yInsetBottom: PLOT_Y_INSET,
       mapValueToY: (value, _height, plotTop, plotHeight) => {
         const normalized = (value - this.minCents) / centsSpan;
-        return plotTop + plotHeight - (normalized * plotHeight);
+        return plotTop + plotHeight - normalized * plotHeight;
       },
-      mapColorValueToStroke: (intensity) => mapWaveformIntensityToStrokeColor(intensity, WAVEFORM_LINE_COLOR, this.lineColorMode),
+      mapColorValueToStroke: (intensity) =>
+        mapWaveformIntensityToStrokeColor(intensity, WAVEFORM_LINE_COLOR, this.lineColorMode),
       plotWidth: viewport.cssWidth,
       plotHeight: viewport.cssHeight,
     });

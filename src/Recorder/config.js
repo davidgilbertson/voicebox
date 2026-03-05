@@ -1,6 +1,6 @@
-import {PITCH_NOTE_OPTIONS} from "../pitchScale.js";
-import {ls} from "../tools.js";
-import {PITCH_LINE_COLOR_MODES} from "./colorTools.js";
+import { PITCH_NOTE_OPTIONS } from "../pitchScale.js";
+import { ls } from "../tools.js";
+import { PITCH_LINE_COLOR_MODES } from "./colorTools.js";
 
 // User-changeable preferences persisted in localStorage.
 const KEEP_RUNNING_IN_BACKGROUND_STORAGE_KEY = "voicebox.keepRunningInBackground";
@@ -89,10 +89,7 @@ export function writeHalfResolutionCanvas(value) {
 }
 
 export function readHighResSpectrogram() {
-  return ls.get(
-      HIGH_RES_SPECTROGRAM_STORAGE_KEY,
-      HIGH_RES_SPECTROGRAM_DEFAULT
-  ) === true;
+  return ls.get(HIGH_RES_SPECTROGRAM_STORAGE_KEY, HIGH_RES_SPECTROGRAM_DEFAULT) === true;
 }
 
 export function writeHighResSpectrogram(value) {

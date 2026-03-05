@@ -1,9 +1,9 @@
-import {useEffect, useRef, useState} from "react";
-import {Pause} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Pause } from "lucide-react";
 import VibratoChart from "./Vibrato/VibratoChart.jsx";
 import PitchChart from "./Pitch/PitchChart.jsx";
 import SpectrogramChart from "./Spectrogram/SpectrogramChart.jsx";
-import {noteNameToCents} from "../pitchScale.js";
+import { noteNameToCents } from "../pitchScale.js";
 
 export default function Recorder({
   activeView,
@@ -86,7 +86,10 @@ export default function Recorder({
     engine.setWantsToRun(!engineUi.isWantedRunning);
   };
 
-  const showStartOverlay = !engineUi.isAudioRunning && !engineUi.isWantedRunning && (engineUi.error || !engineUi.hasEverRun);
+  const showStartOverlay =
+    !engineUi.isAudioRunning &&
+    !engineUi.isWantedRunning &&
+    (engineUi.error || !engineUi.hasEverRun);
   const showPausedOverlay = !engineUi.isWantedRunning && engineUi.hasEverRun && !engineUi.error;
   const showMicPermissionHint = showStartOverlay && engineUi.hasRejectedMicPermission;
 
@@ -98,7 +101,13 @@ export default function Recorder({
         onPointerDown={onChartPointerDown}
         data-testid="recorder-chart-area"
       >
-        <div className={activeView === "vibrato" ? "flex min-h-0 flex-1 flex-col" : "hidden min-h-0 flex-1 flex-col"}>
+        <div
+          className={
+            activeView === "vibrato"
+              ? "flex min-h-0 flex-1 flex-col"
+              : "hidden min-h-0 flex-1 flex-col"
+          }
+        >
           <VibratoChart
             ref={vibratoChartRef}
             vibratoRate={engineUi.vibratoRate}
@@ -106,7 +115,13 @@ export default function Recorder({
             lineColorMode={pitchLineColorMode}
           />
         </div>
-        <div className={activeView === "spectrogram" ? "flex min-h-0 flex-1 flex-col" : "hidden min-h-0 flex-1 flex-col"}>
+        <div
+          className={
+            activeView === "spectrogram"
+              ? "flex min-h-0 flex-1 flex-col"
+              : "hidden min-h-0 flex-1 flex-col"
+          }
+        >
           <SpectrogramChart
             ref={spectrogramChartRef}
             className="h-full w-full"
@@ -115,7 +130,13 @@ export default function Recorder({
             renderScale={halfResolutionCanvas ? 0.5 : 1}
           />
         </div>
-        <div className={activeView === "pitch" ? "flex min-h-0 flex-1 flex-col" : "hidden min-h-0 flex-1 flex-col"}>
+        <div
+          className={
+            activeView === "pitch"
+              ? "flex min-h-0 flex-1 flex-col"
+              : "hidden min-h-0 flex-1 flex-col"
+          }
+        >
           <PitchChart
             ref={pitchChartRef}
             minCents={noteNameToCents(pitchMinNote)}
@@ -150,9 +171,9 @@ export default function Recorder({
           <div className="pointer-events-none absolute inset-0 z-10">
             <div
               role="status"
-              className="pause-pill bg-slate-800/80 text-base font-semibold uppercase tracking-wide text-slate-100 shadow-lg"
+              className="pause-pill bg-slate-800/80 text-base font-semibold tracking-wide text-slate-100 uppercase shadow-lg"
             >
-              <Pause aria-hidden="true" className="pause-pill-icon h-5 w-5"/>
+              <Pause aria-hidden="true" className="pause-pill-icon h-5 w-5" />
               <span className="pause-pill-label">Paused</span>
             </div>
           </div>

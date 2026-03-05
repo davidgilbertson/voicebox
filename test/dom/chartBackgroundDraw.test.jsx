@@ -1,8 +1,8 @@
-import {test, expect, vi} from "vitest";
-import {drawWaveformTrace} from "../../src/Recorder/canvasTools.js";
-import {readPitchLineColorMode} from "../../src/Recorder/config.js";
-import {PitchChartRenderer} from "../../src/Recorder/Pitch/pitchTools.js";
-import {RingBuffer} from "../../src/Recorder/ringBuffer.js";
+import { test, expect, vi } from "vitest";
+import { drawWaveformTrace } from "../../src/Recorder/canvasTools.js";
+import { readPitchLineColorMode } from "../../src/Recorder/config.js";
+import { PitchChartRenderer } from "../../src/Recorder/Pitch/pitchTools.js";
+import { RingBuffer } from "../../src/Recorder/ringBuffer.js";
 
 function createRing(values) {
   const ring = new RingBuffer(values.length || 1);

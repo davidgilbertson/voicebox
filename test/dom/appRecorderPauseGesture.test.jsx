@@ -1,6 +1,6 @@
 import React from "react";
-import {fireEvent, render, screen, waitFor} from "@testing-library/react";
-import {expect, test} from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { expect, test } from "vitest";
 import AppShell from "../../src/AppShell.jsx";
 
 test("recorder pause toggles on pointer down and paused pill includes pause icon", async () => {
@@ -9,29 +9,36 @@ test("recorder pause toggles on pointer down and paused pill includes pause icon
     constructor() {
       this.port = {
         onmessage: null,
-        postMessage: () => {
-        },
+        postMessage: () => {},
       };
     }
 
-    connect() {
-    }
+    connect() {}
 
-    disconnect() {
-    }
+    disconnect() {}
   };
-  window.__setForegroundForTests({visible: true, focused: true});
+  window.__setForegroundForTests({ visible: true, focused: true });
   try {
-    render(<AppShell/>);
+    render(<AppShell />);
 
     const area = await screen.findByTestId("recorder-chart-area");
-    fireEvent.pointerDown(area, {button: 0, isPrimary: true, pointerId: 1, pointerType: "touch"});
+    fireEvent.pointerDown(area, {
+      button: 0,
+      isPrimary: true,
+      pointerId: 1,
+      pointerType: "touch",
+    });
 
     const pausedPill = await screen.findByRole("status");
     expect(pausedPill).toHaveTextContent("Paused");
     expect(pausedPill.querySelector("svg.lucide-pause")).not.toBeNull();
 
-    fireEvent.pointerDown(area, {button: 0, isPrimary: true, pointerId: 1, pointerType: "touch"});
+    fireEvent.pointerDown(area, {
+      button: 0,
+      isPrimary: true,
+      pointerId: 1,
+      pointerType: "touch",
+    });
 
     await waitFor(() => {
       expect(screen.queryByRole("status")).toBeNull();

@@ -1,5 +1,5 @@
-import {ls} from "../tools.js";
-import {noteNameToMidi} from "../pitchScale.js";
+import { ls } from "../tools.js";
+import { noteNameToMidi } from "../pitchScale.js";
 
 const SCALE_BPM_STORAGE_KEY = "voicebox.scales.bpm";
 const SCALE_MIN_NOTE_STORAGE_KEY = "voicebox.scales.minNote";

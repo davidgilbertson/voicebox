@@ -1,10 +1,10 @@
 import React from "react";
-import {act, fireEvent, render, screen} from "@testing-library/react";
-import {beforeEach, expect, test, vi} from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, expect, test, vi } from "vitest";
 import ScalesPage from "../../src/ScalesPage/ScalesPage.jsx";
-import {PlaybackEngine} from "../../src/ScalesPage/PlaybackEngine.js";
+import { PlaybackEngine } from "../../src/ScalesPage/PlaybackEngine.js";
 
-const playNoteMock = vi.fn(async () => ({stop: vi.fn()}));
+const playNoteMock = vi.fn(async () => ({ stop: vi.fn() }));
 
 vi.mock("../../src/ScalesPage/piano.js", () => ({
   ensurePianoLoaded: vi.fn(async () => ({})),
@@ -15,19 +15,19 @@ vi.mock("../../src/ScalesPage/piano.js", () => ({
   subscribeToPlayedNotes: () => () => {},
 }));
 
-function swipe(area, {startX, startY, endX, endY, pointerId = 1}) {
-  fireEvent.pointerDown(area, {pointerId, clientX: startX, clientY: startY});
-  fireEvent.pointerMove(area, {pointerId, clientX: endX, clientY: endY});
-  fireEvent.pointerUp(area, {pointerId, clientX: endX, clientY: endY});
+function swipe(area, { startX, startY, endX, endY, pointerId = 1 }) {
+  fireEvent.pointerDown(area, { pointerId, clientX: startX, clientY: startY });
+  fireEvent.pointerMove(area, { pointerId, clientX: endX, clientY: endY });
+  fireEvent.pointerUp(area, { pointerId, clientX: endX, clientY: endY });
 }
 
-function tap(area, {x = 200, y = 200, pointerId = 1} = {}) {
-  fireEvent.pointerDown(area, {pointerId, clientX: x, clientY: y});
-  fireEvent.pointerUp(area, {pointerId, clientX: x, clientY: y});
+function tap(area, { x = 200, y = 200, pointerId = 1 } = {}) {
+  fireEvent.pointerDown(area, { pointerId, clientX: x, clientY: y });
+  fireEvent.pointerUp(area, { pointerId, clientX: x, clientY: y });
 }
 
 beforeEach(() => {
-  window.__setForegroundForTests({visible: true, focused: true});
+  window.__setForegroundForTests({ visible: true, focused: true });
   playNoteMock.mockClear();
   vi.useFakeTimers();
 });
@@ -41,49 +41,49 @@ async function waitForReady() {
   act(() => {
     vi.advanceTimersByTime(0);
   });
-  expect(screen.getByRole("button", {name: "Play"})).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Play" })).toBeEnabled();
 }
 
 function renderScales(props) {
-  return render(<ScalesPage engine={new PlaybackEngine()} {...props}/>);
+  return render(<ScalesPage engine={new PlaybackEngine()} {...props} />);
 }
 
 test("right swipe shows right-direction gesture feedback", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
-  fireEvent.click(screen.getByRole("button", {name: "Got it"}));
+  fireEvent.click(screen.getByRole("button", { name: "Got it" }));
 
-  swipe(area, {startX: 100, startY: 200, endX: 320, endY: 200});
+  swipe(area, { startX: 100, startY: 200, endX: 320, endY: 200 });
   expect(area.querySelector("svg.lucide-arrow-right")).not.toBeNull();
 });
 
 test("up swipe shows up-direction gesture feedback", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
-  fireEvent.click(screen.getByRole("button", {name: "Got it"}));
+  fireEvent.click(screen.getByRole("button", { name: "Got it" }));
 
-  swipe(area, {startX: 220, startY: 360, endX: 220, endY: 120});
+  swipe(area, { startX: 220, startY: 360, endX: 220, endY: 120 });
   expect(area.querySelector("svg.lucide-arrow-up")).not.toBeNull();
 });
 
 test("down swipe shows down-direction gesture feedback", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
-  fireEvent.click(screen.getByRole("button", {name: "Got it"}));
+  fireEvent.click(screen.getByRole("button", { name: "Got it" }));
 
-  swipe(area, {startX: 220, startY: 120, endX: 220, endY: 360});
+  swipe(area, { startX: 220, startY: 120, endX: 220, endY: 360 });
   expect(area.querySelector("svg.lucide-arrow-down")).not.toBeNull();
 });
 
 test("auto reversal at top of range shows down-direction gesture feedback", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "C#3"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "C#3" });
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
-  fireEvent.click(screen.getByRole("button", {name: "Got it"}));
-  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  fireEvent.click(screen.getByRole("button", { name: "Got it" }));
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
   await act(async () => {
     await Promise.resolve();
   });
@@ -95,11 +95,11 @@ test("auto reversal at top of range shows down-direction gesture feedback", asyn
 });
 
 test("left swipe does nothing and tap on empty area toggles play/pause", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
 
-  swipe(area, {startX: 320, startY: 220, endX: 80, endY: 220});
+  swipe(area, { startX: 320, startY: 220, endX: 80, endY: 220 });
   await act(async () => {
     await vi.advanceTimersByTimeAsync(400);
   });
@@ -127,10 +127,10 @@ test("left swipe does nothing and tap on empty area toggles play/pause", async (
 });
 
 test("swiping the same vertical direction twice mid-set starts a new set immediately", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
-  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
   await act(async () => {
     await Promise.resolve();
   });
@@ -140,10 +140,10 @@ test("swiping the same vertical direction twice mid-set starts a new set immedia
   });
   const callsBeforeSwipe = playNoteMock.mock.calls.length;
 
-  swipe(area, {startX: 220, startY: 360, endX: 220, endY: 120});
+  swipe(area, { startX: 220, startY: 360, endX: 220, endY: 120 });
   const callsAfterFirstUp = playNoteMock.mock.calls.length;
 
-  swipe(area, {startX: 220, startY: 360, endX: 220, endY: 120});
+  swipe(area, { startX: 220, startY: 360, endX: 220, endY: 120 });
   const callsAfterSecondUp = playNoteMock.mock.calls.length;
 
   expect(callsAfterFirstUp).toBe(callsBeforeSwipe);
@@ -152,12 +152,12 @@ test("swiping the same vertical direction twice mid-set starts a new set immedia
 });
 
 test("fast pointer swipe without move event does not toggle play", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
   const area = screen.getByTestId("scales-gesture-area");
 
-  fireEvent.pointerDown(area, {pointerId: 1, clientX: 100, clientY: 200});
-  fireEvent.pointerUp(area, {pointerId: 1, clientX: 340, clientY: 200});
+  fireEvent.pointerDown(area, { pointerId: 1, clientX: 100, clientY: 200 });
+  fireEvent.pointerUp(area, { pointerId: 1, clientX: 340, clientY: 200 });
   fireEvent.click(area);
   await act(async () => {
     await vi.advanceTimersByTimeAsync(1500);
@@ -167,12 +167,20 @@ test("fast pointer swipe without move event does not toggle play", async () => {
 });
 
 test("tap on help button does not toggle play", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
 
-  fireEvent.pointerDown(screen.getByRole("button", {name: "Got it"}), {pointerId: 1, clientX: 100, clientY: 200});
-  fireEvent.pointerUp(screen.getByRole("button", {name: "Got it"}), {pointerId: 1, clientX: 100, clientY: 200});
-  fireEvent.click(screen.getByRole("button", {name: "Got it"}));
+  fireEvent.pointerDown(screen.getByRole("button", { name: "Got it" }), {
+    pointerId: 1,
+    clientX: 100,
+    clientY: 200,
+  });
+  fireEvent.pointerUp(screen.getByRole("button", { name: "Got it" }), {
+    pointerId: 1,
+    clientX: 100,
+    clientY: 200,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Got it" }));
   await act(async () => {
     await vi.advanceTimersByTimeAsync(1500);
   });

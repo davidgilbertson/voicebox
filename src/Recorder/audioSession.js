@@ -1,11 +1,11 @@
 export async function createRecorderAudioSession({
-                                                   preferredDeviceId = null,
-                                                   fftSize,
-                                                   highResSpectrogram = false,
-                                                   displayPixelsPerSecond,
-                                                   workletModuleUrl,
-                                                   onWorkletMessage,
-                                                 }) {
+  preferredDeviceId = null,
+  fftSize,
+  highResSpectrogram = false,
+  displayPixelsPerSecond,
+  workletModuleUrl,
+  onWorkletMessage,
+}) {
   let context = null;
   let stream = null;
   let source = null;
@@ -19,7 +19,7 @@ export async function createRecorderAudioSession({
         autoGainControl: false,
         noiseSuppression: false,
         echoCancellation: false,
-        ...(preferredDeviceId ? {deviceId: preferredDeviceId} : {}),
+        ...(preferredDeviceId ? { deviceId: preferredDeviceId } : {}),
       },
     });
 
@@ -88,14 +88,14 @@ export async function createRecorderAudioSession({
 }
 
 export function destroyRecorderAudioSession({
-                                              context,
-                                              stream,
-                                              source,
-                                              captureNode,
-                                              analyser,
-                                              highResAnalyser,
-                                              silentOutputGain,
-                                            }) {
+  context,
+  stream,
+  source,
+  captureNode,
+  analyser,
+  highResAnalyser,
+  silentOutputGain,
+}) {
   if (captureNode) {
     captureNode.port.onmessage = null;
     captureNode.disconnect();

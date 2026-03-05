@@ -1,5 +1,5 @@
-import {clamp} from "../tools.js";
-import {MAX_DRAW_JUMP_CENTS} from "./config.js";
+import { clamp } from "../tools.js";
+import { MAX_DRAW_JUMP_CENTS } from "./config.js";
 
 const MIN_RENDER_SCALE = 0.25;
 const MAX_RENDER_SCALE = 1;
@@ -19,11 +19,7 @@ export function createCanvasViewportState() {
   };
 }
 
-export function syncCanvasViewport({
-  canvas,
-  renderScale,
-  state,
-}) {
+export function syncCanvasViewport({ canvas, renderScale, state }) {
   const cssWidth = Math.max(1, Math.floor(canvas.clientWidth));
   const cssHeight = Math.max(1, Math.floor(canvas.clientHeight));
   const dpr = window.devicePixelRatio || 1;
@@ -32,12 +28,13 @@ export function syncCanvasViewport({
   const width = Math.max(1, Math.round(cssWidth * renderDpr));
   const height = Math.max(1, Math.round(cssHeight * renderDpr));
 
-  const didSizeInputsChange = state.cssWidth !== cssWidth
-      || state.cssHeight !== cssHeight
-      || state.dpr !== dpr
-      || state.effectiveScale !== effectiveScale
-      || state.width !== width
-      || state.height !== height;
+  const didSizeInputsChange =
+    state.cssWidth !== cssWidth ||
+    state.cssHeight !== cssHeight ||
+    state.dpr !== dpr ||
+    state.effectiveScale !== effectiveScale ||
+    state.width !== width ||
+    state.height !== height;
 
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
@@ -89,8 +86,8 @@ export function drawWaveformTrace({
   const plotBottom = Math.max(plotTop + 1, plotHeight - Math.max(0, yInsetBottom));
   const availableWidth = Math.max(1, plotRight - plotLeft);
   const availableHeight = Math.max(1, plotBottom - plotTop);
-  const midY = plotTop + (availableHeight / 2);
-  const scaleY = (availableHeight / 2) / yRange;
+  const midY = plotTop + availableHeight / 2;
+  const scaleY = availableHeight / 2 / yRange;
 
   ctx.lineWidth = DEFAULT_LINE_WIDTH;
   const useAlphaSegments = Boolean(alphaValues);
@@ -110,13 +107,12 @@ export function drawWaveformTrace({
       continue;
     }
     const slot = startSlot + i;
-    const x = totalSlots > 1
-        ? plotLeft + (slot / (totalSlots - 1)) * availableWidth
-        : plotRight;
+    const x = totalSlots > 1 ? plotLeft + (slot / (totalSlots - 1)) * availableWidth : plotRight;
     const y = mapValueToY
-        ? mapValueToY(value, plotHeight, plotTop, availableHeight)
-        : midY - (value - yOffset) * scaleY;
-    const hasGap = lastValue === null || Math.abs(value - lastValue) > MAX_DRAW_JUMP_CENTS || lastY === null;
+      ? mapValueToY(value, plotHeight, plotTop, availableHeight)
+      : midY - (value - yOffset) * scaleY;
+    const hasGap =
+      lastValue === null || Math.abs(value - lastValue) > MAX_DRAW_JUMP_CENTS || lastY === null;
     if (!hasGap && lastX !== null) {
       const colorValue = colorValuesRing.at(i);
       const alphaValue = alphaValues ? alphaValues[i] : 1;

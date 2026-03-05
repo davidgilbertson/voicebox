@@ -1,13 +1,13 @@
-import {defineConfig} from "vite";
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import basicSsl from "@vitejs/plugin-basic-ssl";
-import {cloudflare} from "@cloudflare/vite-plugin";
-import {VitePWA} from "vite-plugin-pwa";
+import { cloudflare } from "@cloudflare/vite-plugin";
+import { VitePWA } from "vite-plugin-pwa";
 
 const APP_DISPLAY_NAME = "Voicebox";
 
-export default defineConfig(({mode}) => {
+export default defineConfig(({ mode }) => {
   const buildTime = new Date();
   const buildTimeSydneyDisplay = new Intl.DateTimeFormat("en-US", {
     timeZone: "Australia/Sydney",
@@ -37,7 +37,8 @@ export default defineConfig(({mode}) => {
           id: "/",
           name: APP_DISPLAY_NAME,
           short_name: APP_DISPLAY_NAME,
-          description: "Online vocal training app with real-time pitch tracking, spectrogram analysis, and vocal vibrato practice.",
+          description:
+            "Online vocal training app with real-time pitch tracking, spectrogram analysis, and vocal vibrato practice.",
           start_url: "/",
           display: "standalone",
           orientation: "portrait",

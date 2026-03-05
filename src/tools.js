@@ -6,16 +6,16 @@ export function clamp(value, min, max) {
 
 export function pickPreferredAudioInputDeviceId(devices) {
   const preferredInput = devices
-      .filter((device) => device.kind === "audioinput")
-      .find((device) => {
-        const label = (device.label || "").toLowerCase();
-        return (
-            label &&
-            !label.includes("bluetooth") &&
-            !label.includes("headset") &&
-            !label.includes("default")
-        );
-      });
+    .filter((device) => device.kind === "audioinput")
+    .find((device) => {
+      const label = (device.label || "").toLowerCase();
+      return (
+        label &&
+        !label.includes("bluetooth") &&
+        !label.includes("headset") &&
+        !label.includes("default")
+      );
+    });
   return preferredInput?.deviceId || null;
 }
 

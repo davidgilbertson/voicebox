@@ -9,17 +9,17 @@ import {
   readMaxSignalLevel,
   writeMaxSignalLevel,
 } from "./config.js";
-import {createPitchProcessingState, resizePitchProcessingState} from "./pitchProcessing.js";
+import { createPitchProcessingState, resizePitchProcessingState } from "./pitchProcessing.js";
 import {
   createHighResSpectrogramBuffers,
   createSpectrogramBuffers,
   processOneAudioHop,
 } from "./hopProcessing.js";
-import {createRecorderAudioSession, destroyRecorderAudioSession} from "./audioSession.js";
-import {BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor} from "./batteryUsage.js";
-import {computeIsForeground, subscribeToForegroundChanges} from "../foreground.js";
-import {noteNameToCents, noteNameToHz} from "../pitchScale.js";
-import {pickPreferredAudioInputDeviceId} from "../tools.js";
+import { createRecorderAudioSession, destroyRecorderAudioSession } from "./audioSession.js";
+import { BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor } from "./batteryUsage.js";
+import { computeIsForeground, subscribeToForegroundChanges } from "../foreground.js";
+import { noteNameToCents, noteNameToHz } from "../pitchScale.js";
+import { pickPreferredAudioInputDeviceId } from "../tools.js";
 
 const MIN_SIGNAL_THRESHOLD = 0.015;
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
@@ -33,9 +33,12 @@ function createHzBuffer(length) {
 
 function setStreamListeningEnabled(stream, enabled) {
   if (!stream) return;
-  const tracks = typeof stream.getAudioTracks === "function"
-    ? stream.getAudioTracks()
-    : (typeof stream.getTracks === "function" ? stream.getTracks() : []);
+  const tracks =
+    typeof stream.getAudioTracks === "function"
+      ? stream.getAudioTracks()
+      : typeof stream.getTracks === "function"
+        ? stream.getTracks()
+        : [];
   for (const track of tracks) {
     track.enabled = enabled;
   }
@@ -116,7 +119,9 @@ export class RecordingEngine {
     this.pitchProcessingState = createPitchProcessingState({
       columnRateHz: DISPLAY_PIXELS_PER_SECOND,
       seconds: this.state.chartWidthPx / DISPLAY_PIXELS_PER_SECOND,
-      silencePauseStepThreshold: Math.round((SILENCE_PAUSE_THRESHOLD_MS / 1000) * DISPLAY_PIXELS_PER_SECOND),
+      silencePauseStepThreshold: Math.round(
+        (SILENCE_PAUSE_THRESHOLD_MS / 1000) * DISPLAY_PIXELS_PER_SECOND,
+      ),
     });
     this.spectrogramBuffers = createSpectrogramBuffers(SPECTROGRAM_BIN_COUNT);
     this.highResSpectrogramBuffers = null;
@@ -136,7 +141,7 @@ export class RecordingEngine {
   };
 
   setUi = (nextPartial) => {
-    this.state.ui = {...this.state.ui, ...nextPartial};
+    this.state.ui = { ...this.state.ui, ...nextPartial };
     for (const listener of this.listeners) {
       listener(this.state.ui);
     }
@@ -144,7 +149,7 @@ export class RecordingEngine {
 
   sampleBatteryUsage = async () => {
     const usage = await this.batteryUsageMonitor.readUsagePerMinute();
-    this.setUi({batteryUsagePerMinute: usage});
+    this.setUi({ batteryUsagePerMinute: usage });
   };
 
   syncBatteryPolling = () => {
@@ -154,7 +159,10 @@ export class RecordingEngine {
     }
     this.sampleBatteryUsage();
     if (this.state.isForeground) {
-      this.state.batteryIntervalId = window.setInterval(this.sampleBatteryUsage, BATTERY_SAMPLE_INTERVAL_MS);
+      this.state.batteryIntervalId = window.setInterval(
+        this.sampleBatteryUsage,
+        BATTERY_SAMPLE_INTERVAL_MS,
+      );
     }
   };
 
@@ -198,7 +206,7 @@ export class RecordingEngine {
     if (this.state.ui.isAudioRunning || this.state.isStarting) return;
     this.state.isStarting = true;
     const startAttempt = ++this.state.startAttempt;
-    this.setUi({error: ""});
+    this.setUi({ error: "" });
     try {
       let preferredDeviceId = null;
       if (navigator.mediaDevices && typeof navigator.mediaDevices.enumerateDevices === "function") {
@@ -230,9 +238,10 @@ export class RecordingEngine {
       }
 
       const hzLength = Math.floor(CENTER_SECONDS * DISPLAY_PIXELS_PER_SECOND);
-      const hzBuffer = this.audioSessionState.hzBuffer && this.audioSessionState.hzBuffer.length === hzLength
-        ? this.audioSessionState.hzBuffer
-        : createHzBuffer(hzLength);
+      const hzBuffer =
+        this.audioSessionState.hzBuffer && this.audioSessionState.hzBuffer.length === hzLength
+          ? this.audioSessionState.hzBuffer
+          : createHzBuffer(hzLength);
 
       this.state.hopSize = session.hopSize;
       this.audioSessionState.context = session.context;
@@ -260,7 +269,8 @@ export class RecordingEngine {
       if (startAttempt !== this.state.startAttempt) {
         return;
       }
-      const isPermissionRejected = error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError";
+      const isPermissionRejected =
+        error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError";
       this.setUi({
         isWantedRunning: false,
         hasRejectedMicPermission: isPermissionRejected || this.state.ui.hasRejectedMicPermission,
@@ -284,11 +294,13 @@ export class RecordingEngine {
     this.highResSpectrogramBuffers = null;
     this.state.signalLevel = 0;
     this.state.frameDirty = false;
-    this.setUi({isAudioRunning: false});
+    this.setUi({ isAudioRunning: false });
   };
 
   syncAudioState = () => {
-    const shouldRun = (this.state.keepRunningInBackground || this.state.isForeground) && this.state.ui.isWantedRunning;
+    const shouldRun =
+      (this.state.keepRunningInBackground || this.state.isForeground) &&
+      this.state.ui.isWantedRunning;
     if (!shouldRun) {
       if (this.state.isStarting) {
         this.state.startAttempt += 1;
@@ -333,7 +345,7 @@ export class RecordingEngine {
   renderLoop = (nowMs) => {
     if (this.state.runAt30Fps) {
       const lastFrameMs = this.renderState.lastFrameMs;
-      if (lastFrameMs > 0 && (nowMs - lastFrameMs) <= 25) {
+      if (lastFrameMs > 0 && nowMs - lastFrameMs <= 25) {
         this.renderState.rafId = requestAnimationFrame(this.renderLoop);
         return;
       }
@@ -357,18 +369,22 @@ export class RecordingEngine {
       } else if (previousDisplayedRate !== null) {
         estimatedRate = previousDisplayedRate;
       } else {
-        estimatedRate = this.renderState.lastKnownVibratoRate ?? vibratoRateRing.findMostRecentFinite();
+        estimatedRate =
+          this.renderState.lastKnownVibratoRate ?? vibratoRateRing.findMostRecentFinite();
       }
 
       if (estimatedRate !== null) {
         if (previousDisplayedRate === null) {
           displayedRate = estimatedRate;
         } else {
-          const elapsedSinceLastRateUpdateMs = this.renderState.lastVibratoRateUpdateMs === null
-            ? 16
-            : Math.max(0, nowMs - this.renderState.lastVibratoRateUpdateMs);
-          const baseSmoothingFactor = 1 - Math.exp(-elapsedSinceLastRateUpdateMs / VIBRATO_RATE_SMOOTHING_TIME_MS);
-          displayedRate = previousDisplayedRate + ((estimatedRate - previousDisplayedRate) * baseSmoothingFactor);
+          const elapsedSinceLastRateUpdateMs =
+            this.renderState.lastVibratoRateUpdateMs === null
+              ? 16
+              : Math.max(0, nowMs - this.renderState.lastVibratoRateUpdateMs);
+          const baseSmoothingFactor =
+            1 - Math.exp(-elapsedSinceLastRateUpdateMs / VIBRATO_RATE_SMOOTHING_TIME_MS);
+          displayedRate =
+            previousDisplayedRate + (estimatedRate - previousDisplayedRate) * baseSmoothingFactor;
         }
         this.renderState.lastVibratoRateUpdateMs = nowMs;
       }
@@ -381,7 +397,7 @@ export class RecordingEngine {
     }
 
     if (displayedRate !== previousDisplayedRate) {
-      this.setUi({vibratoRate: displayedRate});
+      this.setUi({ vibratoRate: displayedRate });
     }
     this.renderState.displayedVibratoRate = displayedRate;
     this.renderState.rafId = requestAnimationFrame(this.renderLoop);
@@ -415,7 +431,7 @@ export class RecordingEngine {
     onResize();
   };
 
-  attachCharts = ({pitchChart, vibratoChart, spectrogramChart, container}) => {
+  attachCharts = ({ pitchChart, vibratoChart, spectrogramChart, container }) => {
     this.chartRefs.pitchChartRef = pitchChart ?? null;
     this.chartRefs.vibratoChartRef = vibratoChart ?? null;
     this.chartRefs.spectrogramChartRef = spectrogramChart ?? null;
@@ -485,7 +501,7 @@ export class RecordingEngine {
   };
 
   setWantsToRun = (isWanted) => {
-    this.setUi({isWantedRunning: Boolean(isWanted)});
+    this.setUi({ isWantedRunning: Boolean(isWanted) });
     this.syncAudioState();
   };
 

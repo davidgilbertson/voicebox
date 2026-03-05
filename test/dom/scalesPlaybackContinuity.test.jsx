@@ -1,10 +1,10 @@
 import React from "react";
-import {act, fireEvent, render, screen} from "@testing-library/react";
-import {beforeEach, expect, test, vi} from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, expect, test, vi } from "vitest";
 import ScalesPage from "../../src/ScalesPage/ScalesPage.jsx";
-import {PlaybackEngine} from "../../src/ScalesPage/PlaybackEngine.js";
+import { PlaybackEngine } from "../../src/ScalesPage/PlaybackEngine.js";
 
-const playNoteMock = vi.fn(async () => ({stop: vi.fn()}));
+const playNoteMock = vi.fn(async () => ({ stop: vi.fn() }));
 const playMetronomeTickMock = vi.fn(async () => {});
 
 vi.mock("../../src/ScalesPage/piano.js", () => ({
@@ -13,12 +13,11 @@ vi.mock("../../src/ScalesPage/piano.js", () => ({
   ensurePianoReadyForPlayback: vi.fn(async () => true),
   playNote: (...args) => playNoteMock(...args),
   playMetronomeTick: (...args) => playMetronomeTickMock(...args),
-  subscribeToPlayedNotes: () => () => {
-  },
+  subscribeToPlayedNotes: () => () => {},
 }));
 
 beforeEach(() => {
-  window.__setForegroundForTests({visible: true, focused: true});
+  window.__setForegroundForTests({ visible: true, focused: true });
   playNoteMock.mockClear();
   playMetronomeTickMock.mockClear();
   vi.useFakeTimers();
@@ -33,18 +32,18 @@ async function waitForReady() {
   act(() => {
     vi.advanceTimersByTime(0);
   });
-  expect(screen.getByRole("button", {name: "Play"})).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Play" })).toBeEnabled();
 }
 
 function renderScales(props) {
-  return render(<ScalesPage engine={new PlaybackEngine()} {...props}/>);
+  return render(<ScalesPage engine={new PlaybackEngine()} {...props} />);
 }
 
 test("changing BPM while playing applies on the next pulse", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
 
-  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
   await act(async () => {
     await Promise.resolve();
   });
@@ -56,7 +55,7 @@ test("changing BPM while playing applies on the next pulse", async () => {
   expect(playNoteMock.mock.calls[0][0]).toBe(48);
 
   for (let i = 0; i < 30; i += 1) {
-    fireEvent.click(screen.getByRole("button", {name: "Increase scales BPM"}));
+    fireEvent.click(screen.getByRole("button", { name: "Increase scales BPM" }));
   }
 
   await act(async () => {
@@ -67,10 +66,10 @@ test("changing BPM while playing applies on the next pulse", async () => {
 });
 
 test("pause and resume restarts the current set from the cue note", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
 
-  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
   await act(async () => {
     await Promise.resolve();
   });
@@ -80,8 +79,8 @@ test("pause and resume restarts the current set from the cue note", async () => 
   });
   expect(playNoteMock.mock.calls.slice(0, 3).map((args) => args[0])).toEqual([48, 48, 49]);
 
-  fireEvent.click(screen.getByRole("button", {name: "Pause"}));
-  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
   await act(async () => {
     await Promise.resolve();
   });
@@ -93,10 +92,10 @@ test("pause and resume restarts the current set from the cue note", async () => 
 });
 
 test("pressing a piano key while playing restarts the set from that root", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
 
-  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
   await act(async () => {
     await Promise.resolve();
   });
@@ -106,7 +105,7 @@ test("pressing a piano key while playing restarts the set from that root", async
   });
   const callsBeforePress = playNoteMock.mock.calls.length;
 
-  fireEvent.click(screen.getByRole("button", {name: "C4"}));
+  fireEvent.click(screen.getByRole("button", { name: "C4" }));
 
   expect(playNoteMock.mock.calls.length).toBe(callsBeforePress + 2);
   expect(playNoteMock.mock.calls[callsBeforePress][0]).toBe("C4");
@@ -114,10 +113,10 @@ test("pressing a piano key while playing restarts the set from that root", async
 });
 
 test("pressing a piano key too high for the selected pattern is ignored for set restart", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
 
-  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
   await act(async () => {
     await Promise.resolve();
   });
@@ -127,17 +126,17 @@ test("pressing a piano key too high for the selected pattern is ignored for set 
   });
   const callsBeforePress = playNoteMock.mock.calls.length;
 
-  fireEvent.click(screen.getByRole("button", {name: "E4"}));
+  fireEvent.click(screen.getByRole("button", { name: "E4" }));
 
   expect(playNoteMock.mock.calls.length).toBe(callsBeforePress + 1);
   expect(playNoteMock.mock.calls[callsBeforePress][0]).toBe("E4");
 });
 
 test("metronome ticks while scales playback is stopped", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
 
-  fireEvent.click(screen.getByRole("button", {name: "Enable metronome"}));
+  fireEvent.click(screen.getByRole("button", { name: "Enable metronome" }));
 
   await act(async () => {
     await vi.advanceTimersByTimeAsync(700);
@@ -152,15 +151,15 @@ test("metronome ticks while scales playback is stopped", async () => {
 
 test("slow first metronome tick does not trigger immediate catch-up tick", async () => {
   playMetronomeTickMock.mockImplementationOnce(
-      () =>
-          new Promise((resolve) => {
-            window.setTimeout(resolve, 500);
-          })
+    () =>
+      new Promise((resolve) => {
+        window.setTimeout(resolve, 500);
+      }),
   );
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
 
-  fireEvent.click(screen.getByRole("button", {name: "Enable metronome"}));
+  fireEvent.click(screen.getByRole("button", { name: "Enable metronome" }));
 
   await act(async () => {
     await vi.advanceTimersByTimeAsync(800);
@@ -174,10 +173,10 @@ test("slow first metronome tick does not trigger immediate catch-up tick", async
 });
 
 test("metronome shares the scales pulse loop and ducks on simultaneous notes", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E4"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
   await waitForReady();
 
-  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
   await act(async () => {
     await Promise.resolve();
   });
@@ -185,7 +184,7 @@ test("metronome shares the scales pulse loop and ducks on simultaneous notes", a
   await act(async () => {
     await vi.advanceTimersByTimeAsync(100);
   });
-  fireEvent.click(screen.getByRole("button", {name: "Enable metronome"}));
+  fireEvent.click(screen.getByRole("button", { name: "Enable metronome" }));
   expect(playMetronomeTickMock).not.toHaveBeenCalled();
 
   await act(async () => {
@@ -193,7 +192,7 @@ test("metronome shares the scales pulse loop and ducks on simultaneous notes", a
   });
   expect(playNoteMock).toHaveBeenCalledTimes(1);
   expect(playMetronomeTickMock.mock.calls.length).toBeGreaterThan(0);
-  expect(playMetronomeTickMock.mock.calls[0][0]).toEqual({duck: true});
+  expect(playMetronomeTickMock.mock.calls[0][0]).toEqual({ duck: true });
 
   await act(async () => {
     await vi.advanceTimersByTimeAsync(900);
@@ -204,19 +203,19 @@ test("metronome shares the scales pulse loop and ducks on simultaneous notes", a
 
 test("scales playback and metronome pause in background and resume in foreground", async () => {
   const engine = new PlaybackEngine();
-  const {rerender} = render(
-      <ScalesPage
-          engine={engine}
-          scaleMinNote="C3"
-          scaleMaxNote="E4"
-          keepRunningInBackground={false}
-          isForeground={true}
-      />
+  const { rerender } = render(
+    <ScalesPage
+      engine={engine}
+      scaleMinNote="C3"
+      scaleMaxNote="E4"
+      keepRunningInBackground={false}
+      isForeground={true}
+    />,
   );
   await waitForReady();
 
-  fireEvent.click(screen.getByRole("button", {name: "Enable metronome"}));
-  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  fireEvent.click(screen.getByRole("button", { name: "Enable metronome" }));
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
   await act(async () => {
     await Promise.resolve();
   });
@@ -230,13 +229,13 @@ test("scales playback and metronome pause in background and resume in foreground
   expect(ticksBeforeBackground).toBeGreaterThan(0);
 
   rerender(
-      <ScalesPage
-          engine={engine}
-          scaleMinNote="C3"
-          scaleMaxNote="E4"
-          keepRunningInBackground={false}
-          isForeground={false}
-      />
+    <ScalesPage
+      engine={engine}
+      scaleMinNote="C3"
+      scaleMaxNote="E4"
+      keepRunningInBackground={false}
+      isForeground={false}
+    />,
   );
 
   await act(async () => {
@@ -246,13 +245,13 @@ test("scales playback and metronome pause in background and resume in foreground
   expect(playMetronomeTickMock.mock.calls.length).toBe(ticksBeforeBackground);
 
   rerender(
-      <ScalesPage
-          engine={engine}
-          scaleMinNote="C3"
-          scaleMaxNote="E4"
-          keepRunningInBackground={false}
-          isForeground={true}
-      />
+    <ScalesPage
+      engine={engine}
+      scaleMinNote="C3"
+      scaleMaxNote="E4"
+      keepRunningInBackground={false}
+      isForeground={true}
+    />,
   );
 
   await act(async () => {
@@ -263,10 +262,10 @@ test("scales playback and metronome pause in background and resume in foreground
 });
 
 test("repeat-up bounces before a set would exceed the top note", async () => {
-  renderScales({scaleMinNote: "C3", scaleMaxNote: "E3"});
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E3" });
   await waitForReady();
 
-  fireEvent.click(screen.getByRole("button", {name: "Play"}));
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
   await act(async () => {
     await Promise.resolve();
   });
@@ -276,8 +275,8 @@ test("repeat-up bounces before a set would exceed the top note", async () => {
   });
 
   const cueRoots = playNoteMock.mock.calls
-      .filter(([, duration]) => duration > 0.4)
-      .map(([midi]) => midi);
+    .filter(([, duration]) => duration > 0.4)
+    .map(([midi]) => midi);
 
   expect(cueRoots.length).toBeGreaterThanOrEqual(3);
   expect(cueRoots.slice(0, 3)).toEqual([48, 48, 48]);

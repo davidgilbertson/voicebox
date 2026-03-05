@@ -8,9 +8,14 @@ import {
   writeScaleBpm,
   writeScaleSelectedName,
 } from "./config.js";
-import {clamp} from "../tools.js";
-import {noteNameToMidi} from "../pitchScale.js";
-import {ensureMetronomeTickLoaded, ensurePianoLoaded, playMetronomeTick, playNote} from "./piano.js";
+import { clamp } from "../tools.js";
+import { noteNameToMidi } from "../pitchScale.js";
+import {
+  ensureMetronomeTickLoaded,
+  ensurePianoLoaded,
+  playMetronomeTick,
+  playNote,
+} from "./piano.js";
 
 /**
  * Terminology
@@ -24,7 +29,9 @@ import {ensureMetronomeTickLoaded, ensurePianoLoaded, playMetronomeTick, playNot
 const SEMITONE_PATTERN = [0, 1, 2, 3, 4, 3, 2, 1, 0, 1, 2, 3, 4, 3, 2, 1, 0];
 const PENTATONIC_PATTERN = [0, 2, 4, 7, 9, 7, 4, 2, 0, 2, 4, 7, 9, 7, 4, 2, 0];
 const MAJOR_PATTERN = [0, 2, 4, 5, 7, 9, 11, 12, 11, 9, 7, 5, 4, 2, 0];
-const TWO_UP_ONE_DOWN_PATTERN = [0, 4, 2, 5, 4, 7, 5, 9, 7, 11, 9, 12, 9, 11, 7, 9, 5, 7, 4, 5, 2, 4, 0];
+const TWO_UP_ONE_DOWN_PATTERN = [
+  0, 4, 2, 5, 4, 7, 5, 9, 7, 11, 9, 12, 9, 11, 7, 9, 5, 7, 4, 5, 2, 4, 0,
+];
 export const SCALE_PATTERNS = {
   Semitones: SEMITONE_PATTERN,
   Pentatonic: PENTATONIC_PATTERN,
@@ -44,7 +51,7 @@ function patternOffsetBounds(pattern) {
     min = Math.min(min, pattern[i]);
     max = Math.max(max, pattern[i]);
   }
-  return {min, max};
+  return { min, max };
 }
 
 function buildSetTimeline(pattern) {
@@ -107,17 +114,16 @@ export class PlaybackEngine {
     // Warm up playback assets as soon as engine is created.
     ensurePianoLoaded()
       .then(() => {
-        this.setUi({isPianoReady: true});
+        this.setUi({ isPianoReady: true });
       })
       .catch(() => {
-        this.setUi({isPianoReady: false});
+        this.setUi({ isPianoReady: false });
       });
-    ensureMetronomeTickLoaded().catch(() => {
-    });
+    ensureMetronomeTickLoaded().catch(() => {});
   }
 
   setUi = (nextPartial) => {
-    this.state.ui = {...this.state.ui, ...nextPartial};
+    this.state.ui = { ...this.state.ui, ...nextPartial };
     for (const listener of this.listeners) {
       listener(this.state.ui);
     }
@@ -179,7 +185,7 @@ export class PlaybackEngine {
 
   setRepeatDirectionIfChanged = (nextRepeatDirection) => {
     if (this.state.ui.repeatDirection === nextRepeatDirection) return;
-    this.setUi({repeatDirection: nextRepeatDirection});
+    this.setUi({ repeatDirection: nextRepeatDirection });
   };
 
   flashGestureDirection = (direction) => {
@@ -199,23 +205,25 @@ export class PlaybackEngine {
     let noteWasPlayed = false;
 
     if (timelineEntry === "cue") {
-      const cueRootMidi = clamp(this.state.currentSetRootMidi, this.state.scaleMinMidi, this.state.scaleMaxMidi);
+      const cueRootMidi = clamp(
+        this.state.currentSetRootMidi,
+        this.state.scaleMinMidi,
+        this.state.scaleMaxMidi,
+      );
       try {
         const startedNote = await playNote(cueRootMidi, stepDuration * 2);
         noteWasPlayed = this.trackStartedNote(startedNote);
-      } catch {
-      }
+      } catch {}
     } else if (timelineEntry !== "rest") {
       const noteMidi = clamp(
         this.state.currentSetRootMidi + timelineEntry,
         this.state.scaleMinMidi,
-        this.state.scaleMaxMidi
+        this.state.scaleMaxMidi,
       );
       try {
         const startedNote = await playNote(noteMidi, stepDuration);
         noteWasPlayed = this.trackStartedNote(startedNote);
-      } catch {
-      }
+      } catch {}
     }
 
     const nextIndex = (this.state.timelineIndex + 1) % this.state.setTimeline.length;
@@ -230,7 +238,8 @@ export class PlaybackEngine {
     }
 
     let nextDirection = this.state.ui.repeatDirection;
-    let nextRootMidi = this.state.currentSetRootMidi + semitoneDeltaForRepeatDirection(nextDirection);
+    let nextRootMidi =
+      this.state.currentSetRootMidi + semitoneDeltaForRepeatDirection(nextDirection);
     const patternMinOffset = this.state.patternOffsetBounds.min;
     const patternMaxOffset = this.state.patternOffsetBounds.max;
 
@@ -240,7 +249,10 @@ export class PlaybackEngine {
       if (nextRootMidi + patternMinOffset < this.state.scaleMinMidi) {
         nextRootMidi = this.state.currentSetRootMidi;
       }
-    } else if (nextDirection === "down" && nextRootMidi + patternMinOffset < this.state.scaleMinMidi) {
+    } else if (
+      nextDirection === "down" &&
+      nextRootMidi + patternMinOffset < this.state.scaleMinMidi
+    ) {
       nextDirection = "up";
       nextRootMidi = this.state.currentSetRootMidi + semitoneDeltaForRepeatDirection(nextDirection);
       if (nextRootMidi + patternMaxOffset > this.state.scaleMaxMidi) {
@@ -252,7 +264,11 @@ export class PlaybackEngine {
       this.flashGestureDirection(nextDirection);
     }
     this.setRepeatDirectionIfChanged(nextDirection);
-    this.state.currentSetRootMidi = clamp(nextRootMidi, this.state.scaleMinMidi, this.state.scaleMaxMidi);
+    this.state.currentSetRootMidi = clamp(
+      nextRootMidi,
+      this.state.scaleMinMidi,
+      this.state.scaleMaxMidi,
+    );
     return noteWasPlayed;
   };
 
@@ -273,9 +289,10 @@ export class PlaybackEngine {
     try {
       const noteWasPlayed = await this.playStep();
       if (this.state.ui.isMetronomeEnabled) {
-        const metronomeTickPromise = noteWasPlayed ? playMetronomeTick({duck: true}) : playMetronomeTick();
-        await metronomeTickPromise.catch(() => {
-        });
+        const metronomeTickPromise = noteWasPlayed
+          ? playMetronomeTick({ duck: true })
+          : playMetronomeTick();
+        await metronomeTickPromise.catch(() => {});
       }
     } finally {
       this.state.stepInFlight = false;
@@ -312,12 +329,7 @@ export class PlaybackEngine {
     this.restartPulseLoop(this.state.startupPriming);
   };
 
-  updateSettings = ({
-    scaleMinNote,
-    scaleMaxNote,
-    keepRunningInBackground,
-    isForeground,
-  }) => {
+  updateSettings = ({ scaleMinNote, scaleMaxNote, keepRunningInBackground, isForeground }) => {
     if (typeof keepRunningInBackground === "boolean") {
       this.state.keepRunningInBackground = keepRunningInBackground;
     }
@@ -325,8 +337,16 @@ export class PlaybackEngine {
       this.state.isForeground = isForeground;
     }
     if (scaleMinNote || scaleMaxNote) {
-      const nextMin = clamp(noteNameToMidi(scaleMinNote ?? readScaleMinNote()) ?? MIDI_MIN, MIDI_MIN, MIDI_MAX);
-      const nextMax = clamp(noteNameToMidi(scaleMaxNote ?? readScaleMaxNote()) ?? MIDI_MAX, MIDI_MIN, MIDI_MAX);
+      const nextMin = clamp(
+        noteNameToMidi(scaleMinNote ?? readScaleMinNote()) ?? MIDI_MIN,
+        MIDI_MIN,
+        MIDI_MAX,
+      );
+      const nextMax = clamp(
+        noteNameToMidi(scaleMaxNote ?? readScaleMaxNote()) ?? MIDI_MAX,
+        MIDI_MIN,
+        MIDI_MAX,
+      );
       this.state.scaleMinMidi = Math.min(nextMin, nextMax);
       this.state.scaleMaxMidi = Math.max(nextMin, nextMax);
       if (!this.state.ui.isPlaying) {
@@ -340,7 +360,7 @@ export class PlaybackEngine {
   setBpm = (nextBpm) => {
     const bpm = clamp(nextBpm, SCALE_BPM_MIN, SCALE_BPM_MAX);
     if (bpm === this.state.ui.bpm) return;
-    this.setUi({bpm});
+    this.setUi({ bpm });
     writeScaleBpm(bpm);
     if (this.state.nextPulseAtMs) {
       this.reschedulePulseFromLastStep();
@@ -350,7 +370,7 @@ export class PlaybackEngine {
   setSelectedScaleName = (nextScaleName) => {
     const selectedScaleName = sanitizeScaleName(nextScaleName);
     if (selectedScaleName === this.state.ui.selectedScaleName) return;
-    this.setUi({selectedScaleName});
+    this.setUi({ selectedScaleName });
     writeScaleSelectedName(selectedScaleName);
     const pattern = SCALE_PATTERNS[selectedScaleName];
     this.state.setTimeline = buildSetTimeline(pattern);
@@ -361,7 +381,7 @@ export class PlaybackEngine {
   setIsPlaying = (isPlaying) => {
     const nextIsPlaying = Boolean(isPlaying);
     if (nextIsPlaying === this.state.ui.isPlaying) return;
-    this.setUi({isPlaying: nextIsPlaying});
+    this.setUi({ isPlaying: nextIsPlaying });
     this.syncPulseLoopForPolicy();
     this.syncNotePlaybackForPlayingOrPolicy();
   };
@@ -374,7 +394,7 @@ export class PlaybackEngine {
   setIsMetronomeEnabled = (isMetronomeEnabled) => {
     const nextIsMetronomeEnabled = Boolean(isMetronomeEnabled);
     if (nextIsMetronomeEnabled === this.state.ui.isMetronomeEnabled) return;
-    this.setUi({isMetronomeEnabled: nextIsMetronomeEnabled});
+    this.setUi({ isMetronomeEnabled: nextIsMetronomeEnabled });
     this.syncPulseLoopForPolicy();
   };
 
@@ -404,8 +424,13 @@ export class PlaybackEngine {
     rapid.atMs = nowMs;
     this.setRepeatDirectionIfChanged(direction);
     if (this.state.ui.isPlaying && rapid.count >= 2) {
-      const nextRootMidi = this.state.currentSetRootMidi + semitoneDeltaForRepeatDirection(direction);
-      this.state.currentSetRootMidi = clamp(nextRootMidi, this.state.scaleMinMidi, this.state.scaleMaxMidi);
+      const nextRootMidi =
+        this.state.currentSetRootMidi + semitoneDeltaForRepeatDirection(direction);
+      this.state.currentSetRootMidi = clamp(
+        nextRootMidi,
+        this.state.scaleMinMidi,
+        this.state.scaleMaxMidi,
+      );
       this.state.timelineIndex = 0;
       this.playStep();
       this.restartPulseLoop(false);

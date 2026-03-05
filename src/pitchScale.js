@@ -41,7 +41,7 @@ export function midiToNoteName(midi) {
 }
 
 export function midiToHz(midi) {
-  return A4_HZ * (2 ** ((midi - A4_MIDI) / 12));
+  return A4_HZ * 2 ** ((midi - A4_MIDI) / 12);
 }
 
 export function centsToHz(cents) {
@@ -74,13 +74,13 @@ export function isOctaveC(noteName) {
   return /^C-?\d+$/.test(noteName);
 }
 
-export function createPitchGridLines({minCents, maxCents}) {
+export function createPitchGridLines({ minCents, maxCents }) {
   if (!Number.isFinite(minCents) || !Number.isFinite(maxCents) || maxCents <= minCents) {
     return [];
   }
 
-  const minMidi = Math.floor(A4_MIDI + (12 * Math.log2(centsToHz(minCents) / A4_HZ)));
-  const maxMidi = Math.ceil(A4_MIDI + (12 * Math.log2(centsToHz(maxCents) / A4_HZ)));
+  const minMidi = Math.floor(A4_MIDI + 12 * Math.log2(centsToHz(minCents) / A4_HZ));
+  const maxMidi = Math.ceil(A4_MIDI + 12 * Math.log2(centsToHz(maxCents) / A4_HZ));
   const lines = [];
 
   for (let midi = minMidi; midi <= maxMidi; midi += 1) {
@@ -88,14 +88,14 @@ export function createPitchGridLines({minCents, maxCents}) {
     const cents = hzToCents(midiToHz(midi));
     if (!noteName || cents < minCents || cents > maxCents) continue;
     if (isOctaveC(noteName)) {
-      lines.push({cents, noteName, tier: "octave", showLabel: true});
+      lines.push({ cents, noteName, tier: "octave", showLabel: true });
       continue;
     }
     if (isNaturalNote(noteName)) {
-      lines.push({cents, noteName, tier: "natural", showLabel: true});
+      lines.push({ cents, noteName, tier: "natural", showLabel: true });
       continue;
     }
-    lines.push({cents, noteName, tier: "accidental", showLabel: false});
+    lines.push({ cents, noteName, tier: "accidental", showLabel: false });
   }
 
   return lines;

@@ -11,9 +11,8 @@ export function generateVibratoSignal({
   let phase = 0;
   for (let i = 0; i < totalSamples; i += 1) {
     const timeSeconds = i / sampleRate;
-    const centsOffset =
-        Math.sin(2 * Math.PI * vibratoRate * timeSeconds) * (vibratoDepthCents / 2);
-    const frequency = baseHz * (2 ** (centsOffset / 1200));
+    const centsOffset = Math.sin(2 * Math.PI * vibratoRate * timeSeconds) * (vibratoDepthCents / 2);
+    const frequency = baseHz * 2 ** (centsOffset / 1200);
     output[i] = Math.sin(phase) * amplitude;
     phase += (2 * Math.PI * frequency) / sampleRate;
   }

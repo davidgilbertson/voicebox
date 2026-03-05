@@ -1,12 +1,12 @@
-import {expect, test} from "vitest";
-import {createPitchProcessingState} from "../../src/Recorder/pitchProcessing.js";
+import { expect, test } from "vitest";
+import { createPitchProcessingState } from "../../src/Recorder/pitchProcessing.js";
 import {
   createHighResSpectrogramBuffers,
   createSpectrogramBuffers,
   processOneAudioHop,
 } from "../../src/Recorder/hopProcessing.js";
 
-function createAnalyserWithSpectrum(spectrumDb, {minDecibels = -100, maxDecibels = -20} = {}) {
+function createAnalyserWithSpectrum(spectrumDb, { minDecibels = -100, maxDecibels = -20 } = {}) {
   return {
     frequencyBinCount: spectrumDb.length,
     minDecibels,
@@ -33,11 +33,11 @@ test("processOneAudioHop does not write pitch history when silence gating pauses
   const result = processOneAudioHop({
     engineState: {
       activeView: "pitch",
-      pitchRange: {minHz: 80, maxHz: 1200},
-      spectrogramRange: {minHz: 80, maxHz: 1200},
+      pitchRange: { minHz: 80, maxHz: 1200 },
+      spectrogramRange: { minHz: 80, maxHz: 1200 },
       signalLevel: 0.001,
       minSignalThreshold: 0.015,
-      signalTracking: {maxHeardSignalLevel: 0.2},
+      signalTracking: { maxHeardSignalLevel: 0.2 },
       lineStrengthEma: 0,
       autoPauseOnSilence: true,
       skipNextSpectrumFrame: false,
@@ -70,11 +70,11 @@ test("processOneAudioHop writes one pitch-history step for valid signal and retu
   const result = processOneAudioHop({
     engineState: {
       activeView: "pitch",
-      pitchRange: {minHz: 80, maxHz: 1200},
-      spectrogramRange: {minHz: 80, maxHz: 1200},
+      pitchRange: { minHz: 80, maxHz: 1200 },
+      spectrogramRange: { minHz: 80, maxHz: 1200 },
       signalLevel: 0.25,
       minSignalThreshold: 0.015,
-      signalTracking: {maxHeardSignalLevel: 0.1},
+      signalTracking: { maxHeardSignalLevel: 0.1 },
       lineStrengthEma: 0,
       autoPauseOnSilence: true,
       skipNextSpectrumFrame: false,
@@ -114,11 +114,11 @@ test("processOneAudioHop uses pitch range for detection even on spectrogram view
   processOneAudioHop({
     engineState: {
       activeView: "spectrogram",
-      pitchRange: {minHz: 380, maxHz: 500},
-      spectrogramRange: {minHz: 700, maxHz: 900},
+      pitchRange: { minHz: 380, maxHz: 500 },
+      spectrogramRange: { minHz: 700, maxHz: 900 },
       signalLevel: 0.25,
       minSignalThreshold: 0.015,
-      signalTracking: {maxHeardSignalLevel: 0.1},
+      signalTracking: { maxHeardSignalLevel: 0.1 },
       lineStrengthEma: 0,
       autoPauseOnSilence: true,
       skipNextSpectrumFrame: false,
@@ -156,11 +156,11 @@ test("processOneAudioHop can use separate analysers for pitch and spectrogram pa
   const result = processOneAudioHop({
     engineState: {
       activeView: "spectrogram",
-      pitchRange: {minHz: 380, maxHz: 500},
-      spectrogramRange: {minHz: 80, maxHz: 1200},
+      pitchRange: { minHz: 380, maxHz: 500 },
+      spectrogramRange: { minHz: 80, maxHz: 1200 },
       signalLevel: 0.25,
       minSignalThreshold: 0.015,
-      signalTracking: {maxHeardSignalLevel: 0.1},
+      signalTracking: { maxHeardSignalLevel: 0.1 },
       lineStrengthEma: 0,
       autoPauseOnSilence: true,
       skipNextSpectrumFrame: false,
@@ -175,6 +175,8 @@ test("processOneAudioHop can use separate analysers for pitch and spectrogram pa
 
   expect(audioSessionState.hzIndex).toBe(1);
   expect(result.spectrogramBuffers.spectrumNormalized.length).toBe(pitchSpectrumDb.length);
-  expect(result.highResSpectrogramBuffers.spectrumNormalized.length).toBe(spectrogramSpectrumDb.length);
+  expect(result.highResSpectrogramBuffers.spectrumNormalized.length).toBe(
+    spectrogramSpectrumDb.length,
+  );
   expect(result.spectrogramColumn.length).toBe(spectrogramSpectrumDb.length);
 });
