@@ -77,10 +77,10 @@ export class SpectrogramChartRenderer {
     };
     this.pendingColumns = [];
     this.pendingColumnCapacity = DEFAULT_PENDING_COLUMN_CAPACITY;
+    this.canvasNeedsClearing = true;
     this.frameState = {
       renderWidth: 0,
       renderHeight: 0,
-      binCount: 0,
       minHz: 0,
       maxHz: 0,
       sampleRate: 0,
@@ -92,6 +92,9 @@ export class SpectrogramChartRenderer {
   }
 
   updateOptions({ minHz, maxHz, renderScale }) {
+    if (this.minHz !== minHz || this.maxHz !== maxHz || this.renderScale !== renderScale) {
+      this.canvasNeedsClearing = true;
+    }
     this.minHz = minHz;
     this.maxHz = maxHz;
     this.renderScale = renderScale;
@@ -116,6 +119,16 @@ export class SpectrogramChartRenderer {
 
   appendColumn(spectrumNormalized) {
     if (!spectrumNormalized?.length) return;
+    // If the user changes the resolution of the spectrogram,
+    //  buffer sizes will change, so we drop any old ones.
+    const pendingColumnCount = this.pendingColumns.length;
+    if (
+      pendingColumnCount > 0 &&
+      this.pendingColumns[pendingColumnCount - 1].length !== spectrumNormalized.length
+    ) {
+      this.pendingColumns = [];
+      this.canvasNeedsClearing = true;
+    }
     const copy = new Float32Array(spectrumNormalized.length);
     copy.set(spectrumNormalized);
     this.pendingColumns.push(copy);
@@ -124,6 +137,7 @@ export class SpectrogramChartRenderer {
 
   clear() {
     this.pendingColumns = [];
+    this.canvasNeedsClearing = true;
     if (this.renderCanvas) {
       const renderCtx = this.renderCanvas.getContext("2d");
       renderCtx?.clearRect(0, 0, this.renderCanvas.width, this.renderCanvas.height);
@@ -132,7 +146,6 @@ export class SpectrogramChartRenderer {
     this.frameState = {
       renderWidth: 0,
       renderHeight: 0,
-      binCount: 0,
       minHz: 0,
       maxHz: 0,
       sampleRate: 0,
@@ -189,23 +202,20 @@ export class SpectrogramChartRenderer {
       this.trimPendingColumnsToCapacity();
     }
 
+    const pendingColumnCount = this.pendingColumns.length;
+    const pendingBinCount =
+      pendingColumnCount > 0 ? this.pendingColumns[pendingColumnCount - 1].length : 0;
+    const effectiveBinCount = pendingBinCount || binCount;
+
+    // TODO (@davidgilbertson): clamping should happen in updateOptions, not on every draw
     const clampedMinHz = clamp(this.minHz, 1e-3, this.maxHz);
     const clampedMaxHz = Math.max(clampedMinHz + 1e-3, Math.max(this.minHz, this.maxHz));
-    const hzPerBin = sampleRate / 2 / Math.max(1, binCount - 1);
     const frameState = this.frameState;
-    const mappingChanged =
-      frameState.binCount !== binCount ||
-      frameState.minHz !== clampedMinHz ||
-      frameState.maxHz !== clampedMaxHz ||
-      frameState.sampleRate !== sampleRate;
-    if (mappingChanged) {
+    const sampleRateChanged = frameState.sampleRate > 0 && frameState.sampleRate !== sampleRate;
+    if (this.canvasNeedsClearing || sampleRateChanged) {
       renderCtx.clearRect(0, 0, renderWidth, renderHeight);
-      const filteredPending = [];
-      for (const item of this.pendingColumns) {
-        if (item?.length !== binCount) continue;
-        filteredPending.push(item);
-      }
-      this.pendingColumns = filteredPending;
+      this.yBinCache = null;
+      this.canvasNeedsClearing = false;
     } else if (renderResized && frameState.renderWidth > 0 && frameState.renderHeight > 0) {
       const previousWidth = frameState.renderWidth;
       const previousHeight = frameState.renderHeight;
@@ -230,41 +240,40 @@ export class SpectrogramChartRenderer {
       }
     }
 
-    const yCache = this.yBinCache;
-    const needsYCache =
-      !yCache ||
-      yCache.height !== renderHeight ||
-      yCache.binCount !== binCount ||
-      yCache.minHz !== clampedMinHz ||
-      yCache.maxHz !== clampedMaxHz ||
-      yCache.sampleRate !== sampleRate;
-    if (needsYCache) {
-      const low = new Uint16Array(renderHeight);
-      const mix = new Float32Array(renderHeight);
-      const freqSpanRatio = clampedMinHz / clampedMaxHz;
-      for (let y = 0; y < renderHeight; y += 1) {
-        const normalizedY = renderHeight <= 1 ? 0 : y / (renderHeight - 1);
-        const hz = clampedMaxHz * Math.pow(freqSpanRatio, normalizedY);
-        const binFloat = clamp(hz / hzPerBin, 0, binCount - 1);
-        const binLow = Math.floor(binFloat);
-        low[y] = clamp(binLow, 0, binCount - 1);
-        mix[y] = binFloat - binLow;
-      }
-      this.yBinCache = {
-        low,
-        mix,
-        height: renderHeight,
-        binCount,
-        minHz: clampedMinHz,
-        maxHz: clampedMaxHz,
-        sampleRate,
-      };
-    }
-    const yBinLow = this.yBinCache.low;
-    const yBinMix = this.yBinCache.mix;
-
-    const pendingColumnCount = this.pendingColumns.length;
     if (pendingColumnCount > 0) {
+      const hzPerBin = sampleRate / 2 / Math.max(1, effectiveBinCount - 1);
+      const yCache = this.yBinCache;
+      const needsYCache =
+        !yCache ||
+        yCache.height !== renderHeight ||
+        yCache.binCount !== effectiveBinCount ||
+        yCache.minHz !== clampedMinHz ||
+        yCache.maxHz !== clampedMaxHz ||
+        yCache.sampleRate !== sampleRate;
+      if (needsYCache) {
+        const low = new Uint16Array(renderHeight);
+        const mix = new Float32Array(renderHeight);
+        const freqSpanRatio = clampedMinHz / clampedMaxHz;
+        for (let y = 0; y < renderHeight; y += 1) {
+          const normalizedY = renderHeight <= 1 ? 0 : y / (renderHeight - 1);
+          const hz = clampedMaxHz * Math.pow(freqSpanRatio, normalizedY);
+          const binFloat = clamp(hz / hzPerBin, 0, effectiveBinCount - 1);
+          const binLow = Math.floor(binFloat);
+          low[y] = clamp(binLow, 0, effectiveBinCount - 1);
+          mix[y] = binFloat - binLow;
+        }
+        this.yBinCache = {
+          low,
+          mix,
+          height: renderHeight,
+          binCount: effectiveBinCount,
+          minHz: clampedMinHz,
+          maxHz: clampedMaxHz,
+          sampleRate,
+        };
+      }
+      const yBinLow = this.yBinCache.low;
+      const yBinMix = this.yBinCache.mix;
       const columnsToDraw = Math.min(renderWidth, pendingColumnCount);
       const tailColumns = this.collectTailColumns(columnsToDraw);
       if (columnsToDraw < renderWidth) {
@@ -292,7 +301,7 @@ export class SpectrogramChartRenderer {
           yBinMix,
           palette: this.palette,
           spectrumNormalized: spectrumColumn,
-          binCount,
+          binCount: effectiveBinCount,
         });
       }
       renderCtx.putImageData(strip, renderWidth - columnsToDraw, 0);
@@ -301,7 +310,6 @@ export class SpectrogramChartRenderer {
 
     frameState.renderWidth = renderWidth;
     frameState.renderHeight = renderHeight;
-    frameState.binCount = binCount;
     frameState.minHz = clampedMinHz;
     frameState.maxHz = clampedMaxHz;
     frameState.sampleRate = sampleRate;

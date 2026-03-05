@@ -329,9 +329,8 @@ export class RecordingEngine {
       return;
     }
     if (this.state.activeView === "spectrogram") {
-      const activeSpectrogramBuffers = this.highResSpectrogramBuffers ?? this.spectrogramBuffers;
       this.chartRefs.spectrogramChartRef?.current?.draw({
-        binCount: activeSpectrogramBuffers.spectrumNormalized.length,
+        binCount: this.state.highResSpectrogram ? SPECTROGRAM_BIN_COUNT * 2 : SPECTROGRAM_BIN_COUNT,
         sampleRate: this.audioSessionState.sampleRate,
       });
       return;
