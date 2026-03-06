@@ -177,6 +177,28 @@ export class PlaybackEngine {
     this.schedulePulseAt(this.state.lastStepAtMs + stepMs);
   };
 
+  normalizeCurrentSetRootMidi = () => {
+    const minAllowedRootMidi = Math.max(
+      this.state.scaleMinMidi,
+      this.state.scaleMinMidi - this.state.patternOffsetBounds.min,
+    );
+    const maxAllowedRootMidi = Math.min(
+      this.state.scaleMaxMidi,
+      this.state.scaleMaxMidi - this.state.patternOffsetBounds.max,
+    );
+
+    if (minAllowedRootMidi > maxAllowedRootMidi) {
+      this.state.currentSetRootMidi = this.state.scaleMinMidi;
+      return;
+    }
+
+    this.state.currentSetRootMidi = clamp(
+      this.state.currentSetRootMidi,
+      minAllowedRootMidi,
+      maxAllowedRootMidi,
+    );
+  };
+
   restartPulseLoop = (primeFirstPulse = false) => {
     this.state.startupPriming = primeFirstPulse;
     const stepMs = (60 / this.state.ui.bpm) * 1000;
@@ -352,6 +374,7 @@ export class PlaybackEngine {
       if (!this.state.ui.isPlaying) {
         this.state.currentSetRootMidi = this.state.scaleMinMidi;
       }
+      this.normalizeCurrentSetRootMidi();
     }
     this.syncPulseLoopForPolicy();
     this.syncNotePlaybackForPlayingOrPolicy();
@@ -375,6 +398,7 @@ export class PlaybackEngine {
     const pattern = SCALE_PATTERNS[selectedScaleName];
     this.state.setTimeline = buildSetTimeline(pattern);
     this.state.patternOffsetBounds = patternOffsetBounds(pattern);
+    this.normalizeCurrentSetRootMidi();
     this.state.timelineIndex = 0;
   };
 

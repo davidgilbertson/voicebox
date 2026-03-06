@@ -281,3 +281,38 @@ test("repeat-up bounces before a set would exceed the top note", async () => {
   expect(cueRoots.length).toBeGreaterThanOrEqual(3);
   expect(cueRoots.slice(0, 3)).toEqual([48, 48, 48]);
 });
+
+test("changing to a taller scale lowers the root enough to keep the pattern in range", async () => {
+  renderScales({ scaleMinNote: "C3", scaleMaxNote: "C4" });
+  await waitForReady();
+
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1100);
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: "A3" }));
+
+  const cueRootsBeforeSwitch = playNoteMock.mock.calls
+    .filter(([, duration]) => duration > 0.4)
+    .map(([midi]) => midi);
+
+  fireEvent.change(screen.getByRole("combobox", { name: "Scale pattern" }), {
+    target: { value: "Major" },
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1300);
+  });
+
+  const cueRoots = playNoteMock.mock.calls
+    .filter(([, duration]) => duration > 0.4)
+    .map(([midi]) => midi);
+  const cueRootsAfterSwitch = cueRoots.slice(cueRootsBeforeSwitch.length);
+
+  expect(cueRootsAfterSwitch[0]).toBe(48);
+});
