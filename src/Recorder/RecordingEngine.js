@@ -128,6 +128,7 @@ export class RecordingEngine {
     this.signalTracking = {
       maxHeardSignalLevel: initialMaxSignalLevel,
     };
+    this.pendingAudioRestart = false;
     this.unsubscribeForeground = subscribeToForegroundChanges(this.onForegroundChange);
 
     this.syncBatteryPolling();
@@ -205,6 +206,8 @@ export class RecordingEngine {
   startAudio = async () => {
     if (this.state.ui.isAudioRunning || this.state.isStarting) return;
     this.state.isStarting = true;
+    // If settings change WHILE audio is starting, we'll set this back to true and need to start again
+    this.pendingAudioRestart = false;
     const startAttempt = ++this.state.startAttempt;
     this.setUi({ error: "" });
     try {
@@ -232,7 +235,7 @@ export class RecordingEngine {
           this.processCurrentAudioHop();
         },
       });
-      if (startAttempt !== this.state.startAttempt) {
+      if (startAttempt !== this.state.startAttempt || this.pendingAudioRestart) {
         destroyRecorderAudioSession(session);
         return;
       }
@@ -278,6 +281,9 @@ export class RecordingEngine {
       });
     } finally {
       this.state.isStarting = false;
+      if (this.pendingAudioRestart) {
+        this.syncAudioState();
+      }
     }
   };
 
@@ -469,6 +475,9 @@ export class RecordingEngine {
     let shouldRestartAudio = false;
     if (typeof highResSpectrogram === "boolean") {
       if (highResSpectrogram !== this.state.highResSpectrogram) {
+        if (this.state.isStarting && !this.state.ui.isAudioRunning) {
+          this.pendingAudioRestart = true;
+        }
         this.state.highResSpectrogram = highResSpectrogram;
         shouldRestartAudio = true;
       }
