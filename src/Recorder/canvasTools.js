@@ -116,7 +116,7 @@ export function drawWaveformTrace({
     if (!hasGap && lastX !== null) {
       const colorValue = colorValuesRing.at(i);
       const alphaValue = alphaValues ? alphaValues[i] : 1;
-      ctx.strokeStyle = mapColorValueToStroke(colorValue);
+      ctx.strokeStyle = mapColorValueToStroke(colorValue, i);
       ctx.globalAlpha = Number.isFinite(alphaValue) ? clamp(alphaValue, 0, 1) : 1;
       ctx.beginPath();
       ctx.moveTo(lastX, lastY);

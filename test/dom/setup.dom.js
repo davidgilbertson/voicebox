@@ -97,6 +97,7 @@ const canvasCtx = {
   moveTo: () => {},
   lineTo: () => {},
   stroke: () => {},
+  fillRect: () => {},
   strokeText: () => {},
   fillText: () => {},
   drawImage: () => {},
@@ -104,6 +105,9 @@ const canvasCtx = {
     width,
     height,
     data: new Uint8ClampedArray(width * height * 4),
+  }),
+  getImageData: () => ({
+    data: new Uint8ClampedArray([100, 100, 100, 255]),
   }),
   putImageData: () => {},
   lineWidth: 1,

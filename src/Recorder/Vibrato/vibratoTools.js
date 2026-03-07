@@ -294,14 +294,18 @@ export class VibratoChartRenderer {
       ctx,
       valuesRing: smoothedPitchCentsRing,
       colorValuesRing: lineStrengthRing,
-      alphaValues: this.detectionAlphas,
       yOffset: this.centerCents,
       yRange: Y_RANGE,
       xInsetLeft: PLOT_LEFT,
       yInsetTop: PLOT_Y_INSET,
       yInsetBottom: PLOT_Y_INSET,
-      mapColorValueToStroke: (intensity) =>
-        mapWaveformIntensityToStrokeColor(intensity, WAVEFORM_LINE_COLOR, this.lineColorMode),
+      mapColorValueToStroke: (intensity, sampleIndex) =>
+        mapWaveformIntensityToStrokeColor(
+          intensity,
+          WAVEFORM_LINE_COLOR,
+          this.lineColorMode,
+          this.detectionAlphas?.[sampleIndex] ?? 1,
+        ),
       plotWidth: viewport.cssWidth,
       plotHeight: viewport.cssHeight,
     });

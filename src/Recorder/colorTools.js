@@ -17,10 +17,22 @@ const PITCH_LINE_COLOR_MODE_DEFAULT = "terrain";
 const paletteByMode = new Map();
 const colorStringsByMode = new Map();
 const FIXED_COLOR_BY_MODE = {
-  blue: colors.blue[400],
-  orange: colors.orange[400],
-  green: colors.green[400],
+  blue: colorStringToRgb(colors.blue[400]),
+  orange: colorStringToRgb(colors.orange[400]),
+  green: colorStringToRgb(colors.green[400]),
 };
+
+function colorStringToRgb(color) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.clearRect(0, 0, 1, 1);
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, 1, 1);
+  const [red, green, blue] = ctx.getImageData(0, 0, 1, 1).data;
+  return [red, green, blue];
+}
 
 function createPaletteFromStops(stops) {
   const palette = new Uint8ClampedArray(256 * 3);
@@ -91,19 +103,16 @@ function getPaletteForMode(mode) {
   return palette;
 }
 
-function getColorStringsForMode(mode) {
-  const resolved = resolvePitchLineColorMode(mode);
-  if (isFixedColorMode(resolved)) return null;
-  if (colorStringsByMode.has(resolved)) {
-    return colorStringsByMode.get(resolved);
-  }
-  const palette = getPaletteForMode(resolved);
-  const colors = Array.from({ length: 256 }, (_, index) => {
-    const offset = index * 3;
-    return `rgb(${palette[offset]}, ${palette[offset + 1]}, ${palette[offset + 2]})`;
-  });
-  colorStringsByMode.set(resolved, colors);
-  return colors;
+function scaleRgb(rgb, brightness) {
+  return [
+    Math.round(rgb[0] * brightness),
+    Math.round(rgb[1] * brightness),
+    Math.round(rgb[2] * brightness),
+  ];
+}
+
+function rgbToString(rgb) {
+  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 }
 
 function mapWaveformIntensityToNormalized(intensity) {
@@ -122,10 +131,32 @@ function mapWaveformIntensityToPaletteIndex(intensity, mode) {
   );
 }
 
-export function mapWaveformIntensityToStrokeColor(intensity, fallbackColor, mode) {
+export function mapWaveformIntensityToStrokeColor(intensity, fallbackColor, mode, brightness = 1) {
   const resolved = resolvePitchLineColorMode(mode);
-  if (isFixedColorMode(resolved)) return FIXED_COLOR_BY_MODE[resolved] ?? fallbackColor;
+  const clampedBrightness = clamp(brightness, 0, 1);
+  if (isFixedColorMode(resolved)) {
+    return rgbToString(
+      scaleRgb(FIXED_COLOR_BY_MODE[resolved], clampedBrightness),
+    );
+  }
   const colorIndex = mapWaveformIntensityToPaletteIndex(intensity, resolved);
-  if (colorIndex === null) return fallbackColor;
-  return getColorStringsForMode(resolved)[colorIndex];
+  if (colorIndex === null) {
+    return rgbToString(scaleRgb(colorStringToRgb(fallbackColor), clampedBrightness));
+  }
+  const cacheKey = `${resolved}:${clampedBrightness}`;
+  if (!colorStringsByMode.has(cacheKey)) {
+    const palette = getPaletteForMode(resolved);
+    colorStringsByMode.set(
+      cacheKey,
+      Array.from({ length: 256 }, (_, index) => {
+        const offset = index * 3;
+        return rgbToString([
+          Math.round(palette[offset] * clampedBrightness),
+          Math.round(palette[offset + 1] * clampedBrightness),
+          Math.round(palette[offset + 2] * clampedBrightness),
+        ]);
+      }),
+    );
+  }
+  return colorStringsByMode.get(cacheKey)[colorIndex];
 }
