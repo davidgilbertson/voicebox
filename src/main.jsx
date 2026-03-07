@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import AppShell from "./AppShell.jsx";
 import AboutPage from "./AboutPage.jsx";
 import DebugPage from "./debug/DebugPage.jsx";
+import { installFocusVisibilityPolicy } from "./focusVisibility.js";
 import "./index.css";
 import { registerSW } from "virtual:pwa-register";
 
@@ -19,6 +20,7 @@ const updateNextFrame = () => {
 };
 
 updateViewportHeight();
+installFocusVisibilityPolicy();
 
 window.addEventListener("pageshow", updateNextFrame, { passive: true });
 document.addEventListener("visibilitychange", () => {

@@ -26,6 +26,12 @@ body {
   overflow: hidden;
 }
 
+html.disable-focus-rings :focus,
+html.disable-focus-rings :focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 button,
 [role="button"],
 input[type="button"],
