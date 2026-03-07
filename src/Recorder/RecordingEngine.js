@@ -57,7 +57,7 @@ export class RecordingEngine {
     this.batteryUsageMonitor = createBatteryUsageMonitor();
     // Decay the remembered max a little on each session start so it can adapt downward over time
     // while still retaining a device-specific sense of "loud enough" between runs.
-    const initialMaxSignalLevel = readMaxSignalLevel() * 0.9;
+    const initialMaxSignalLevel = readMaxSignalLevel() * 0.8;
     writeMaxSignalLevel(initialMaxSignalLevel);
 
     this.state = {
