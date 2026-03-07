@@ -7,6 +7,7 @@ const LATENCY_OPTIONS = [
   { value: "0.1", label: "0.1 s" },
   { value: "0.25", label: "0.25 s" },
 ];
+const LEVEL_PUBLISH_INTERVAL_MS = 100;
 
 function roundValue(value, digits = 4) {
   return Number.isFinite(value) ? value.toFixed(digits) : "n/a";
@@ -62,8 +63,22 @@ export default function DebugPage() {
     analyser: null,
     rafId: 0,
     samples: null,
+    batchSampleCount: 0,
+    batchSumSquares: 0,
+    batchAbsMax: 0,
+    batchMin: 0,
+    batchMax: 0,
+    lastPublishedAt: null,
   });
   const supportedConstraintNames = listSupportedConstraints(supportedConstraints);
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = "Debug Voicebox";
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
 
   useEffect(() => {
     const root = document.getElementById("root");
@@ -116,6 +131,12 @@ export default function DebugPage() {
       analyser: null,
       rafId: 0,
       samples: null,
+      batchSampleCount: 0,
+      batchSumSquares: 0,
+      batchAbsMax: 0,
+      batchMin: 0,
+      batchMax: 0,
+      lastPublishedAt: null,
     };
     setIsRunning(false);
   };
@@ -154,6 +175,12 @@ export default function DebugPage() {
         analyser,
         rafId: 0,
         samples,
+        batchSampleCount: 0,
+        batchSumSquares: 0,
+        batchAbsMax: 0,
+        batchMin: 0,
+        batchMax: 0,
+        lastPublishedAt: null,
       };
       setActualConstraints(track?.getConstraints?.() ?? {});
       setActualSettings(track?.getSettings?.() ?? {});
@@ -165,7 +192,7 @@ export default function DebugPage() {
       });
       setIsRunning(true);
 
-      const tick = () => {
+      const tick = (timestamp) => {
         const current = resourcesRef.current;
         if (!current.analyser || !current.samples) return;
         const frame = readAnalyserFrame(current.analyser, current.samples);
@@ -187,16 +214,41 @@ export default function DebugPage() {
           }
           sumSquares += sample * sample;
         }
-        setLevels({
-          frameAbsMax,
-          frameRms: Math.sqrt(sumSquares / frame.length),
-          frameMin: Number.isFinite(frameMin) ? frameMin : 0,
-          frameMax: Number.isFinite(frameMax) ? frameMax : 0,
-        });
-        setMaxHold((currentMaxHold) => ({
-          frameAbsMax: Math.max(currentMaxHold.frameAbsMax, frameAbsMax),
-          frameRms: Math.max(currentMaxHold.frameRms, Math.sqrt(sumSquares / frame.length)),
-        }));
+        current.batchSampleCount += frame.length;
+        current.batchSumSquares += sumSquares;
+        current.batchAbsMax = Math.max(current.batchAbsMax, frameAbsMax);
+        current.batchMin =
+          current.batchSampleCount === frame.length
+            ? frameMin
+            : Math.min(current.batchMin, frameMin);
+        current.batchMax =
+          current.batchSampleCount === frame.length
+            ? frameMax
+            : Math.max(current.batchMax, frameMax);
+
+        if (current.lastPublishedAt === null) {
+          current.lastPublishedAt = timestamp;
+        }
+
+        if (timestamp - current.lastPublishedAt >= LEVEL_PUBLISH_INTERVAL_MS) {
+          const frameRms = Math.sqrt(current.batchSumSquares / current.batchSampleCount);
+          setLevels({
+            frameAbsMax: current.batchAbsMax,
+            frameRms,
+            frameMin: Number.isFinite(current.batchMin) ? current.batchMin : 0,
+            frameMax: Number.isFinite(current.batchMax) ? current.batchMax : 0,
+          });
+          setMaxHold((currentMaxHold) => ({
+            frameAbsMax: Math.max(currentMaxHold.frameAbsMax, current.batchAbsMax),
+            frameRms: Math.max(currentMaxHold.frameRms, frameRms),
+          }));
+          current.batchSampleCount = 0;
+          current.batchSumSquares = 0;
+          current.batchAbsMax = 0;
+          current.batchMin = 0;
+          current.batchMax = 0;
+          current.lastPublishedAt = timestamp;
+        }
         current.rafId = requestAnimationFrame(tick);
       };
 

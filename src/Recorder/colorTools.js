@@ -135,9 +135,7 @@ export function mapWaveformIntensityToStrokeColor(intensity, fallbackColor, mode
   const resolved = resolvePitchLineColorMode(mode);
   const clampedBrightness = clamp(brightness, 0, 1);
   if (isFixedColorMode(resolved)) {
-    return rgbToString(
-      scaleRgb(FIXED_COLOR_BY_MODE[resolved], clampedBrightness),
-    );
+    return rgbToString(scaleRgb(FIXED_COLOR_BY_MODE[resolved], clampedBrightness));
   }
   const colorIndex = mapWaveformIntensityToPaletteIndex(intensity, resolved);
   if (colorIndex === null) {

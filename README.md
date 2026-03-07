@@ -100,3 +100,15 @@ Then:
 2. One column is `1 / 80 s = 12.5 ms`.
 3. `12.5 ms` at `48 kHz` is `600` samples.
 4. So `hopSize = 600` gives one new chart step per `12.5 ms` of audio.
+
+## Real Device Mic Volumes
+
+These are recordings from the /debug page in various scenarios.
+
+Values are RMS signal level.
+
+| Device     | Dead Quiet | Aircon Hum | Loud   |
+| ---------- | ---------- | ---------- | ------ |
+| iPad       | 0.0001     | 0.0014     | 0.1200 |
+| Note 9     | 0.0008     | 0.0040     | 0.3600 |
+| Galaxy S24 | 0.0013     | 0.0045     | 0.4300 |
