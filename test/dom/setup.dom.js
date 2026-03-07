@@ -161,6 +161,12 @@ class FakeAudioContext {
         return Math.max(1, Math.floor(fftSize / 2));
       },
       smoothingTimeConstant: 0,
+      getFloatTimeDomainData: (array) => {
+        array.fill(0);
+      },
+      getByteTimeDomainData: (array) => {
+        array.fill(128);
+      },
       getFloatFrequencyData: (array) => {
         array.fill(-120);
       },
@@ -193,11 +199,16 @@ if (!navigator.mediaDevices) {
   navigator.mediaDevices = {};
 }
 navigator.mediaDevices.getUserMedia = vi.fn(async () => ({
-  getTracks: () => [
+  getAudioTracks: () => [
     {
       stop: () => {},
+      getConstraints: () => ({}),
+      getSettings: () => ({}),
     },
   ],
+  getTracks() {
+    return this.getAudioTracks();
+  },
 }));
 
 Object.defineProperty(navigator, "getBattery", {

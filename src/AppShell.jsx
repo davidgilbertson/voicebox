@@ -5,6 +5,7 @@ import ScalesPage from "./ScalesPage/ScalesPage.jsx";
 import SettingsPanel from "./SettingsPanel.jsx";
 import { getRecordingEngine } from "./Recorder/RecordingEngine.js";
 import { getPlaybackEngine } from "./ScalesPage/PlaybackEngine.js";
+import { calibrateMinSignalThreshold } from "./Recorder/micCalibration.js";
 import { readActiveView, writeActiveView } from "./AppShell/config.js";
 import { PITCH_NOTE_OPTIONS } from "./pitchScale.js";
 import { computeIsForeground, subscribeToForegroundChanges } from "./foreground.js";
@@ -19,6 +20,7 @@ import {
   readHighResSpectrogram,
   readHalfResolutionCanvas,
   readKeepRunningInBackground,
+  readMinSignalThreshold,
   readPitchMaxNote,
   readPitchMinNote,
   readPitchLineColorMode,
@@ -29,6 +31,7 @@ import {
   writeHighResSpectrogram,
   writeHalfResolutionCanvas,
   writeKeepRunningInBackground,
+  writeMinSignalThreshold,
   writePitchMaxNote,
   writePitchMinNote,
   writePitchLineColorMode,
@@ -53,6 +56,7 @@ export default function AppShell({ downloadingUpdate = false }) {
     readHalfResolutionCanvas(),
   );
   const [highResSpectrogram, setHighResSpectrogram] = useState(() => readHighResSpectrogram());
+  const [minSignalThreshold, setMinSignalThreshold] = useState(() => readMinSignalThreshold());
   const [pitchMinNote, setPitchMinNote] = useState(() => readPitchMinNote());
   const [pitchMaxNote, setPitchMaxNote] = useState(() => readPitchMaxNote());
   const [pitchLineColorMode, setPitchLineColorMode] = useState(() => readPitchLineColorMode());
@@ -62,7 +66,7 @@ export default function AppShell({ downloadingUpdate = false }) {
   const [runtimeSettings, setRuntimeSettings] = useState({
     batteryUsagePerMinute: null,
   });
-  const showingScales = activeView === "scales";
+  const onScalesPage = activeView === "scales";
 
   useEffect(() => {
     writeActiveView(activeView);
@@ -96,6 +100,10 @@ export default function AppShell({ downloadingUpdate = false }) {
   }, [highResSpectrogram]);
 
   useEffect(() => {
+    writeMinSignalThreshold(minSignalThreshold);
+  }, [minSignalThreshold]);
+
+  useEffect(() => {
     writePitchMinNote(pitchMinNote);
     writePitchMaxNote(pitchMaxNote);
   }, [pitchMaxNote, pitchMinNote]);
@@ -110,13 +118,13 @@ export default function AppShell({ downloadingUpdate = false }) {
   }, [spectrogramMaxHz, spectrogramMinHz]);
 
   useEffect(() => {
-    if (showingScales) {
+    if (onScalesPage) {
       recorderEngine.setWantsToRun(false);
       return;
     }
     recorderEngine.setWantsToRun(true);
     recorderEngine.startIfNeeded();
-  }, [recorderEngine, showingScales]);
+  }, [recorderEngine, onScalesPage]);
 
   useEffect(() => {
     scalesPlaybackEngine.updateSettings({
@@ -133,6 +141,15 @@ export default function AppShell({ downloadingUpdate = false }) {
 
   const onOpenSettings = () => {
     setSettingsOpen(true);
+  };
+
+  const onCalibrateMicFloor = async () => {
+    const measuredRms = onScalesPage
+      ? await calibrateMinSignalThreshold()
+      : await recorderEngine.getMaxRms();
+    const threshold = Math.max(1e-4, measuredRms * 0.7);
+    setMinSignalThreshold(threshold);
+    return { measuredRms, threshold };
   };
 
   const onPitchMinNoteChange = (nextNote) => {
@@ -226,7 +243,7 @@ export default function AppShell({ downloadingUpdate = false }) {
       </div>
       <div className="flex h-full w-full items-stretch">
         <main className="relative flex min-h-0 flex-1 flex-col bg-black md:h-full md:w-full md:flex-none">
-          {showingScales ? (
+          {onScalesPage ? (
             <ScalesPage
               scaleMinNote={scaleMinNote}
               scaleMaxNote={scaleMaxNote}
@@ -243,6 +260,7 @@ export default function AppShell({ downloadingUpdate = false }) {
               runAt30Fps={runAt30Fps}
               halfResolutionCanvas={halfResolutionCanvas}
               highResSpectrogram={highResSpectrogram}
+              minSignalThreshold={minSignalThreshold}
               pitchMinNote={pitchMinNote}
               pitchMaxNote={pitchMaxNote}
               pitchLineColorMode={pitchLineColorMode}
@@ -340,6 +358,7 @@ export default function AppShell({ downloadingUpdate = false }) {
             onKeepRunningInBackgroundChange={setKeepRunningInBackground}
             autoPauseOnSilence={autoPauseOnSilence}
             onAutoPauseOnSilenceChange={setAutoPauseOnSilence}
+            onCalibrateMicFloor={onCalibrateMicFloor}
             runAt30Fps={runAt30Fps}
             onRunAt30FpsChange={setRunAt30Fps}
             halfResolutionCanvas={halfResolutionCanvas}

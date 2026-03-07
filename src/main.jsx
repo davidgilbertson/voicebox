@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import AppShell from "./AppShell.jsx";
 import AboutPage from "./AboutPage.jsx";
+import DebugPage from "./debug/DebugPage.jsx";
 import "./index.css";
 import { registerSW } from "virtual:pwa-register";
 
@@ -64,6 +65,9 @@ function CurrentRoute() {
   const pathname = window.location.pathname;
   if (pathname === "/about") {
     return <AboutPage />;
+  }
+  if (pathname === "/debug") {
+    return <DebugPage />;
   }
   return <Root />;
 }

@@ -1,3 +1,4 @@
+import { Circle, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import StepperControl from "./components/StepperControl.jsx";
 import { PITCH_LINE_COLOR_MODES } from "./Recorder/colorTools.js";
@@ -26,6 +27,7 @@ export default function SettingsPanel({
   onKeepRunningInBackgroundChange,
   autoPauseOnSilence,
   onAutoPauseOnSilenceChange,
+  onCalibrateMicFloor,
   runAt30Fps,
   onRunAt30FpsChange,
   halfResolutionCanvas,
@@ -52,6 +54,7 @@ export default function SettingsPanel({
   const [spectrogramMaxHzDraft, setSpectrogramMaxHzDraft] = useState(() =>
     String(spectrogramMaxHz),
   );
+  const [isCalibratingMic, setIsCalibratingMic] = useState(false);
   const scaleMinIndex = scaleNoteOptions.indexOf(scaleMinNote);
   const scaleMaxIndex = scaleNoteOptions.indexOf(scaleMaxNote);
   const pitchMinIndex = pitchNoteOptions.indexOf(pitchMinNote);
@@ -100,6 +103,18 @@ export default function SettingsPanel({
       : batteryUsagePerMinute === "--"
         ? "-- %/min"
         : `${batteryUsagePerMinute.toFixed(2)} %/min`;
+
+  const onCalibrateMicFloorClick = async () => {
+    if (isCalibratingMic) return;
+    setIsCalibratingMic(true);
+    try {
+      await onCalibrateMicFloor();
+    } catch (error) {
+      console.error("Mic calibration failed.", error);
+    } finally {
+      setIsCalibratingMic(false);
+    }
+  };
 
   return (
     <dialog
@@ -156,6 +171,36 @@ export default function SettingsPanel({
               className={settingsCheckboxClass}
             />
           </label>
+          <div className="flex items-start justify-between gap-4 text-sm">
+            <div className="flex flex-col gap-1">
+              <span>Calibrate microphone</span>
+              <span className="text-xs text-slate-400">
+                Calibrate Voicebox to this microphone. Press the button and make the quietest sound
+                you'd like Voicebox to capture.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onCalibrateMicFloorClick}
+              disabled={isCalibratingMic}
+              className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-white ${
+                isCalibratingMic ? "bg-red-500" : "bg-blue-400"
+              }`}
+              aria-label={
+                isCalibratingMic ? "Recording microphone calibration" : "Calibrate microphone"
+              }
+            >
+              {isCalibratingMic ? (
+                <Circle
+                  aria-hidden="true"
+                  className="h-4 w-4 fill-white text-white"
+                  strokeWidth={2.5}
+                />
+              ) : (
+                <Volume2 aria-hidden="true" className="h-5 w-5" strokeWidth={2.2} />
+              )}
+            </button>
+          </div>
           <div className="h-2 border-t border-slate-700/80" />
           <div className={settingsSectionHeadingClass}>Scales Page</div>
           <div className="grid grid-cols-2 gap-2">

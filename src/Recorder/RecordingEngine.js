@@ -6,6 +6,7 @@ import {
   PITCH_MIN_NOTE_DEFAULT,
   SILENCE_PAUSE_THRESHOLD_MS,
   SPECTROGRAM_BIN_COUNT,
+  MIN_SIGNAL_THRESHOLD_DEFAULT,
   readMaxSignalLevel,
   writeMaxSignalLevel,
 } from "./config.js";
@@ -17,11 +18,10 @@ import {
 } from "./hopProcessing.js";
 import { createRecorderAudioSession, destroyRecorderAudioSession } from "./audioSession.js";
 import { BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor } from "./batteryUsage.js";
+import { measureMaxRmsFromAnalyser } from "./micCalibration.js";
 import { computeIsForeground, subscribeToForegroundChanges } from "../foreground.js";
 import { noteNameToCents, noteNameToHz } from "../pitchScale.js";
-import { pickPreferredAudioInputDeviceId } from "../tools.js";
 
-const MIN_SIGNAL_THRESHOLD = 0.015;
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
 let recordingEngineSingleton = null;
 
@@ -55,6 +55,8 @@ export class RecordingEngine {
     };
     this.resizeObserver = null;
     this.batteryUsageMonitor = createBatteryUsageMonitor();
+    // Decay the remembered max a little on each session start so it can adapt downward over time
+    // while still retaining a device-specific sense of "loud enough" between runs.
     const initialMaxSignalLevel = readMaxSignalLevel() * 0.9;
     writeMaxSignalLevel(initialMaxSignalLevel);
 
@@ -89,6 +91,7 @@ export class RecordingEngine {
       chartWidthPx: Math.max(1, Math.floor(window.innerWidth)),
       hopSize: Math.round(48_000 / DISPLAY_PIXELS_PER_SECOND),
       signalLevel: 0,
+      minSignalThreshold: MIN_SIGNAL_THRESHOLD_DEFAULT,
       lineStrengthEma: 0,
       skipNextSpectrumFrame: false,
       frameDirty: false,
@@ -175,7 +178,7 @@ export class RecordingEngine {
         pitchRange: this.state.pitchRange,
         spectrogramRange: this.state.spectrogramRange,
         signalLevel: this.state.signalLevel,
-        minSignalThreshold: MIN_SIGNAL_THRESHOLD,
+        minSignalThreshold: this.state.minSignalThreshold,
         signalTracking: this.signalTracking,
         lineStrengthEma: this.state.lineStrengthEma,
         autoPauseOnSilence: this.state.autoPauseOnSilence,
@@ -211,14 +214,7 @@ export class RecordingEngine {
     const startAttempt = ++this.state.startAttempt;
     this.setUi({ error: "" });
     try {
-      let preferredDeviceId = null;
-      if (navigator.mediaDevices && typeof navigator.mediaDevices.enumerateDevices === "function") {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        if (startAttempt !== this.state.startAttempt) return;
-        preferredDeviceId = pickPreferredAudioInputDeviceId(devices);
-      }
       const session = await createRecorderAudioSession({
-        preferredDeviceId,
         fftSize: FFT_SIZE,
         highResSpectrogram: this.state.highResSpectrogram,
         displayPixelsPerSecond: DISPLAY_PIXELS_PER_SECOND,
@@ -285,6 +281,27 @@ export class RecordingEngine {
         this.syncAudioState();
       }
     }
+  };
+
+  getMaxRms = async ({ settleMs = 100, captureMs = 1000 } = {}) => {
+    if (this.state.isStarting) {
+      throw new Error("Microphone is still starting.");
+    }
+    if (!this.state.ui.isAudioRunning) {
+      this.setWantsToRun(true);
+      await this.startAudio();
+    }
+    if (!this.state.ui.isAudioRunning) {
+      throw new Error("Microphone is not running.");
+    }
+
+    // We reuse the live analyser when recorder audio is already active so calibration does not need
+    // a second temporary mic context on top of the existing one.
+    return measureMaxRmsFromAnalyser({
+      analyser: this.audioSessionState.analyser,
+      settleMs,
+      captureMs,
+    });
   };
 
   stopAudio = () => {
@@ -458,6 +475,7 @@ export class RecordingEngine {
     autoPauseOnSilence,
     runAt30Fps,
     highResSpectrogram,
+    minSignalThreshold,
     pitchMinNote,
     pitchMaxNote,
     spectrogramMinHz,
@@ -471,6 +489,9 @@ export class RecordingEngine {
     }
     if (typeof runAt30Fps === "boolean") {
       this.state.runAt30Fps = runAt30Fps;
+    }
+    if (Number.isFinite(minSignalThreshold) && minSignalThreshold > 0) {
+      this.state.minSignalThreshold = minSignalThreshold;
     }
     let shouldRestartAudio = false;
     if (typeof highResSpectrogram === "boolean") {

@@ -13,6 +13,7 @@ export default function Recorder({
   runAt30Fps,
   halfResolutionCanvas,
   highResSpectrogram,
+  minSignalThreshold,
   pitchMinNote,
   pitchMaxNote,
   pitchLineColorMode,
@@ -51,6 +52,7 @@ export default function Recorder({
       autoPauseOnSilence,
       runAt30Fps,
       highResSpectrogram,
+      minSignalThreshold,
       pitchMinNote,
       pitchMaxNote,
       spectrogramMinHz,
@@ -65,6 +67,7 @@ export default function Recorder({
     pitchMinNote,
     runAt30Fps,
     highResSpectrogram,
+    minSignalThreshold,
     spectrogramMaxHz,
     spectrogramMinHz,
   ]);

@@ -210,6 +210,14 @@ export default function AboutPage() {
                   <strong>Auto pause on silence</strong>: pauses pitch-history writes during
                   silence.
                 </li>
+                <li>
+                  <strong>Calibrate microphone</strong>: different phones and tablets can have very
+                  different microphone levels. If Voicebox is missing quiet sounds, use this to
+                  calibrate to your microphone. When you press the button, Voicebox will record one
+                  second of audio. Make the quietest sound you want captured, and Voicebox will
+                  adjust the level it uses for auto-pause so quiet singing or humming is less likely
+                  to get missed.
+                </li>
               </ul>
 
               <h3 className="pt-4 text-lg font-semibold text-slate-200">Scales Page</h3>

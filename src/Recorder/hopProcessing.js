@@ -183,6 +183,7 @@ function processHopPitchAndSignals({
   const usedMaxSignalLevel = maxHeardSignalLevel * 0.8;
 
   const isAboveSilenceThreshold = signalLevel > minSignalThreshold;
+  // The same RMS floor gates pitch detection, even when auto-pause is disabled.
   const cents = isAboveSilenceThreshold
     ? getPitchFromSpectrum(audioSessionState, spectrumForPitchDetection, minHz, maxHz)
     : Number.NaN;

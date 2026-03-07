@@ -15,6 +15,9 @@ async function flushMicrotasks() {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+  await new Promise((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
 }
 
 afterEach(() => {

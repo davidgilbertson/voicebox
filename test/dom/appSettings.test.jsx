@@ -7,6 +7,7 @@ import {
   readAutoPauseOnSilence,
   readHighResSpectrogram,
   readHalfResolutionCanvas,
+  readMinSignalThreshold,
   readPitchLineColorMode,
   readRunAt30Fps,
   readSpectrogramMaxHz,
@@ -21,6 +22,7 @@ test("settings defaults and persistence work via localStorage", async () => {
   const autoPauseCheckbox = screen.getByRole("checkbox", {
     name: /Auto pause on silence/i,
   });
+  const calibrateButton = screen.getByRole("button", { name: /Calibrate microphone/i });
   const runAt30FpsCheckbox = screen.getByRole("checkbox", {
     name: /Run at 30 FPS/i,
   });
@@ -32,6 +34,7 @@ test("settings defaults and persistence work via localStorage", async () => {
   });
 
   expect(autoPauseCheckbox).toBeChecked();
+  expect(calibrateButton).toBeEnabled();
   expect(runAt30FpsCheckbox).not.toBeChecked();
   expect(halfResolutionCanvasCheckbox).not.toBeChecked();
   expect(halfResolutionSpectrogramCheckbox).not.toBeChecked();
@@ -45,10 +48,21 @@ test("settings defaults and persistence work via localStorage", async () => {
 
   await waitFor(() => {
     expect(readAutoPauseOnSilence()).toBe(true);
+    expect(readMinSignalThreshold()).toBe(0.015);
     expect(readRunAt30Fps()).toBe(true);
     expect(readHalfResolutionCanvas()).toBe(true);
     expect(readHighResSpectrogram()).toBe(false);
   });
+});
+
+test("calibrate microphone stays available on the scales page", async () => {
+  const user = userEvent.setup();
+  render(<AppShell />);
+
+  await user.click(screen.getByRole("button", { name: "Scales" }));
+  await user.click(screen.getByLabelText("Open settings"));
+
+  expect(screen.getByRole("button", { name: /Calibrate microphone/i })).toBeEnabled();
 });
 
 test("spectrogram frequency settings are editable and persisted", async () => {

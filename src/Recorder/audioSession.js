@@ -1,19 +1,33 @@
-export async function createRecorderAudioSession({
-  preferredDeviceId = null,
-  fftSize,
-  highResSpectrogram = false,
-  displayPixelsPerSecond,
-  workletModuleUrl,
-  onWorkletMessage,
-}) {
+function pickPreferredAudioInputDeviceId(devices) {
+  const preferredInput = devices
+    .filter((device) => device.kind === "audioinput")
+    .find((device) => {
+      const label = (device.label || "").toLowerCase();
+      return (
+        label &&
+        !label.includes("bluetooth") &&
+        !label.includes("headset") &&
+        !label.includes("default")
+      );
+    });
+  return preferredInput?.deviceId || null;
+}
+
+async function getPreferredAudioInputDeviceId() {
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.enumerateDevices !== "function") {
+    return null;
+  }
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  return pickPreferredAudioInputDeviceId(devices);
+}
+
+export async function createBaseMicrophoneSession({ fftSize }) {
   let context = null;
   let stream = null;
   let source = null;
-  let captureNode = null;
   let analyser = null;
-  let highResAnalyser = null;
-  let silentOutputGain = null;
   try {
+    const preferredDeviceId = await getPreferredAudioInputDeviceId();
     stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         autoGainControl: false,
@@ -22,40 +36,59 @@ export async function createRecorderAudioSession({
         ...(preferredDeviceId ? { deviceId: preferredDeviceId } : {}),
       },
     });
-
     context = new AudioContext();
-    await context.audioWorklet.addModule(workletModuleUrl);
     await context.resume();
 
     source = context.createMediaStreamSource(stream);
-    captureNode = new AudioWorkletNode(context, "audio-capture-processor", {
-      numberOfInputs: 1,
-      numberOfOutputs: 1,
-      channelCount: 1,
-      outputChannelCount: [1],
-    });
-    captureNode.port.onmessage = onWorkletMessage ?? null;
-
     analyser = context.createAnalyser();
     analyser.fftSize = fftSize;
     analyser.smoothingTimeConstant = 0;
-
-    source.connect(captureNode);
     source.connect(analyser);
+
+    return {
+      context,
+      stream,
+      source,
+      analyser,
+    };
+  } catch (error) {
+    destroyMicrophoneSession({ context, stream, source, analyser });
+    throw error;
+  }
+}
+
+export async function createRecorderAudioSession({
+  fftSize,
+  highResSpectrogram = false,
+  displayPixelsPerSecond,
+  workletModuleUrl,
+  onWorkletMessage,
+}) {
+  let session = null;
+  let captureNode = null;
+  let highResAnalyser = null;
+  let silentOutputGain = null;
+  try {
+    session = await createBaseMicrophoneSession({ fftSize });
+    await session.context.audioWorklet.addModule(workletModuleUrl);
+
+    captureNode = new AudioWorkletNode(session.context, "audio-capture-processor");
+    captureNode.port.onmessage = onWorkletMessage ?? null;
+    session.source.connect(captureNode);
+
     if (highResSpectrogram) {
-      highResAnalyser = context.createAnalyser();
+      highResAnalyser = session.context.createAnalyser();
       highResAnalyser.fftSize = fftSize * 2;
       highResAnalyser.smoothingTimeConstant = 0;
-      source.connect(highResAnalyser);
+      session.source.connect(highResAnalyser);
     }
 
-    // Keep the worklet in the pull graph while producing no audible output.
-    silentOutputGain = context.createGain();
+    silentOutputGain = session.context.createGain();
     silentOutputGain.gain.value = 0;
     captureNode.connect(silentOutputGain);
-    silentOutputGain.connect(context.destination);
+    silentOutputGain.connect(session.context.destination);
 
-    const sampleRate = context.sampleRate;
+    const sampleRate = session.context.sampleRate;
     const hopSize = Math.round(sampleRate / displayPixelsPerSecond);
     captureNode.port.postMessage({
       type: "set-batch-size",
@@ -63,11 +96,8 @@ export async function createRecorderAudioSession({
     });
 
     return {
-      context,
-      stream,
-      source,
+      ...session,
       captureNode,
-      analyser,
       highResAnalyser,
       silentOutputGain,
       sampleRate,
@@ -75,15 +105,33 @@ export async function createRecorderAudioSession({
     };
   } catch (error) {
     destroyRecorderAudioSession({
-      context,
-      stream,
-      source,
+      ...(session ?? {}),
       captureNode,
-      analyser,
       highResAnalyser,
       silentOutputGain,
     });
     throw error;
+  }
+}
+
+export function destroyMicrophoneSession({ context, stream, source, analyser }) {
+  if (source) {
+    source.disconnect();
+  }
+  if (analyser) {
+    analyser.disconnect();
+  }
+  if (stream) {
+    const tracks =
+      typeof stream.getTracks === "function"
+        ? stream.getTracks()
+        : typeof stream.getAudioTracks === "function"
+          ? stream.getAudioTracks()
+          : [];
+    tracks.forEach((track) => track.stop());
+  }
+  if (context && context.state !== "closed") {
+    context.close();
   }
 }
 
@@ -100,22 +148,11 @@ export function destroyRecorderAudioSession({
     captureNode.port.onmessage = null;
     captureNode.disconnect();
   }
-  if (source) {
-    source.disconnect();
-  }
   if (silentOutputGain) {
     silentOutputGain.disconnect();
-  }
-  if (analyser) {
-    analyser.disconnect();
   }
   if (highResAnalyser) {
     highResAnalyser.disconnect();
   }
-  if (stream) {
-    stream.getTracks().forEach((track) => track.stop());
-  }
-  if (context && context.state !== "closed") {
-    context.close();
-  }
+  destroyMicrophoneSession({ context, stream, source, analyser });
 }
