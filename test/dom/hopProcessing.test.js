@@ -32,12 +32,10 @@ test("processOneAudioHop does not write pitch history when silence gating pauses
   };
   const result = processOneAudioHop({
     engineState: {
-      activeView: "pitch",
       pitchRange: { minHz: 80, maxHz: 1200 },
-      spectrogramRange: { minHz: 80, maxHz: 1200 },
-      signalLevel: 0.001,
-      minSignalThreshold: 0.015,
-      signalTracking: { maxHeardSignalLevel: 0.2 },
+      volume: 1,
+      minVolumeThreshold: 2,
+      volumeTracking: { maxHeardVolume: 6 },
       lineStrengthEma: 0,
       autoPauseOnSilence: true,
       skipNextSpectrumFrame: false,
@@ -50,7 +48,7 @@ test("processOneAudioHop does not write pitch history when silence gating pauses
   });
 
   expect(result.didFrameDataChange).toBe(false);
-  expect(result.spectrogramColumn).toBeNull();
+  expect(result.spectrumDb).toBeNull();
   expect(processingState.rawPitchCentsRing.sampleCount).toBe(0);
 });
 
@@ -69,12 +67,10 @@ test("processOneAudioHop writes one pitch-history step for valid signal and retu
   };
   const result = processOneAudioHop({
     engineState: {
-      activeView: "pitch",
       pitchRange: { minHz: 80, maxHz: 1200 },
-      spectrogramRange: { minHz: 80, maxHz: 1200 },
-      signalLevel: 0.25,
-      minSignalThreshold: 0.015,
-      signalTracking: { maxHeardSignalLevel: 0.1 },
+      volume: 4.5,
+      minVolumeThreshold: 2,
+      volumeTracking: { maxHeardVolume: 4 },
       lineStrengthEma: 0,
       autoPauseOnSilence: true,
       skipNextSpectrumFrame: false,
@@ -87,8 +83,8 @@ test("processOneAudioHop writes one pitch-history step for valid signal and retu
   });
 
   expect(result.didFrameDataChange).toBe(true);
-  expect(result.spectrogramColumn).toBeInstanceOf(Float32Array);
-  expect(result.shouldPersistMaxSignalLevel).toBe(true);
+  expect(result.spectrumDb).toBeInstanceOf(Float32Array);
+  expect(result.shouldPersistMaxVolume).toBe(true);
   expect(processingState.rawPitchCentsRing.sampleCount).toBe(1);
 });
 
@@ -113,12 +109,10 @@ test("processOneAudioHop uses pitch range for detection even on spectrogram view
 
   processOneAudioHop({
     engineState: {
-      activeView: "spectrogram",
       pitchRange: { minHz: 380, maxHz: 500 },
-      spectrogramRange: { minHz: 700, maxHz: 900 },
-      signalLevel: 0.25,
-      minSignalThreshold: 0.015,
-      signalTracking: { maxHeardSignalLevel: 0.1 },
+      volume: 4.5,
+      minVolumeThreshold: 2,
+      volumeTracking: { maxHeardVolume: 4 },
       lineStrengthEma: 0,
       autoPauseOnSilence: true,
       skipNextSpectrumFrame: false,
@@ -155,12 +149,10 @@ test("processOneAudioHop can use separate analysers for pitch and spectrogram pa
 
   const result = processOneAudioHop({
     engineState: {
-      activeView: "spectrogram",
       pitchRange: { minHz: 380, maxHz: 500 },
-      spectrogramRange: { minHz: 80, maxHz: 1200 },
-      signalLevel: 0.25,
-      minSignalThreshold: 0.015,
-      signalTracking: { maxHeardSignalLevel: 0.1 },
+      volume: 4.5,
+      minVolumeThreshold: 2,
+      volumeTracking: { maxHeardVolume: 4 },
       lineStrengthEma: 0,
       autoPauseOnSilence: true,
       skipNextSpectrumFrame: false,
@@ -174,9 +166,7 @@ test("processOneAudioHop can use separate analysers for pitch and spectrogram pa
   });
 
   expect(audioSessionState.hzIndex).toBe(1);
-  expect(result.spectrogramBuffers.spectrumNormalized.length).toBe(pitchSpectrumDb.length);
-  expect(result.highResSpectrogramBuffers.spectrumNormalized.length).toBe(
-    spectrogramSpectrumDb.length,
-  );
-  expect(result.spectrogramColumn.length).toBe(spectrogramSpectrumDb.length);
+  expect(result.spectrogramBuffers.spectrumDb.length).toBe(pitchSpectrumDb.length);
+  expect(result.highResSpectrogramBuffers.spectrumDb.length).toBe(spectrogramSpectrumDb.length);
+  expect(result.spectrumDb.length).toBe(spectrogramSpectrumDb.length);
 });

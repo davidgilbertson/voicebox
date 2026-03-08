@@ -55,8 +55,6 @@ export default function Recorder({
       minVolumeThreshold,
       pitchMinNote,
       pitchMaxNote,
-      spectrogramMinHz,
-      spectrogramMaxHz,
     });
     engine.startIfNeeded();
   }, [
@@ -68,8 +66,6 @@ export default function Recorder({
     runAt30Fps,
     highResSpectrogram,
     minVolumeThreshold,
-    spectrogramMaxHz,
-    spectrogramMinHz,
   ]);
 
   useEffect(() => {

@@ -23,8 +23,8 @@ const SpectrogramChart = forwardRef(function SpectrogramChart(
   useImperativeHandle(
     ref,
     () => ({
-      appendColumn(spectrumNormalized, gain = 1) {
-        rendererRef.current.appendColumn(spectrumNormalized, gain);
+      appendColumn(spectrumDb, maxHeardVolume) {
+        rendererRef.current.appendColumn(spectrumDb, maxHeardVolume);
       },
       clear() {
         rendererRef.current.clear();

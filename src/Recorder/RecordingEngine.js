@@ -18,7 +18,7 @@ import {
 } from "./hopProcessing.js";
 import { createRecorderAudioSession, destroyRecorderAudioSession } from "./audioSession.js";
 import { BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor } from "./batteryUsage.js";
-import { calibrateMinVolumeThreshold } from "./micCalibration.js";
+import { calibrateMinVolumeThreshold as runVolumeCalibration } from "./micCalibration.js";
 import { computeIsForeground, subscribeToForegroundChanges } from "../foreground.js";
 import { noteNameToCents, noteNameToHz } from "../pitchScale.js";
 import { STARTUP_MAX_VOLUME_DECAY_FACTOR } from "./signalVolume.js";
@@ -85,10 +85,6 @@ export class RecordingEngine {
         minCents: noteNameToCents(PITCH_MIN_NOTE_DEFAULT),
         maxCents: noteNameToCents(PITCH_MAX_NOTE_DEFAULT),
       },
-      spectrogramRange: {
-        minHz: 0,
-        maxHz: 0,
-      },
       chartWidthPx: Math.max(1, Math.floor(window.innerWidth)),
       hopSize: Math.round(48_000 / DISPLAY_PIXELS_PER_SECOND),
       volume: 0,
@@ -131,17 +127,6 @@ export class RecordingEngine {
     this.highResSpectrogramBuffers = null;
     this.volumeTracking = {
       maxHeardVolume: initialMaxVolume,
-    };
-    this.spectrogramDebug = {
-      peakAfterScaling: 0,
-      scalingFactor: 1,
-      minVolumeThreshold: MIN_VOLUME_THRESHOLD_DEFAULT,
-      currentVolume: 0,
-      maxHeardVolume: this.volumeTracking.maxHeardVolume,
-      usedMinVolume: MIN_VOLUME_THRESHOLD_DEFAULT,
-      usedMaxVolume: this.volumeTracking.maxHeardVolume,
-      volumeSpan: 0,
-      canScale: false,
     };
     this.pendingAudioRestart = false;
     this.unsubscribeForeground = subscribeToForegroundChanges(this.onForegroundChange);
@@ -186,9 +171,7 @@ export class RecordingEngine {
     if (!this.state.ui.isWantedRunning) return;
     const result = processOneAudioHop({
       engineState: {
-        activeView: this.state.activeView,
         pitchRange: this.state.pitchRange,
-        spectrogramRange: this.state.spectrogramRange,
         volume: this.state.volume,
         minVolumeThreshold: this.state.minVolumeThreshold,
         volumeTracking: this.volumeTracking,
@@ -207,16 +190,13 @@ export class RecordingEngine {
     this.state.lineStrengthEma = result.nextLineStrengthEma;
     this.spectrogramBuffers = result.spectrogramBuffers;
     this.highResSpectrogramBuffers = result.highResSpectrogramBuffers;
-    if (result.spectrogramDebug) {
-      this.spectrogramDebug = result.spectrogramDebug;
-    }
     if (result.shouldPersistMaxVolume) {
       writeMaxVolume(this.state.volume);
     }
-    if (result.spectrogramColumn) {
+    if (result.spectrumDb) {
       this.chartRefs.spectrogramChartRef?.current?.appendColumn(
-        result.spectrogramColumn,
-        result.spectrogramColumnGain,
+        result.spectrumDb,
+        this.volumeTracking.maxHeardVolume,
       );
     }
     if (result.didFrameDataChange) {
@@ -301,7 +281,7 @@ export class RecordingEngine {
     }
   };
 
-  getMaxVolume = async ({ settleMs = 100, captureMs = 1000 } = {}) => {
+  calibrateMinVolumeThreshold = async ({ settleMs = 100, captureMs = 1000 } = {}) => {
     if (this.state.isStarting) {
       throw new Error("Microphone is still starting.");
     }
@@ -315,7 +295,7 @@ export class RecordingEngine {
 
     // We reuse the live analyser when recorder audio is already active so calibration does not need
     // a second temporary mic context on top of the existing one.
-    return calibrateMinVolumeThreshold({
+    return runVolumeCalibration({
       settleMs,
       captureMs,
     });
@@ -372,17 +352,6 @@ export class RecordingEngine {
       this.chartRefs.spectrogramChartRef?.current?.draw({
         binCount: this.state.highResSpectrogram ? SPECTROGRAM_BIN_COUNT * 2 : SPECTROGRAM_BIN_COUNT,
         sampleRate: this.audioSessionState.sampleRate,
-        debug: {
-          peakAfterScaling: this.spectrogramDebug.peakAfterScaling,
-          scalingFactor: this.spectrogramDebug.scalingFactor,
-          storedMinVolume: this.state.minVolumeThreshold,
-          storedMaxVolume: this.volumeTracking.maxHeardVolume,
-          usedMinVolume: this.spectrogramDebug.usedMinVolume,
-          usedMaxVolume: this.spectrogramDebug.usedMaxVolume,
-          volumeSpan: this.spectrogramDebug.volumeSpan,
-          canScale: this.spectrogramDebug.canScale,
-          currentVolume: this.state.volume,
-        },
       });
       return;
     }
@@ -506,8 +475,6 @@ export class RecordingEngine {
     minVolumeThreshold,
     pitchMinNote,
     pitchMaxNote,
-    spectrogramMinHz,
-    spectrogramMaxHz,
   }) => {
     if (typeof keepRunningInBackground === "boolean") {
       this.state.keepRunningInBackground = keepRunningInBackground;
@@ -537,12 +504,6 @@ export class RecordingEngine {
         maxHz: noteNameToHz(pitchMaxNote),
         minCents: noteNameToCents(pitchMinNote),
         maxCents: noteNameToCents(pitchMaxNote),
-      };
-    }
-    if (Number.isFinite(spectrogramMinHz) && Number.isFinite(spectrogramMaxHz)) {
-      this.state.spectrogramRange = {
-        minHz: spectrogramMinHz,
-        maxHz: spectrogramMaxHz,
       };
     }
     this.state.forceRedraw = true;

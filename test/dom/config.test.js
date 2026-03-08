@@ -1,13 +1,13 @@
 import { expect, test } from "vitest";
-import { readMinSignalThreshold, writeMinSignalThreshold } from "../../src/Recorder/config.js";
+import { readMinVolumeThreshold, writeMinVolumeThreshold } from "../../src/Recorder/config.js";
 
-test("min signal threshold persists as a positive number", () => {
-  window.localStorage.removeItem("voicebox.minSignalThreshold");
-  expect(readMinSignalThreshold()).toBe(0.015);
+test("min volume threshold persists as a positive number", () => {
+  window.localStorage.removeItem("voicebox.minVolumeThreshold");
+  expect(readMinVolumeThreshold()).toBe(2);
 
-  writeMinSignalThreshold(0.003);
-  expect(readMinSignalThreshold()).toBe(0.003);
+  writeMinVolumeThreshold(3.4);
+  expect(readMinVolumeThreshold()).toBe(3.4);
 
-  writeMinSignalThreshold(-1);
-  expect(readMinSignalThreshold()).toBe(0.003);
+  writeMinVolumeThreshold(-1);
+  expect(readMinVolumeThreshold()).toBe(3.4);
 });

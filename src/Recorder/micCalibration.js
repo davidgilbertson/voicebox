@@ -27,14 +27,14 @@ export async function measureMaxRmsFromAnalyser({
     window.setTimeout(resolve, settleMs);
   });
 
-  const sampleSignalLevel = () => {
+  const sampleVolume = () => {
     calibrationState.maxRms = Math.max(
       calibrationState.maxRms,
       computeAnalyserRms(analyser, calibrationState.buffer),
     );
-    calibrationState.rafId = requestAnimationFrame(sampleSignalLevel);
+    calibrationState.rafId = requestAnimationFrame(sampleVolume);
   };
-  calibrationState.rafId = requestAnimationFrame(sampleSignalLevel);
+  calibrationState.rafId = requestAnimationFrame(sampleVolume);
 
   await new Promise((resolve) => {
     window.setTimeout(resolve, captureMs);

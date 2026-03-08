@@ -17,11 +17,10 @@ const EXTRA_HZ_LABELS = [
 ];
 const LABEL_FONT = "12px ui-monospace, SFMono-Regular, Consolas, monospace";
 const LABEL_STROKE_WIDTH = 3;
-const DEBUG_TEXT_X = 30;
-const DEBUG_TEXT_BOTTOM_INSET = 6;
-const DEBUG_LINE_HEIGHT = 14;
 const MIN_PENDING_COLUMN_CAPACITY = 1024;
 const DEFAULT_PENDING_COLUMN_CAPACITY = 8192;
+const SPECTROGRAM_DISPLAY_MIN_DB = -100;
+const SPECTROGRAM_DISPLAY_MAX_DB = -15;
 
 function drawLabelWithOutline(ctx, label, x, y) {
   ctx.lineWidth = LABEL_STROKE_WIDTH;
@@ -32,29 +31,6 @@ function drawLabelWithOutline(ctx, label, x, y) {
   ctx.fillText(label, x, y);
 }
 
-function formatFourDecimals(value) {
-  return Number.isFinite(value) ? value.toFixed(4) : "n/a";
-}
-
-function formatVolumeValue(value) {
-  return Number.isFinite(value) ? value.toFixed(2) : "n/a";
-}
-
-function formatDebugStat(label, value) {
-  return `${label.padEnd(10, " ")} ${value}`;
-}
-
-function drawDebugLines(ctx, viewport, lines) {
-  ctx.font = LABEL_FONT;
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  for (let i = 0; i < lines.length; i += 1) {
-    const y =
-      viewport.cssHeight - DEBUG_TEXT_BOTTOM_INSET - (lines.length - 1 - i) * DEBUG_LINE_HEIGHT;
-    drawLabelWithOutline(ctx, lines[i], DEBUG_TEXT_X, y);
-  }
-}
-
 function drawColumnImage({
   imageData,
   xOffset,
@@ -63,7 +39,7 @@ function drawColumnImage({
   yBinLow,
   yBinMix,
   palette,
-  spectrumNormalized,
+  spectrumValues,
   binCount,
 }) {
   const pixels = imageData.data;
@@ -71,8 +47,8 @@ function drawColumnImage({
     const low = yBinLow[y];
     const high = Math.min(binCount - 1, low + 1);
     const mix = yBinMix[y];
-    const lowValue = spectrumNormalized[low] ?? 0;
-    const highValue = spectrumNormalized[high] ?? 0;
+    const lowValue = spectrumValues[low] ?? 0;
+    const highValue = spectrumValues[high] ?? 0;
     const value = lowValue + (highValue - lowValue) * mix;
     const valueIndex = clamp(Math.round(value * 255), 0, 255);
     const colorOffset = valueIndex * 3;
@@ -143,26 +119,28 @@ export class SpectrogramChartRenderer {
     return tailColumns;
   }
 
-  appendColumn(spectrumNormalized, gain = 1) {
-    if (!spectrumNormalized?.length) return;
+  appendColumn(spectrumDb, maxHeardVolume) {
+    if (!spectrumDb?.length) return;
     // If the user changes the resolution of the spectrogram,
     //  buffer sizes will change, so we drop any old ones.
     const pendingColumnCount = this.pendingColumns.length;
     if (
       pendingColumnCount > 0 &&
-      this.pendingColumns[pendingColumnCount - 1].length !== spectrumNormalized.length
+      this.pendingColumns[pendingColumnCount - 1].length !== spectrumDb.length
     ) {
       this.pendingColumns = [];
       this.canvasNeedsClearing = true;
     }
-    const copy = new Float32Array(spectrumNormalized.length);
-    const columnGain = clamp(gain, 0, 1);
-    if (columnGain === 1) {
-      copy.set(spectrumNormalized);
-    } else {
-      for (let i = 0; i < spectrumNormalized.length; i += 1) {
-        copy[i] = spectrumNormalized[i] * columnGain;
-      }
+    const copy = new Float32Array(spectrumDb.length);
+    const dbRange = SPECTROGRAM_DISPLAY_MAX_DB - SPECTROGRAM_DISPLAY_MIN_DB;
+    const invDbRange = dbRange > 0 ? 1 / dbRange : 0;
+    const gain = maxHeardVolume > 0 ? 10 / maxHeardVolume : 1;
+    for (let i = 0; i < spectrumDb.length; i += 1) {
+      const normalized =
+        (Math.max(spectrumDb[i], SPECTROGRAM_DISPLAY_MIN_DB) - SPECTROGRAM_DISPLAY_MIN_DB) *
+        invDbRange;
+      const value = clamp(normalized * gain, 0, 1);
+      copy[i] = value;
     }
     this.pendingColumns.push(copy);
     this.trimPendingColumnsToCapacity();
@@ -185,7 +163,7 @@ export class SpectrogramChartRenderer {
     };
   }
 
-  draw({ binCount, sampleRate, debug }) {
+  draw({ binCount, sampleRate }) {
     const canvas = this.canvas;
     if (!canvas || !binCount || !sampleRate) return;
     const ctx = canvas.getContext("2d");
@@ -333,7 +311,7 @@ export class SpectrogramChartRenderer {
           yBinLow,
           yBinMix,
           palette: this.palette,
-          spectrumNormalized: spectrumColumn,
+          spectrumValues: spectrumColumn,
           binCount: effectiveBinCount,
         });
       }
@@ -405,17 +383,5 @@ export class SpectrogramChartRenderer {
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(labelCanvas, 0, 0, viewport.width, viewport.height);
-    ctx.setTransform(viewport.actualScaleX, 0, 0, viewport.actualScaleY, 0, 0);
-    drawDebugLines(ctx, viewport, [
-      formatDebugStat("peak", formatFourDecimals(debug?.peakAfterScaling)),
-      formatDebugStat("scale", formatFourDecimals(debug?.scalingFactor)),
-      formatDebugStat("volume", formatVolumeValue(debug?.currentVolume)),
-      formatDebugStat("min vol", formatVolumeValue(debug?.storedMinVolume)),
-      formatDebugStat("max vol", formatVolumeValue(debug?.storedMaxVolume)),
-      formatDebugStat("used min", formatVolumeValue(debug?.usedMinVolume)),
-      formatDebugStat("used max", formatVolumeValue(debug?.usedMaxVolume)),
-      formatDebugStat("span", formatVolumeValue(debug?.volumeSpan)),
-      formatDebugStat("can scale", debug?.canScale ? "yes" : "no"),
-    ]);
   }
 }

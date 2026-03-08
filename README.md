@@ -1,8 +1,8 @@
-# Voice Pipeline Architecture (Sample-Driven)
+# Voice Pipeline Architecture
 
-This is the developer-facing architecture reference for the recorder pipeline (mic input to chart rendering).
+This is the developer-facing overview for the recorder pipeline.
 
-Audio work is usually under 1 ms per hop, but battery efficiency is still a priority.
+Audio work per hop is small, but battery efficiency still matters.
 
 ## Core Rule
 
@@ -17,106 +17,94 @@ Chart progression is driven by audio sample counts, not wall-clock time.
     1. Audio session lifecycle (`getUserMedia`, `AudioContext`, worklet, analyser, teardown).
     2. Foreground/background policy for recorder pages.
     3. Per-hop processing and pitch-history updates.
-    4. Render scheduling (`requestAnimationFrame`) and chart drawing dispatch.
+    4. Render scheduling and chart drawing dispatch.
     5. Runtime UI state publication (`isAudioRunning`, `error`, `vibratoRate`, battery usage).
 2. `Recorder.jsx` is a thin adapter:
     1. Attaches chart refs and container ref to `RecordingEngine`.
     2. Forwards page/settings changes into engine APIs.
     3. Renders overlays and chart components from engine-provided state.
 
-## Naming
+## Adaptive Loudness Model
 
-1. `audioSampleRateHz`
-    1. From `AudioContext.sampleRate` for the current session.
-    2. Example: `48000` (or `44100` on some devices).
-2. `hopSize`
-    1. Samples per chart step (and per worklet message).
-    2. Main speed control.
-    3. Example with `80 px/sec` at `48 kHz`: `hopSize = 600`.
-3. `FFT_SIZE`
-    1. `AnalyserNode` input window sample count.
-    2. `frequencyBinCount` is always `FFT_SIZE / 2`.
-    3. Current: `FFT_SIZE = 8192`, so `frequencyBinCount = 4096`.
-4. `spectrumDb`
-    1. Raw analyser spectrum in dB (`getFloatFrequencyData` output).
-5. `spectrumNormalized`
-    1. Per-bin spectrogram intensity in `[0..1]`, normalized from analyser dB range.
-6. `spectrumForPitchDetection`
-    1. Per-bin linear magnitudes, peak-normalized per hop for pitch detection.
-7. `signalLevel`
-    1. Time-domain RMS from worklet input samples, in a practical `[0..1]` range.
-    2. Used for silence gating, auto-pause thresholding, and line-color normalization.
-8. `maxSignalLevel`
-    1. Running per-session maximum of `signalLevel` (after warmup).
-    2. Initialized from persisted localStorage value with a small decay factor so it can adapt downward over time.
-9. `lineStrength`
-    1. Normalized `[0..1]` value used for pitch/vibrato line coloring.
-    2. Stored in pitch history as `lineStrengthRing`.
+Voicebox uses a custom `volume` scale derived from hop RMS. It is logarithmic and mapped onto a practical `0..10` range so the numbers are easier to reason about across very quiet and very loud devices.
 
-## Pipeline
+### Minimum Volume Threshold
 
-1. Audio worklet (`AudioCaptureProcessor`) counts incoming input samples.
-2. Every full `hopSize` samples, it posts one message containing:
-    1. `sampleCount` (expected to equal `hopSize`)
-    2. `signalLevel` (hop RMS, `[0..1]`)
-3. On each message (`captureNode.port.onmessage` in `src/Recorder/RecordingEngine.js`):
-    1. Capture analyser spectrum once.
-    2. Build `spectrumDb`, `spectrumNormalized`, `spectrumForPitchDetection`.
-    3. Silence-gate pitch detection from `signalLevel` threshold.
-    4. Detect pitch from `spectrumForPitchDetection` when the gate is open.
-    5. Update running `maxSignalLevel` from `signalLevel` after warmup.
-    6. Compute `lineStrength` from `signalLevel` using a fixed floor + running max (with EMA smoothing).
-    7. Write pitch/lineStrength into shared pitch-history rings.
-    8. Append spectrogram column (`spectrumNormalized`) unless silence-paused.
-4. `RecordingEngine` `renderLoop` draws when dirty:
-    1. Pitch and vibrato read from shared pitch-history rings.
-    2. Spectrogram draws from retained bitmap + pending columns queue in `SpectrogramChart`.
+This is the quietest sound the user wants to count as real input.
 
-## State Objects (Current)
+Why it exists:
 
-1. Shared pitch-history rings:
-    1. `rawPitchCentsRing` (pitch cents)
-    2. `smoothedPitchCentsRing` (drawn cents)
-    3. `lineStrengthRing` (line color intensity)
-    4. `vibratoRateHzRing`
-2. Per-hop spectrum capture buffers:
-    1. `spectrogramCapture.spectrumDb`
-    2. `spectrogramCapture.spectrumNormalized`
-    3. `spectrogramCapture.spectrumForPitchDetection`
-3. Spectrogram pending queue (inside chart component):
-    1. `pendingColumnsRef.current`
+1. Different devices have very different microphone sensitivity.
+2. Different users hold the phone or tablet at different distances.
+3. A sensible floor is needed so background noise does not keep the recorder active.
 
-## Grounded Example
+How it is set:
 
-Given:
+1. There is a default minimum volume threshold.
+2. The user can calibrate it by making the quietest sound they want Voicebox to treat as intentional input.
 
-1. `audioSampleRateHz = 48000`
-2. Width `400 px`
-3. Speed `80 px/sec`
+Where it is used:
 
-Then:
+1. Pitch detection is skipped below this threshold.
+2. Auto-pause uses the same threshold.
+3. Pitch-line color normalization uses it as the floor.
 
-1. Visible duration is `400 / 80 = 5 s`.
-2. One column is `1 / 80 s = 12.5 ms`.
-3. `12.5 ms` at `48 kHz` is `600` samples.
-4. So `hopSize = 600` gives one new chart step per `12.5 ms` of audio.
+### Maximum Heard Volume
 
-## Real Device Mic Volumes
+This is the loudest volume Voicebox has heard recently for that user/device.
+
+Why it exists:
+
+1. The same singing volume can produce very different levels on different microphones.
+2. Voicebox needs a device-specific sense of what "loud" looks like.
+3. That lets the visuals adapt without requiring manual setup on every device.
+
+How it adapts:
+
+1. Within a session, it can only increase.
+2. On page load, the remembered value is decayed by a small factor so it can adapt downward over time as real-world usage changes.
+
+Where it is used:
+
+1. Pitch-line color normalization uses it as the ceiling.
+2. Spectrogram brightness uses it to scale quiet-device input up into a more useful part of the color range.
+
+## Recorder Flow
+
+1. The audio worklet counts input samples and posts one message per hop.
+2. Each hop includes:
+    1. `sampleCount`
+    2. `volume`
+3. On each hop, `RecordingEngine`:
+    1. Captures analyser spectrum in dB.
+    2. Uses the current volume threshold to decide whether to run pitch detection.
+    3. Updates the running maximum volume when a new louder input is heard.
+    4. Updates pitch history and line color strength.
+    5. Appends a spectrogram column unless silence auto-pause is active.
+4. Rendering happens separately on `requestAnimationFrame`.
+
+## Spectrogram Notes
+
+1. The spectrogram keeps analyser output in dB until render time.
+2. The renderer maps dB values into display brightness.
+3. It then applies device/session gain based on the current remembered maximum volume.
+
+## Real Device Examples
 
 `Moderate` is regular singing volume.
 
-RMS signal level:
-
-| Device     | Dead Quiet | Aircon Hum | Moderate | Loud   |
-|------------|------------|------------|----------|--------|
-| iPad       | 0.0001     | 0.0014     | 0.0130   | 0.1200 |
-| Note 9     | 0.0008     | 0.0040     | 0.1540   | 0.3600 |
-| Galaxy S24 | 0.0013     | 0.0045     | 0.2120   | 0.4300 |
-
-Volume (our custom 0-10 scale):
+Volume:
 
 | Device     | Dead Quiet | Aircon Hum | Moderate | Loud |
 |------------|------------|------------|----------|------|
 | iPad       | 0.5        | 0.6        | 4.2      | 8.3  |
 | Note 9     | 1.8        | 3.2        | 7.3      | 9.0  |
 | Galaxy S24 | 1.8        | 3.5        | 7.8      | 9.3  |
+
+RMS:
+
+| Device     | Dead Quiet | Aircon Hum | Moderate | Loud   |
+|------------|------------|------------|----------|--------|
+| iPad       | 0.0001     | 0.0014     | 0.0130   | 0.1200 |
+| Note 9     | 0.0008     | 0.0040     | 0.1540   | 0.3600 |
+| Galaxy S24 | 0.0013     | 0.0045     | 0.2120   | 0.4300 |

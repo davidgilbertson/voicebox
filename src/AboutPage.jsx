@@ -84,8 +84,9 @@ export default function AboutPage() {
           </div>
           <p className="leading-relaxed text-slate-300">
             Voicebox is a free online vocal training app. It has a spectrogram, real-time pitch
-            tracking, and vibrato analysis. You can also play scales or tinker on the built-in piano
-            keyboard. And it all works offline.
+            tracking, and vibrato analysis. It adapts to different microphones so quiet devices are
+            still usable. You can also play scales or tinker on the built-in piano keyboard. And it
+            all works offline.
           </p>
         </header>
 
@@ -140,6 +141,7 @@ export default function AboutPage() {
             <ul className="list-disc space-y-1 pl-5 leading-relaxed text-slate-300 lg:flex-1">
               <li>Shows a live frequency heatmap of your voice.</li>
               <li>Useful for seeing harmonics, noise, and overall tone energy over time.</li>
+              <li>Brightness adapts to your microphone level so quiet devices still use the color range.</li>
               <li>You can limit the displayed frequency range in settings.</li>
               <li>Tap the screen to pause/resume.</li>
             </ul>
@@ -160,6 +162,7 @@ export default function AboutPage() {
               <li>
                 You can choose between a line that changes color with volume, or a solid color.
               </li>
+              <li>Pitch detection ignores sounds below your calibrated minimum volume.</li>
               <li>Tap the screen to pause/resume.</li>
             </ul>
           </div>
@@ -215,8 +218,7 @@ export default function AboutPage() {
                   different microphone levels. If Voicebox is missing quiet sounds, use this to
                   calibrate to your microphone. When you press the button, Voicebox will record one
                   second of audio. Make the quietest sound you want captured, and Voicebox will
-                  adjust the level it uses for auto-pause so quiet singing or humming is less likely
-                  to get missed.
+                  adjust the minimum volume it uses for pitch detection and auto-pause.
                 </li>
               </ul>
 

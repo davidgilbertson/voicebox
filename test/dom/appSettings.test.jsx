@@ -7,7 +7,7 @@ import {
   readAutoPauseOnSilence,
   readHighResSpectrogram,
   readHalfResolutionCanvas,
-  readMinSignalThreshold,
+  readMinVolumeThreshold,
   readPitchLineColorMode,
   readRunAt30Fps,
   readSpectrogramMaxHz,
@@ -48,7 +48,7 @@ test("settings defaults and persistence work via localStorage", async () => {
 
   await waitFor(() => {
     expect(readAutoPauseOnSilence()).toBe(true);
-    expect(readMinSignalThreshold()).toBe(0.015);
+    expect(readMinVolumeThreshold()).toBe(2);
     expect(readRunAt30Fps()).toBe(true);
     expect(readHalfResolutionCanvas()).toBe(true);
     expect(readHighResSpectrogram()).toBe(false);

@@ -144,9 +144,9 @@ export default function AppShell({ downloadingUpdate = false }) {
   };
 
   const onCalibrateMicFloor = async () => {
-    const measuredVolume = onScalesPage
-      ? await calibrateMinVolumeThreshold()
-      : await recorderEngine.getMaxVolume();
+      const measuredVolume = onScalesPage
+        ? await calibrateMinVolumeThreshold()
+        : await recorderEngine.calibrateMinVolumeThreshold();
     const threshold = Math.max(0.1, measuredVolume * 0.7);
     setMinVolumeThreshold(threshold);
     return { measuredVolume, threshold };
