@@ -2,6 +2,24 @@ import { clamp } from "../tools.js";
 import { getPitchFromSpectrum } from "./pitchDetection.js";
 import { processPitchSample } from "./pitchProcessing.js";
 
+function getRelativeVolumeStrength(volume, minVolumeThreshold, maxHeardVolume) {
+  const epsilon = 1e-4;
+  let usedMinVolume = minVolumeThreshold;
+  const usedMaxVolume = maxHeardVolume;
+  if (usedMinVolume + epsilon > usedMaxVolume) {
+    usedMinVolume = 0;
+  }
+  const volumeSpan = usedMaxVolume - usedMinVolume;
+  const canScale = volumeSpan > epsilon;
+  return {
+    usedMinVolume,
+    usedMaxVolume,
+    volumeSpan,
+    canScale,
+    volumeStrength: canScale ? clamp((volume - usedMinVolume) / volumeSpan, 0, 1) : 1,
+  };
+}
+
 export function createSpectrogramBuffers(binCount) {
   return {
     spectrumNormalized: new Float32Array(binCount),
@@ -137,16 +155,18 @@ function processHopSpectrogram({
   const activeSpectrogramBuffers = highResAnalyser
     ? nextHighResSpectrogramBuffers
     : nextSpectrogramBuffers;
-  const buildSpectrogramOutput = ({ isSilencePaused }) => {
+  const buildSpectrogramOutput = ({ isSilencePaused, signalStrength }) => {
     if (!spectrumNormalized || isSilencePaused) {
       return {
         spectrogramColumn: null,
+        spectrogramColumnGain: 0,
         spectrogramBuffers: activeSpectrogramBuffers,
         didFrameDataChange: false,
       };
     }
     return {
       spectrogramColumn: spectrumNormalized,
+      spectrogramColumnGain: signalStrength,
       spectrogramBuffers: activeSpectrogramBuffers,
       didFrameDataChange: true,
     };
@@ -163,9 +183,9 @@ function processHopSpectrogram({
 function processHopPitchAndSignals({
   processingState,
   audioSessionState,
-  signalLevel,
-  minSignalThreshold,
-  signalTracking,
+  volume,
+  minVolumeThreshold,
+  volumeTracking,
   lineStrengthEma,
   autoPauseOnSilence,
   pitchRange,
@@ -174,16 +194,17 @@ function processHopPitchAndSignals({
   const minHz = pitchRange.minHz;
   const maxHz = pitchRange.maxHz;
 
-  let shouldPersistMaxSignalLevel = false;
-  if (signalLevel > signalTracking.maxHeardSignalLevel + 0.01) {
-    signalTracking.maxHeardSignalLevel = signalLevel;
-    shouldPersistMaxSignalLevel = true;
+  let shouldPersistMaxVolume = false;
+  if (volume > volumeTracking.maxHeardVolume + 0.1) {
+    volumeTracking.maxHeardVolume = volume;
+    shouldPersistMaxVolume = true;
   }
-  const maxHeardSignalLevel = signalTracking.maxHeardSignalLevel;
-  const usedMaxSignalLevel = maxHeardSignalLevel * 0.8;
+  const maxHeardVolume = volumeTracking.maxHeardVolume;
+  const scaling = getRelativeVolumeStrength(volume, minVolumeThreshold, maxHeardVolume);
+  const volumeStrength = scaling.volumeStrength;
 
-  const isAboveSilenceThreshold = signalLevel > minSignalThreshold;
-  // The same RMS floor gates pitch detection, even when auto-pause is disabled.
+  const isAboveSilenceThreshold = volume > minVolumeThreshold;
+  // The same derived loudness floor gates pitch detection, even when auto-pause is disabled.
   const cents = isAboveSilenceThreshold
     ? getPitchFromSpectrum(audioSessionState, spectrumForPitchDetection, minHz, maxHz)
     : Number.NaN;
@@ -191,13 +212,7 @@ function processHopPitchAndSignals({
   let didFrameDataChange = false;
   let pitchWriteResult = null;
   let nextLineStrengthEma = lineStrengthEma;
-  const signalSpan = usedMaxSignalLevel - minSignalThreshold;
-  const lineStrength = clamp(
-    signalSpan > 0 ? (signalLevel - minSignalThreshold) / signalSpan : 0,
-    0,
-    1,
-  );
-  const smoothedLineStrength = lineStrengthEma + (lineStrength - lineStrengthEma) * 0.2;
+  const smoothedLineStrength = lineStrengthEma + (volumeStrength - lineStrengthEma) * 0.2;
   nextLineStrengthEma = smoothedLineStrength;
   pitchWriteResult = processPitchSample(processingState, {
     autoPauseOnSilence,
@@ -211,8 +226,10 @@ function processHopPitchAndSignals({
 
   return {
     didFrameDataChange,
-    shouldPersistMaxSignalLevel,
+    shouldPersistMaxVolume,
     nextLineStrengthEma,
+    volumeScaling: scaling,
+    volumeStrength,
     isSilencePaused: pitchWriteResult?.paused ?? processingState.silencePaused,
   };
 }
@@ -224,13 +241,14 @@ function processHopPitchAndSignals({
 export function processOneAudioHop({ engineState, hopState }) {
   const {
     pitchRange,
-    signalLevel,
-    minSignalThreshold,
-    signalTracking,
+    volume,
+    minVolumeThreshold,
+    volumeTracking,
     lineStrengthEma,
     autoPauseOnSilence,
     skipNextSpectrumFrame,
   } = engineState;
+  const activeVolumeTracking = volumeTracking;
   const { audioSessionState, processingState, spectrogramBuffers, highResSpectrogramBuffers } =
     hopState;
   const spectrogramResult = processHopSpectrogram({
@@ -252,8 +270,10 @@ export function processOneAudioHop({ engineState, hopState }) {
       didFrameDataChange: false,
       nextSkipNextSpectrumFrame,
       nextLineStrengthEma: lineStrengthEma,
-      shouldPersistMaxSignalLevel: false,
+      shouldPersistMaxVolume: false,
       spectrogramColumn: null,
+      spectrogramColumnGain: 0,
+      spectrogramDebug: null,
       spectrogramBuffers: nextSpectrogramBuffers,
       highResSpectrogramBuffers: nextHighResSpectrogramBuffers,
     };
@@ -261,9 +281,9 @@ export function processOneAudioHop({ engineState, hopState }) {
 
   const pitchResult = processHopPitchAndSignals({
     pitchRange,
-    signalLevel,
-    minSignalThreshold,
-    signalTracking,
+    volume,
+    minVolumeThreshold,
+    volumeTracking: activeVolumeTracking,
     lineStrengthEma,
     autoPauseOnSilence,
     processingState,
@@ -272,14 +292,34 @@ export function processOneAudioHop({ engineState, hopState }) {
   });
   const spectrogramOutput = buildSpectrogramOutput({
     isSilencePaused: pitchResult.isSilencePaused,
+    signalStrength: pitchResult.volumeStrength,
   });
+  const spectrogramPeak =
+    spectrogramOutput.spectrogramColumn && spectrogramOutput.spectrogramColumn.length > 0
+      ? spectrogramOutput.spectrogramColumn.reduce(
+          (peak, value) => Math.max(peak, value * spectrogramOutput.spectrogramColumnGain),
+          0,
+        )
+      : 0;
   const didFrameDataChange = pitchResult.didFrameDataChange || spectrogramOutput.didFrameDataChange;
   return {
     didFrameDataChange,
     nextSkipNextSpectrumFrame,
     nextLineStrengthEma: pitchResult.nextLineStrengthEma,
-    shouldPersistMaxSignalLevel: pitchResult.shouldPersistMaxSignalLevel,
+    shouldPersistMaxVolume: pitchResult.shouldPersistMaxVolume,
     spectrogramColumn: spectrogramOutput.spectrogramColumn,
+    spectrogramColumnGain: spectrogramOutput.spectrogramColumnGain,
+    spectrogramDebug: {
+      peakAfterScaling: spectrogramPeak,
+      scalingFactor: spectrogramOutput.spectrogramColumnGain,
+      usedMinVolume: pitchResult.volumeScaling.usedMinVolume,
+      usedMaxVolume: pitchResult.volumeScaling.usedMaxVolume,
+      volumeSpan: pitchResult.volumeScaling.volumeSpan,
+      minVolumeThreshold,
+      currentVolume: volume,
+      maxHeardVolume: activeVolumeTracking.maxHeardVolume,
+      canScale: pitchResult.volumeScaling.canScale,
+    },
     spectrogramBuffers: nextSpectrogramBuffers,
     highResSpectrogramBuffers: nextHighResSpectrogramBuffers,
   };

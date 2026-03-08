@@ -15,8 +15,11 @@ const EXTRA_HZ_LABELS = [
   { hz: 5000, label: "5k" },
   { hz: 10000, label: "10k" },
 ];
-const LABEL_FONT = "12px system-ui";
+const LABEL_FONT = "12px ui-monospace, SFMono-Regular, Consolas, monospace";
 const LABEL_STROKE_WIDTH = 3;
+const DEBUG_TEXT_X = 30;
+const DEBUG_TEXT_BOTTOM_INSET = 6;
+const DEBUG_LINE_HEIGHT = 14;
 const MIN_PENDING_COLUMN_CAPACITY = 1024;
 const DEFAULT_PENDING_COLUMN_CAPACITY = 8192;
 
@@ -27,6 +30,29 @@ function drawLabelWithOutline(ctx, label, x, y) {
   ctx.strokeText(label, x, y);
   ctx.fillStyle = colors.white;
   ctx.fillText(label, x, y);
+}
+
+function formatFourDecimals(value) {
+  return Number.isFinite(value) ? value.toFixed(4) : "n/a";
+}
+
+function formatVolumeValue(value) {
+  return Number.isFinite(value) ? value.toFixed(2) : "n/a";
+}
+
+function formatDebugStat(label, value) {
+  return `${label.padEnd(10, " ")} ${value}`;
+}
+
+function drawDebugLines(ctx, viewport, lines) {
+  ctx.font = LABEL_FONT;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  for (let i = 0; i < lines.length; i += 1) {
+    const y =
+      viewport.cssHeight - DEBUG_TEXT_BOTTOM_INSET - (lines.length - 1 - i) * DEBUG_LINE_HEIGHT;
+    drawLabelWithOutline(ctx, lines[i], DEBUG_TEXT_X, y);
+  }
 }
 
 function drawColumnImage({
@@ -117,7 +143,7 @@ export class SpectrogramChartRenderer {
     return tailColumns;
   }
 
-  appendColumn(spectrumNormalized) {
+  appendColumn(spectrumNormalized, gain = 1) {
     if (!spectrumNormalized?.length) return;
     // If the user changes the resolution of the spectrogram,
     //  buffer sizes will change, so we drop any old ones.
@@ -130,7 +156,14 @@ export class SpectrogramChartRenderer {
       this.canvasNeedsClearing = true;
     }
     const copy = new Float32Array(spectrumNormalized.length);
-    copy.set(spectrumNormalized);
+    const columnGain = clamp(gain, 0, 1);
+    if (columnGain === 1) {
+      copy.set(spectrumNormalized);
+    } else {
+      for (let i = 0; i < spectrumNormalized.length; i += 1) {
+        copy[i] = spectrumNormalized[i] * columnGain;
+      }
+    }
     this.pendingColumns.push(copy);
     this.trimPendingColumnsToCapacity();
   }
@@ -152,7 +185,7 @@ export class SpectrogramChartRenderer {
     };
   }
 
-  draw({ binCount, sampleRate }) {
+  draw({ binCount, sampleRate, debug }) {
     const canvas = this.canvas;
     if (!canvas || !binCount || !sampleRate) return;
     const ctx = canvas.getContext("2d");
@@ -372,5 +405,17 @@ export class SpectrogramChartRenderer {
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(labelCanvas, 0, 0, viewport.width, viewport.height);
+    ctx.setTransform(viewport.actualScaleX, 0, 0, viewport.actualScaleY, 0, 0);
+    drawDebugLines(ctx, viewport, [
+      formatDebugStat("peak", formatFourDecimals(debug?.peakAfterScaling)),
+      formatDebugStat("scale", formatFourDecimals(debug?.scalingFactor)),
+      formatDebugStat("volume", formatVolumeValue(debug?.currentVolume)),
+      formatDebugStat("min vol", formatVolumeValue(debug?.storedMinVolume)),
+      formatDebugStat("max vol", formatVolumeValue(debug?.storedMaxVolume)),
+      formatDebugStat("used min", formatVolumeValue(debug?.usedMinVolume)),
+      formatDebugStat("used max", formatVolumeValue(debug?.usedMaxVolume)),
+      formatDebugStat("span", formatVolumeValue(debug?.volumeSpan)),
+      formatDebugStat("can scale", debug?.canScale ? "yes" : "no"),
+    ]);
   }
 }

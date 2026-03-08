@@ -1,6 +1,8 @@
+import { rmsToVolume } from "../signalVolume.js";
+
 // This worklet is our clock.
 // It posts a message every `batchSize` samples (e.g. 600) with the sample count
-// and a time-domain RMS signal level in the [0..1] range for silence gating.
+// and a derived volume value for silence gating.
 class AudioCaptureProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
@@ -40,10 +42,10 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
       this.pendingSumSquares += sample * sample;
       this.pendingSampleCount += 1;
       if (this.pendingSampleCount >= this.batchSize) {
-        const signalLevel = Math.sqrt(this.pendingSumSquares / this.pendingSampleCount);
+        const volume = rmsToVolume(Math.sqrt(this.pendingSumSquares / this.pendingSampleCount));
         this.port.postMessage({
           sampleCount: this.pendingSampleCount,
-          signalLevel,
+          volume,
         });
         this.pendingSampleCount = 0;
         this.pendingSumSquares = 0;

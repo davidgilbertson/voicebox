@@ -6,9 +6,9 @@ import {
   PITCH_MIN_NOTE_DEFAULT,
   SILENCE_PAUSE_THRESHOLD_MS,
   SPECTROGRAM_BIN_COUNT,
-  MIN_SIGNAL_THRESHOLD_DEFAULT,
-  readMaxSignalLevel,
-  writeMaxSignalLevel,
+  MIN_VOLUME_THRESHOLD_DEFAULT,
+  readMaxVolume,
+  writeMaxVolume,
 } from "./config.js";
 import { createPitchProcessingState, resizePitchProcessingState } from "./pitchProcessing.js";
 import {
@@ -18,9 +18,10 @@ import {
 } from "./hopProcessing.js";
 import { createRecorderAudioSession, destroyRecorderAudioSession } from "./audioSession.js";
 import { BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor } from "./batteryUsage.js";
-import { measureMaxRmsFromAnalyser } from "./micCalibration.js";
+import { calibrateMinVolumeThreshold } from "./micCalibration.js";
 import { computeIsForeground, subscribeToForegroundChanges } from "../foreground.js";
 import { noteNameToCents, noteNameToHz } from "../pitchScale.js";
+import { STARTUP_MAX_VOLUME_DECAY_FACTOR } from "./signalVolume.js";
 
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
 let recordingEngineSingleton = null;
@@ -57,8 +58,8 @@ export class RecordingEngine {
     this.batteryUsageMonitor = createBatteryUsageMonitor();
     // Decay the remembered max a little on each session start so it can adapt downward over time
     // while still retaining a device-specific sense of "loud enough" between runs.
-    const initialMaxSignalLevel = readMaxSignalLevel() * 0.8;
-    writeMaxSignalLevel(initialMaxSignalLevel);
+    const initialMaxVolume = readMaxVolume() * STARTUP_MAX_VOLUME_DECAY_FACTOR;
+    writeMaxVolume(initialMaxVolume);
 
     this.state = {
       ui: {
@@ -90,8 +91,8 @@ export class RecordingEngine {
       },
       chartWidthPx: Math.max(1, Math.floor(window.innerWidth)),
       hopSize: Math.round(48_000 / DISPLAY_PIXELS_PER_SECOND),
-      signalLevel: 0,
-      minSignalThreshold: MIN_SIGNAL_THRESHOLD_DEFAULT,
+      volume: 0,
+      minVolumeThreshold: MIN_VOLUME_THRESHOLD_DEFAULT,
       lineStrengthEma: 0,
       skipNextSpectrumFrame: false,
       frameDirty: false,
@@ -128,8 +129,19 @@ export class RecordingEngine {
     });
     this.spectrogramBuffers = createSpectrogramBuffers(SPECTROGRAM_BIN_COUNT);
     this.highResSpectrogramBuffers = null;
-    this.signalTracking = {
-      maxHeardSignalLevel: initialMaxSignalLevel,
+    this.volumeTracking = {
+      maxHeardVolume: initialMaxVolume,
+    };
+    this.spectrogramDebug = {
+      peakAfterScaling: 0,
+      scalingFactor: 1,
+      minVolumeThreshold: MIN_VOLUME_THRESHOLD_DEFAULT,
+      currentVolume: 0,
+      maxHeardVolume: this.volumeTracking.maxHeardVolume,
+      usedMinVolume: MIN_VOLUME_THRESHOLD_DEFAULT,
+      usedMaxVolume: this.volumeTracking.maxHeardVolume,
+      volumeSpan: 0,
+      canScale: false,
     };
     this.pendingAudioRestart = false;
     this.unsubscribeForeground = subscribeToForegroundChanges(this.onForegroundChange);
@@ -177,9 +189,9 @@ export class RecordingEngine {
         activeView: this.state.activeView,
         pitchRange: this.state.pitchRange,
         spectrogramRange: this.state.spectrogramRange,
-        signalLevel: this.state.signalLevel,
-        minSignalThreshold: this.state.minSignalThreshold,
-        signalTracking: this.signalTracking,
+        volume: this.state.volume,
+        minVolumeThreshold: this.state.minVolumeThreshold,
+        volumeTracking: this.volumeTracking,
         lineStrengthEma: this.state.lineStrengthEma,
         autoPauseOnSilence: this.state.autoPauseOnSilence,
         skipNextSpectrumFrame: this.state.skipNextSpectrumFrame,
@@ -195,11 +207,17 @@ export class RecordingEngine {
     this.state.lineStrengthEma = result.nextLineStrengthEma;
     this.spectrogramBuffers = result.spectrogramBuffers;
     this.highResSpectrogramBuffers = result.highResSpectrogramBuffers;
-    if (result.shouldPersistMaxSignalLevel) {
-      writeMaxSignalLevel(this.state.signalLevel);
+    if (result.spectrogramDebug) {
+      this.spectrogramDebug = result.spectrogramDebug;
+    }
+    if (result.shouldPersistMaxVolume) {
+      writeMaxVolume(this.state.volume);
     }
     if (result.spectrogramColumn) {
-      this.chartRefs.spectrogramChartRef?.current?.appendColumn(result.spectrogramColumn);
+      this.chartRefs.spectrogramChartRef?.current?.appendColumn(
+        result.spectrogramColumn,
+        result.spectrogramColumnGain,
+      );
     }
     if (result.didFrameDataChange) {
       this.state.frameDirty = true;
@@ -221,7 +239,7 @@ export class RecordingEngine {
         workletModuleUrl: new URL("./worklets/audioWorklet.js", import.meta.url),
         onWorkletMessage: (event) => {
           const sampleCount = Number(event.data.sampleCount);
-          this.state.signalLevel = Number(event.data.signalLevel) || 0;
+          this.state.volume = Number(event.data.volume) || 0;
           if (!Number.isFinite(sampleCount) || sampleCount !== this.state.hopSize) {
             console.error("something has gone very wrong this should not be possible", {
               sampleCount,
@@ -283,7 +301,7 @@ export class RecordingEngine {
     }
   };
 
-  getMaxRms = async ({ settleMs = 100, captureMs = 1000 } = {}) => {
+  getMaxVolume = async ({ settleMs = 100, captureMs = 1000 } = {}) => {
     if (this.state.isStarting) {
       throw new Error("Microphone is still starting.");
     }
@@ -297,8 +315,7 @@ export class RecordingEngine {
 
     // We reuse the live analyser when recorder audio is already active so calibration does not need
     // a second temporary mic context on top of the existing one.
-    return measureMaxRmsFromAnalyser({
-      analyser: this.audioSessionState.analyser,
+    return calibrateMinVolumeThreshold({
       settleMs,
       captureMs,
     });
@@ -315,7 +332,7 @@ export class RecordingEngine {
     this.audioSessionState.highResAnalyser = null;
     this.audioSessionState.silentOutputGain = null;
     this.highResSpectrogramBuffers = null;
-    this.state.signalLevel = 0;
+    this.state.volume = 0;
     this.state.frameDirty = false;
     this.setUi({ isAudioRunning: false });
   };
@@ -355,6 +372,17 @@ export class RecordingEngine {
       this.chartRefs.spectrogramChartRef?.current?.draw({
         binCount: this.state.highResSpectrogram ? SPECTROGRAM_BIN_COUNT * 2 : SPECTROGRAM_BIN_COUNT,
         sampleRate: this.audioSessionState.sampleRate,
+        debug: {
+          peakAfterScaling: this.spectrogramDebug.peakAfterScaling,
+          scalingFactor: this.spectrogramDebug.scalingFactor,
+          storedMinVolume: this.state.minVolumeThreshold,
+          storedMaxVolume: this.volumeTracking.maxHeardVolume,
+          usedMinVolume: this.spectrogramDebug.usedMinVolume,
+          usedMaxVolume: this.spectrogramDebug.usedMaxVolume,
+          volumeSpan: this.spectrogramDebug.volumeSpan,
+          canScale: this.spectrogramDebug.canScale,
+          currentVolume: this.state.volume,
+        },
       });
       return;
     }
@@ -475,7 +503,7 @@ export class RecordingEngine {
     autoPauseOnSilence,
     runAt30Fps,
     highResSpectrogram,
-    minSignalThreshold,
+    minVolumeThreshold,
     pitchMinNote,
     pitchMaxNote,
     spectrogramMinHz,
@@ -490,8 +518,8 @@ export class RecordingEngine {
     if (typeof runAt30Fps === "boolean") {
       this.state.runAt30Fps = runAt30Fps;
     }
-    if (Number.isFinite(minSignalThreshold) && minSignalThreshold > 0) {
-      this.state.minSignalThreshold = minSignalThreshold;
+    if (Number.isFinite(minVolumeThreshold) && minVolumeThreshold > 0) {
+      this.state.minVolumeThreshold = minVolumeThreshold;
     }
     let shouldRestartAudio = false;
     if (typeof highResSpectrogram === "boolean") {

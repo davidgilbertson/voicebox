@@ -1,5 +1,6 @@
 import { createBaseMicrophoneSession, destroyMicrophoneSession } from "./audioSession.js";
 import { FFT_SIZE } from "./config.js";
+import { rmsToVolume } from "./signalVolume.js";
 
 function computeAnalyserRms(analyser, buffer) {
   analyser.getFloatTimeDomainData(buffer);
@@ -17,7 +18,7 @@ export async function measureMaxRmsFromAnalyser({
   captureMs = 1000,
 } = {}) {
   const calibrationState = {
-    maxSignalLevel: 0,
+    maxRms: 0,
     rafId: 0,
     buffer: new Float32Array(analyser.fftSize),
   };
@@ -27,8 +28,8 @@ export async function measureMaxRmsFromAnalyser({
   });
 
   const sampleSignalLevel = () => {
-    calibrationState.maxSignalLevel = Math.max(
-      calibrationState.maxSignalLevel,
+    calibrationState.maxRms = Math.max(
+      calibrationState.maxRms,
       computeAnalyserRms(analyser, calibrationState.buffer),
     );
     calibrationState.rafId = requestAnimationFrame(sampleSignalLevel);
@@ -42,20 +43,21 @@ export async function measureMaxRmsFromAnalyser({
   if (calibrationState.rafId) {
     cancelAnimationFrame(calibrationState.rafId);
   }
-  if (calibrationState.maxSignalLevel <= 0) {
+  if (calibrationState.maxRms <= 0) {
     throw new Error("No microphone samples were captured.");
   }
-  return calibrationState.maxSignalLevel;
+  return calibrationState.maxRms;
 }
 
-export async function calibrateMinSignalThreshold({ settleMs = 100, captureMs = 1000 } = {}) {
+export async function calibrateMinVolumeThreshold({ settleMs = 100, captureMs = 1000 } = {}) {
   const session = await createBaseMicrophoneSession({ fftSize: FFT_SIZE });
   try {
-    return measureMaxRmsFromAnalyser({
+    const measuredRms = await measureMaxRmsFromAnalyser({
       analyser: session.analyser,
       settleMs,
       captureMs,
     });
+    return rmsToVolume(measuredRms);
   } finally {
     destroyMicrophoneSession(session);
   }

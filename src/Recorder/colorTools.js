@@ -12,7 +12,6 @@ export const PITCH_LINE_COLOR_MODES = [
 ];
 
 const WAVEFORM_COLOR_MODE_SET = new Set(PITCH_LINE_COLOR_MODES.map((item) => item.value));
-const MIN_WAVEFORM_COLOR_INDEX = 36;
 const PITCH_LINE_COLOR_MODE_DEFAULT = "terrain";
 const paletteByMode = new Map();
 const colorStringsByMode = new Map();
@@ -115,20 +114,13 @@ function rgbToString(rgb) {
   return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 }
 
-function mapWaveformIntensityToNormalized(intensity) {
-  if (!Number.isFinite(intensity)) return Number.NaN;
-  return clamp(intensity, 0, 1);
-}
-
 function mapWaveformIntensityToPaletteIndex(intensity, mode) {
   if (isFixedColorMode(resolvePitchLineColorMode(mode))) return null;
-  const normalized = mapWaveformIntensityToNormalized(intensity);
-  if (!Number.isFinite(normalized)) return null;
-  return clamp(
-    Math.round(MIN_WAVEFORM_COLOR_INDEX + normalized * (255 - MIN_WAVEFORM_COLOR_INDEX)),
-    MIN_WAVEFORM_COLOR_INDEX,
-    255,
-  );
+  const dead_zone = 0.25;
+  // Keep a dead zone at the bottom so the lowest fraction of normalized values all map
+  // to the lowest palette color, then stretch the rest across the remaining color range.
+  const normalized = intensity <= dead_zone ? 0 : (intensity - dead_zone) / (1 - dead_zone);
+  return clamp(Math.round(normalized * 255), 0, 255);
 }
 
 export function mapWaveformIntensityToStrokeColor(intensity, fallbackColor, mode, brightness = 1) {

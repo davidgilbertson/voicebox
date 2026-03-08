@@ -11,8 +11,8 @@ const HIGH_RES_SPECTROGRAM_STORAGE_KEY = "voicebox.highResSpectrogram";
 const PITCH_MIN_NOTE_STORAGE_KEY = "voicebox.pitchMinNote";
 const PITCH_MAX_NOTE_STORAGE_KEY = "voicebox.pitchMaxNote";
 const PITCH_LINE_COLOR_MODE_STORAGE_KEY = "voicebox.pitchLineColorMode";
-const MAX_SIGNAL_LEVEL_STORAGE_KEY = "voicebox.maxSignalLevel";
-const MIN_SIGNAL_THRESHOLD_STORAGE_KEY = "voicebox.minSignalThreshold";
+const MAX_VOLUME_STORAGE_KEY = "voicebox.maxVolume";
+const MIN_VOLUME_THRESHOLD_STORAGE_KEY = "voicebox.minVolumeThreshold";
 const SPECTROGRAM_MIN_HZ_STORAGE_KEY = "voicebox.spectrogramMinHz";
 const SPECTROGRAM_MAX_HZ_STORAGE_KEY = "voicebox.spectrogramMaxHz";
 
@@ -42,8 +42,8 @@ const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
 const RUN_AT_30_FPS_DEFAULT = false;
 const HALF_RESOLUTION_CANVAS_DEFAULT = false;
 const HIGH_RES_SPECTROGRAM_DEFAULT = true;
-const MAX_SIGNAL_LEVEL_DEFAULT = 0.2;
-export const MIN_SIGNAL_THRESHOLD_DEFAULT = 0.015;
+const MAX_VOLUME_DEFAULT = 6;
+export const MIN_VOLUME_THRESHOLD_DEFAULT = 2;
 const PITCH_LINE_COLOR_MODE_SET = new Set(PITCH_LINE_COLOR_MODES.map((item) => item.value));
 
 function safeReadPitchNote(storageKey, fallback) {
@@ -124,23 +124,22 @@ export function writePitchLineColorMode(value) {
   ls.set(PITCH_LINE_COLOR_MODE_STORAGE_KEY, value);
 }
 
-export function readMaxSignalLevel() {
-  const stored = Number(ls.get(MAX_SIGNAL_LEVEL_STORAGE_KEY, MAX_SIGNAL_LEVEL_DEFAULT));
-  return Number.isFinite(stored) && stored > 0 ? stored : MAX_SIGNAL_LEVEL_DEFAULT;
+export function readMaxVolume() {
+  return safeReadPositiveNumber(MAX_VOLUME_STORAGE_KEY, MAX_VOLUME_DEFAULT);
 }
 
-export function writeMaxSignalLevel(value) {
+export function writeMaxVolume(value) {
   if (!Number.isFinite(value) || value <= 0) return;
-  ls.set(MAX_SIGNAL_LEVEL_STORAGE_KEY, value);
+  ls.set(MAX_VOLUME_STORAGE_KEY, value);
 }
 
-export function readMinSignalThreshold() {
-  return safeReadPositiveNumber(MIN_SIGNAL_THRESHOLD_STORAGE_KEY, MIN_SIGNAL_THRESHOLD_DEFAULT);
+export function readMinVolumeThreshold() {
+  return safeReadPositiveNumber(MIN_VOLUME_THRESHOLD_STORAGE_KEY, MIN_VOLUME_THRESHOLD_DEFAULT);
 }
 
-export function writeMinSignalThreshold(value) {
+export function writeMinVolumeThreshold(value) {
   if (!Number.isFinite(value) || value <= 0) return;
-  ls.set(MIN_SIGNAL_THRESHOLD_STORAGE_KEY, value);
+  ls.set(MIN_VOLUME_THRESHOLD_STORAGE_KEY, value);
 }
 
 export function readSpectrogramMinHz() {

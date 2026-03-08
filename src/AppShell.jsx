@@ -5,7 +5,7 @@ import ScalesPage from "./ScalesPage/ScalesPage.jsx";
 import SettingsPanel from "./SettingsPanel.jsx";
 import { getRecordingEngine } from "./Recorder/RecordingEngine.js";
 import { getPlaybackEngine } from "./ScalesPage/PlaybackEngine.js";
-import { calibrateMinSignalThreshold } from "./Recorder/micCalibration.js";
+import { calibrateMinVolumeThreshold } from "./Recorder/micCalibration.js";
 import { readActiveView, writeActiveView } from "./AppShell/config.js";
 import { PITCH_NOTE_OPTIONS } from "./pitchScale.js";
 import { computeIsForeground, subscribeToForegroundChanges } from "./foreground.js";
@@ -20,7 +20,7 @@ import {
   readHighResSpectrogram,
   readHalfResolutionCanvas,
   readKeepRunningInBackground,
-  readMinSignalThreshold,
+  readMinVolumeThreshold,
   readPitchMaxNote,
   readPitchMinNote,
   readPitchLineColorMode,
@@ -31,7 +31,7 @@ import {
   writeHighResSpectrogram,
   writeHalfResolutionCanvas,
   writeKeepRunningInBackground,
-  writeMinSignalThreshold,
+  writeMinVolumeThreshold,
   writePitchMaxNote,
   writePitchMinNote,
   writePitchLineColorMode,
@@ -56,7 +56,7 @@ export default function AppShell({ downloadingUpdate = false }) {
     readHalfResolutionCanvas(),
   );
   const [highResSpectrogram, setHighResSpectrogram] = useState(() => readHighResSpectrogram());
-  const [minSignalThreshold, setMinSignalThreshold] = useState(() => readMinSignalThreshold());
+  const [minVolumeThreshold, setMinVolumeThreshold] = useState(() => readMinVolumeThreshold());
   const [pitchMinNote, setPitchMinNote] = useState(() => readPitchMinNote());
   const [pitchMaxNote, setPitchMaxNote] = useState(() => readPitchMaxNote());
   const [pitchLineColorMode, setPitchLineColorMode] = useState(() => readPitchLineColorMode());
@@ -100,8 +100,8 @@ export default function AppShell({ downloadingUpdate = false }) {
   }, [highResSpectrogram]);
 
   useEffect(() => {
-    writeMinSignalThreshold(minSignalThreshold);
-  }, [minSignalThreshold]);
+    writeMinVolumeThreshold(minVolumeThreshold);
+  }, [minVolumeThreshold]);
 
   useEffect(() => {
     writePitchMinNote(pitchMinNote);
@@ -144,12 +144,12 @@ export default function AppShell({ downloadingUpdate = false }) {
   };
 
   const onCalibrateMicFloor = async () => {
-    const measuredRms = onScalesPage
-      ? await calibrateMinSignalThreshold()
-      : await recorderEngine.getMaxRms();
-    const threshold = Math.max(1e-4, measuredRms * 0.7);
-    setMinSignalThreshold(threshold);
-    return { measuredRms, threshold };
+    const measuredVolume = onScalesPage
+      ? await calibrateMinVolumeThreshold()
+      : await recorderEngine.getMaxVolume();
+    const threshold = Math.max(0.1, measuredVolume * 0.7);
+    setMinVolumeThreshold(threshold);
+    return { measuredVolume, threshold };
   };
 
   const onPitchMinNoteChange = (nextNote) => {
@@ -260,7 +260,7 @@ export default function AppShell({ downloadingUpdate = false }) {
               runAt30Fps={runAt30Fps}
               halfResolutionCanvas={halfResolutionCanvas}
               highResSpectrogram={highResSpectrogram}
-              minSignalThreshold={minSignalThreshold}
+              minVolumeThreshold={minVolumeThreshold}
               pitchMinNote={pitchMinNote}
               pitchMaxNote={pitchMaxNote}
               pitchLineColorMode={pitchLineColorMode}
@@ -365,6 +365,7 @@ export default function AppShell({ downloadingUpdate = false }) {
             onHalfResolutionCanvasChange={setHalfResolutionCanvas}
             highResSpectrogram={highResSpectrogram}
             onHighResSpectrogramChange={setHighResSpectrogram}
+            minVolumeThreshold={minVolumeThreshold}
             pitchMinNote={pitchMinNote}
             pitchMaxNote={pitchMaxNote}
             pitchLineColorMode={pitchLineColorMode}
