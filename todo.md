@@ -1,1 +1,0 @@
-- Spectrogram feature: record a bit of silence, and subtract that from everything else.

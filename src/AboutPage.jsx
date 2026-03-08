@@ -141,7 +141,10 @@ export default function AboutPage() {
             <ul className="list-disc space-y-1 pl-5 leading-relaxed text-slate-300 lg:flex-1">
               <li>Shows a live frequency heatmap of your voice.</li>
               <li>Useful for seeing harmonics, noise, and overall tone energy over time.</li>
-              <li>Brightness adapts to your microphone level so quiet devices still use the color range.</li>
+              <li>
+                Brightness adapts to your microphone level so quiet devices still use the full color
+                range.
+              </li>
               <li>You can limit the displayed frequency range in settings.</li>
               <li>Tap the screen to pause/resume.</li>
             </ul>

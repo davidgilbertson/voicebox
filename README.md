@@ -14,15 +14,15 @@ Chart progression is driven by audio sample counts, not wall-clock time.
 ## Ownership
 
 1. `RecordingEngine` owns recorder runtime behavior:
-    1. Audio session lifecycle (`getUserMedia`, `AudioContext`, worklet, analyser, teardown).
-    2. Foreground/background policy for recorder pages.
-    3. Per-hop processing and pitch-history updates.
-    4. Render scheduling and chart drawing dispatch.
-    5. Runtime UI state publication (`isAudioRunning`, `error`, `vibratoRate`, battery usage).
+   1. Audio session lifecycle (`getUserMedia`, `AudioContext`, worklet, analyser, teardown).
+   2. Foreground/background policy for recorder pages.
+   3. Per-hop processing and pitch-history updates.
+   4. Render scheduling and chart drawing dispatch.
+   5. Runtime UI state publication (`isAudioRunning`, `error`, `vibratoRate`, battery usage).
 2. `Recorder.jsx` is a thin adapter:
-    1. Attaches chart refs and container ref to `RecordingEngine`.
-    2. Forwards page/settings changes into engine APIs.
-    3. Renders overlays and chart components from engine-provided state.
+   1. Attaches chart refs and container ref to `RecordingEngine`.
+   2. Forwards page/settings changes into engine APIs.
+   3. Renders overlays and chart components from engine-provided state.
 
 ## Adaptive Loudness Model
 
@@ -73,14 +73,14 @@ Where it is used:
 
 1. The audio worklet counts input samples and posts one message per hop.
 2. Each hop includes:
-    1. `sampleCount`
-    2. `volume`
+   1. `sampleCount`
+   2. `volume`
 3. On each hop, `RecordingEngine`:
-    1. Captures analyser spectrum in dB.
-    2. Uses the current volume threshold to decide whether to run pitch detection.
-    3. Updates the running maximum volume when a new louder input is heard.
-    4. Updates pitch history and line color strength.
-    5. Appends a spectrogram column unless silence auto-pause is active.
+   1. Captures analyser spectrum in dB.
+   2. Uses the current volume threshold to decide whether to run pitch detection.
+   3. Updates the running maximum volume when a new louder input is heard.
+   4. Updates pitch history and line color strength.
+   5. Appends a spectrogram column unless silence auto-pause is active.
 4. Rendering happens separately on `requestAnimationFrame`.
 
 ## Spectrogram Notes
@@ -96,7 +96,7 @@ Where it is used:
 Volume:
 
 | Device     | Dead Quiet | Aircon Hum | Moderate | Loud |
-|------------|------------|------------|----------|------|
+| ---------- | ---------- | ---------- | -------- | ---- |
 | iPad       | 0.5        | 0.6        | 4.2      | 8.3  |
 | Note 9     | 1.8        | 3.2        | 7.3      | 9.0  |
 | Galaxy S24 | 1.8        | 3.5        | 7.8      | 9.3  |
@@ -104,7 +104,7 @@ Volume:
 RMS:
 
 | Device     | Dead Quiet | Aircon Hum | Moderate | Loud   |
-|------------|------------|------------|----------|--------|
+| ---------- | ---------- | ---------- | -------- | ------ |
 | iPad       | 0.0001     | 0.0014     | 0.0130   | 0.1200 |
 | Note 9     | 0.0008     | 0.0040     | 0.1540   | 0.3600 |
 | Galaxy S24 | 0.0013     | 0.0045     | 0.2120   | 0.4300 |

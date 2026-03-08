@@ -1,6 +1,6 @@
 import { createBaseMicrophoneSession, destroyMicrophoneSession } from "./audioSession.js";
 import { FFT_SIZE } from "./config.js";
-import { rmsToVolume } from "./signalVolume.js";
+import { clamp } from "../tools.js";
 
 function computeAnalyserRms(analyser, buffer) {
   analyser.getFloatTimeDomainData(buffer);
@@ -57,7 +57,7 @@ export async function calibrateMinVolumeThreshold({ settleMs = 100, captureMs = 
       settleMs,
       captureMs,
     });
-    return rmsToVolume(measuredRms);
+    return measuredRms > 0 ? clamp((4 + Math.log10(measuredRms)) * 2.6, 0, 10) : 0;
   } finally {
     destroyMicrophoneSession(session);
   }

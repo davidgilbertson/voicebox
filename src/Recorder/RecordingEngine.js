@@ -21,9 +21,9 @@ import { BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor } from "./battery
 import { calibrateMinVolumeThreshold as runVolumeCalibration } from "./micCalibration.js";
 import { computeIsForeground, subscribeToForegroundChanges } from "../foreground.js";
 import { noteNameToCents, noteNameToHz } from "../pitchScale.js";
-import { STARTUP_MAX_VOLUME_DECAY_FACTOR } from "./signalVolume.js";
 
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
+const STARTUP_MAX_VOLUME_DECAY_FACTOR = 0.8;
 let recordingEngineSingleton = null;
 
 function createHzBuffer(length) {

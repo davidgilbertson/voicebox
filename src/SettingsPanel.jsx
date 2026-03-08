@@ -176,8 +176,9 @@ export default function SettingsPanel({
             <div className="flex flex-col gap-1">
               <span>Calibrate microphone</span>
               <span className="text-xs text-slate-400">
-                Calibrate Voicebox to this microphone. Press the button and make the quietest sound
-                you'd like Voicebox to capture. Current floor: {minVolumeThreshold.toFixed(1)}.
+                Press the button and make the quietest sound you'd like Voicebox to capture.
+                <br />
+                This will capture 1 second of audio.
               </span>
             </div>
             <button

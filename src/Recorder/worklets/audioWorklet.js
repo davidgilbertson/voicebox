@@ -1,8 +1,14 @@
-import { rmsToVolume } from "../signalVolume.js";
+// Do not import anything into this file. That can appear to work in dev mode, but it breaks when
+// the app is bundled for production.
 
 // This worklet is our clock.
 // It posts a message every `batchSize` samples (e.g. 600) with the sample count
 // and a derived volume value for silence gating.
+function rmsToVolume(value) {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.max(0, Math.min((4 + Math.log10(value)) * 2.6, 10));
+}
+
 class AudioCaptureProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
