@@ -15,6 +15,7 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
     this.batchSize = 0;
     this.pendingSampleCount = 0;
     this.pendingSumSquares = 0;
+    this.pendingSamples = new Float32Array(0);
     this.port.onmessage = (event) => {
       if (event?.data?.type !== "set-batch-size") return;
       const nextBatchSize = Math.floor(event.data.batchSize);
@@ -23,6 +24,7 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
       this.batchSize = nextBatchSize;
       this.pendingSampleCount = 0;
       this.pendingSumSquares = 0;
+      this.pendingSamples = new Float32Array(nextBatchSize);
     };
   }
 
@@ -46,15 +48,19 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
     for (let i = 0; i < channel.length; i += 1) {
       const sample = channel[i];
       this.pendingSumSquares += sample * sample;
+      this.pendingSamples[this.pendingSampleCount] = sample;
       this.pendingSampleCount += 1;
       if (this.pendingSampleCount >= this.batchSize) {
         const volume = rmsToVolume(Math.sqrt(this.pendingSumSquares / this.pendingSampleCount));
+        const samples = this.pendingSamples;
         this.port.postMessage({
           sampleCount: this.pendingSampleCount,
           volume,
-        });
+          samples,
+        }, [samples.buffer]);
         this.pendingSampleCount = 0;
         this.pendingSumSquares = 0;
+        this.pendingSamples = new Float32Array(this.batchSize);
       }
     }
 

@@ -378,6 +378,7 @@ export default function AppShell({ downloadingUpdate = false }) {
             onSpectrogramMinHzChange={onSpectrogramMinHzChange}
             onSpectrogramMaxHzChange={onSpectrogramMaxHzChange}
             batteryUsagePerMinute={runtimeSettings.batteryUsagePerMinute}
+            showRecorderShare={!onScalesPage}
           />
         ) : null}
       </div>

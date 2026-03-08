@@ -1,6 +1,7 @@
-import { Circle, Volume2 } from "lucide-react";
+import { Circle, Share, Share2, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import StepperControl from "./components/StepperControl.jsx";
+import { getRecordingEngine } from "./Recorder/RecordingEngine.js";
 import { PITCH_LINE_COLOR_MODES } from "./Recorder/colorTools.js";
 
 const settingsCheckboxClass = "settings-checkbox h-5 w-5 shrink-0";
@@ -34,7 +35,6 @@ export default function SettingsPanel({
   onHalfResolutionCanvasChange,
   highResSpectrogram,
   onHighResSpectrogramChange,
-  minVolumeThreshold,
   pitchMinNote,
   pitchMaxNote,
   pitchLineColorMode,
@@ -47,7 +47,9 @@ export default function SettingsPanel({
   onSpectrogramMinHzChange,
   onSpectrogramMaxHzChange,
   batteryUsagePerMinute,
+  showRecorderShare,
 }) {
+  const recorderEngine = getRecordingEngine();
   const dialogRef = useRef(null);
   const [spectrogramMinHzDraft, setSpectrogramMinHzDraft] = useState(() =>
     String(spectrogramMinHz),
@@ -56,10 +58,16 @@ export default function SettingsPanel({
     String(spectrogramMaxHz),
   );
   const [isCalibratingMic, setIsCalibratingMic] = useState(false);
+  const [recorderUi, setRecorderUi] = useState(() => recorderEngine.getUiSnapshot());
   const scaleMinIndex = scaleNoteOptions.indexOf(scaleMinNote);
   const scaleMaxIndex = scaleNoteOptions.indexOf(scaleMaxNote);
   const pitchMinIndex = pitchNoteOptions.indexOf(pitchMinNote);
   const pitchMaxIndex = pitchNoteOptions.indexOf(pitchMaxNote);
+  const useIosShareIcon =
+    /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent) &&
+    (!navigator.platform || navigator.platform === "MacIntel" ? navigator.maxTouchPoints > 1 : true);
+  const ShareIcon = useIosShareIcon ? Share : Share2;
+  const canShareRawAudio = showRecorderShare && recorderEngine.canShareRawAudio();
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -80,6 +88,8 @@ export default function SettingsPanel({
   useEffect(() => {
     setSpectrogramMaxHzDraft(String(spectrogramMaxHz));
   }, [spectrogramMaxHz]);
+
+  useEffect(() => recorderEngine.subscribeUi(setRecorderUi), [recorderEngine]);
 
   const onSpectrogramMinHzBlur = () => {
     const nextValue = Number(spectrogramMinHzDraft);
@@ -404,9 +414,26 @@ export default function SettingsPanel({
               >
                 Feedback
               </a>
+              {canShareRawAudio ? (
+                <button
+                  type="button"
+                  onClick={() => recorderEngine.shareRawAudio()}
+                  disabled={recorderUi.isSharingRawAudio}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-800 hover:text-slate-100 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                  aria-label={
+                    recorderUi.isSharingRawAudio ? "Sharing recording" : "Share paused recording"
+                  }
+                  title="Share paused recording"
+                >
+                  <ShareIcon aria-hidden="true" className="h-4 w-4" />
+                </button>
+              ) : null}
             </div>
             <div className="text-right text-xs text-slate-500">Build: {__BUILD_TIME_SYDNEY__}</div>
           </div>
+          {showRecorderShare && recorderUi.rawAudioShareError ? (
+            <div className="pt-2 text-xs text-slate-400">{recorderUi.rawAudioShareError}</div>
+          ) : null}
         </div>
       </section>
     </dialog>

@@ -21,6 +21,14 @@ import { BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor } from "./battery
 import { calibrateMinVolumeThreshold as runVolumeCalibration } from "./micCalibration.js";
 import { computeIsForeground, subscribeToForegroundChanges } from "../foreground.js";
 import { noteNameToCents, noteNameToHz } from "../pitchScale.js";
+import { clamp } from "../tools.js";
+import {
+  appendRawAudioSamples,
+  createRawAudioState,
+  createWavBlob,
+  readRawAudioSamples,
+  resetRawAudioState,
+} from "./rawAudio.js";
 
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
 const STARTUP_MAX_VOLUME_DECAY_FACTOR = 0.8;
@@ -30,6 +38,20 @@ function createHzBuffer(length) {
   const hzBuffer = new Float32Array(length);
   hzBuffer.fill(Number.NaN);
   return hzBuffer;
+}
+
+function getChartSeconds(chartWidthPx) {
+  return clamp(chartWidthPx / DISPLAY_PIXELS_PER_SECOND, 1 / DISPLAY_PIXELS_PER_SECOND, Infinity);
+}
+
+function formatShareTimestamp(date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
+}
+
+function getCapturedSeconds(rawAudioState) {
+  if (!(rawAudioState.sampleRate > 0)) return 0;
+  return rawAudioState.ring.sampleCount / rawAudioState.sampleRate;
 }
 
 function setStreamListeningEnabled(stream, enabled) {
@@ -70,6 +92,8 @@ export class RecordingEngine {
         isWantedRunning: true,
         batteryUsagePerMinute: null,
         vibratoRate: null,
+        isSharingRawAudio: false,
+        rawAudioShareError: "",
       },
       isStarting: false,
       startAttempt: 0,
@@ -118,7 +142,7 @@ export class RecordingEngine {
     };
     this.pitchProcessingState = createPitchProcessingState({
       columnRateHz: DISPLAY_PIXELS_PER_SECOND,
-      seconds: this.state.chartWidthPx / DISPLAY_PIXELS_PER_SECOND,
+      seconds: getChartSeconds(this.state.chartWidthPx),
       silencePauseStepThreshold: Math.round(
         (SILENCE_PAUSE_THRESHOLD_MS / 1000) * DISPLAY_PIXELS_PER_SECOND,
       ),
@@ -128,6 +152,10 @@ export class RecordingEngine {
     this.volumeTracking = {
       maxHeardVolume: initialMaxVolume,
     };
+    this.rawAudioState = createRawAudioState({
+      sampleRate: this.audioSessionState.sampleRate,
+      seconds: getChartSeconds(this.state.chartWidthPx),
+    });
     this.pendingAudioRestart = false;
     this.unsubscribeForeground = subscribeToForegroundChanges(this.onForegroundChange);
 
@@ -220,6 +248,7 @@ export class RecordingEngine {
         onWorkletMessage: (event) => {
           const sampleCount = Number(event.data.sampleCount);
           this.state.volume = Number(event.data.volume) || 0;
+          appendRawAudioSamples(this.rawAudioState, event.data.samples);
           if (!Number.isFinite(sampleCount) || sampleCount !== this.state.hopSize) {
             console.error("something has gone very wrong this should not be possible", {
               sampleCount,
@@ -250,6 +279,10 @@ export class RecordingEngine {
       this.audioSessionState.silentOutputGain = session.silentOutputGain;
       this.audioSessionState.sampleRate = session.sampleRate;
       this.audioSessionState.hzBuffer = hzBuffer;
+      resetRawAudioState(this.rawAudioState, {
+        sampleRate: session.sampleRate,
+        seconds: getChartSeconds(this.state.chartWidthPx),
+      });
 
       setStreamListeningEnabled(session.stream, this.state.ui.isWantedRunning);
       this.spectrogramBuffers = createSpectrogramBuffers(session.analyser.frequencyBinCount);
@@ -441,7 +474,14 @@ export class RecordingEngine {
       const nextWidth = Math.max(1, Math.floor(container.clientWidth ?? window.innerWidth));
       if (nextWidth !== this.state.chartWidthPx) {
         this.state.chartWidthPx = nextWidth;
-        resizePitchProcessingState(this.pitchProcessingState, nextWidth);
+        resizePitchProcessingState(
+          this.pitchProcessingState,
+          Math.max(1, Math.floor(DISPLAY_PIXELS_PER_SECOND * getChartSeconds(nextWidth))),
+        );
+        resetRawAudioState(this.rawAudioState, {
+          sampleRate: this.audioSessionState.sampleRate,
+          seconds: getChartSeconds(nextWidth),
+        });
       }
       this.state.forceRedraw = true;
     };
@@ -519,8 +559,52 @@ export class RecordingEngine {
   };
 
   setWantsToRun = (isWanted) => {
-    this.setUi({ isWantedRunning: Boolean(isWanted) });
+    this.setUi({ isWantedRunning: Boolean(isWanted), rawAudioShareError: "" });
     this.syncAudioState();
+  };
+
+  canShareRawAudio = () => {
+    if (this.state.ui.isWantedRunning || !this.state.ui.hasEverRun) return false;
+    if (this.rawAudioState.ring.sampleCount <= 0) return false;
+    if (typeof navigator.share !== "function" || typeof navigator.canShare !== "function")
+      return false;
+    const seconds = Math.max(1, Math.ceil(getCapturedSeconds(this.rawAudioState)));
+    const file = new File(
+      [],
+      `voicebox-last-${seconds}-seconds-${formatShareTimestamp(new Date())}.wav`,
+      {
+        type: "audio/wav",
+      },
+    );
+    return navigator.canShare({ files: [file] });
+  };
+
+  shareRawAudio = async () => {
+    this.setUi({ isSharingRawAudio: true, rawAudioShareError: "" });
+    try {
+      const samples = readRawAudioSamples(this.rawAudioState);
+      const blob = createWavBlob(samples, this.rawAudioState.sampleRate);
+      const seconds = Math.max(1, Math.ceil(getCapturedSeconds(this.rawAudioState)));
+      const file = new File(
+        [blob],
+        `voicebox-last-${seconds}-seconds-${formatShareTimestamp(new Date())}.wav`,
+        { type: blob.type },
+      );
+      await navigator.share({
+        files: [file],
+        title: "Voicebox capture",
+        text: "Pitch capture from Voicebox",
+      });
+      return true;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return false;
+      }
+      this.setUi({ rawAudioShareError: error?.message || "Unable to share audio." });
+      return false;
+    } finally {
+      this.setUi({ isSharingRawAudio: false });
+    }
   };
 
   startIfNeeded = () => {

@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { test, expect, vi } from "vitest";
 import AppShell from "../../src/AppShell.jsx";
+import { getRecordingEngine } from "../../src/Recorder/RecordingEngine.js";
+import { appendRawAudioSamples } from "../../src/Recorder/rawAudio.js";
 import {
   readAutoPauseOnSilence,
   readHighResSpectrogram,
@@ -226,4 +228,29 @@ test("settings about link points to the local about page", async () => {
   const aboutLink = screen.getByRole("link", { name: "Help" });
 
   expect(aboutLink).toHaveAttribute("href", "/about");
+});
+
+test("share button only appears for paused recorder views with captured audio", async () => {
+  navigator.share = vi.fn(async () => {});
+  navigator.canShare = vi.fn(() => true);
+
+  const user = userEvent.setup();
+  render(<AppShell />);
+
+  await user.click(screen.getByLabelText("Open settings"));
+  expect(screen.queryByRole("button", { name: /Share paused recording/i })).toBeNull();
+
+  const engine = getRecordingEngine();
+  appendRawAudioSamples(engine.rawAudioState, new Float32Array(48_000).fill(0.25));
+  engine.setUi({ hasEverRun: true, isWantedRunning: false });
+
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: /Share paused recording/i })).toBeInTheDocument();
+  });
+
+  await user.click(screen.getByLabelText("Close settings"));
+  await user.click(screen.getByRole("button", { name: "Scales" }));
+  await user.click(screen.getByLabelText("Open settings"));
+
+  expect(screen.queryByRole("button", { name: /Share paused recording/i })).toBeNull();
 });
