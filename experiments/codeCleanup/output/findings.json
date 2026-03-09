@@ -1,0 +1,177 @@
+[
+  {
+    "type": "never-passed",
+    "functionId": "src/debug/DebugPage.jsx::roundValue",
+    "functionName": "roundValue",
+    "ownerClass": null,
+    "filePath": "src/debug/DebugPage.jsx",
+    "functionLoc": {
+      "line": 12,
+      "column": 1
+    },
+    "paramName": "digits",
+    "paramIndex": 1,
+    "paramHasDefault": true,
+    "paramReferenceCount": 1,
+    "callCount": 7,
+    "onlyExplicitUndefined": false,
+    "calls": [
+      {
+        "filePath": "src/debug/DebugPage.jsx",
+        "loc": {
+          "line": 344,
+          "column": 51
+        },
+        "count": 1,
+        "hasSpread": false
+      },
+      {
+        "filePath": "src/debug/DebugPage.jsx",
+        "loc": {
+          "line": 362,
+          "column": 50
+        },
+        "count": 1,
+        "hasSpread": false
+      },
+      {
+        "filePath": "src/debug/DebugPage.jsx",
+        "loc": {
+          "line": 384,
+          "column": 55
+        },
+        "count": 1,
+        "hasSpread": false
+      },
+      {
+        "filePath": "src/debug/DebugPage.jsx",
+        "loc": {
+          "line": 385,
+          "column": 23
+        },
+        "count": 1,
+        "hasSpread": false
+      },
+      {
+        "filePath": "src/debug/DebugPage.jsx",
+        "loc": {
+          "line": 387,
+          "column": 23
+        },
+        "count": 1,
+        "hasSpread": false
+      },
+      {
+        "filePath": "src/debug/DebugPage.jsx",
+        "loc": {
+          "line": 388,
+          "column": 55
+        },
+        "count": 1,
+        "hasSpread": false
+      },
+      {
+        "filePath": "src/debug/DebugPage.jsx",
+        "loc": {
+          "line": 389,
+          "column": 23
+        },
+        "count": 1,
+        "hasSpread": false
+      }
+    ]
+  },
+  {
+    "type": "never-passed-and-unused",
+    "functionId": "src/Recorder/RecordingEngine.js::RecordingEngine.canShareRawAudio",
+    "functionName": "canShareRawAudio",
+    "ownerClass": "RecordingEngine",
+    "filePath": "src/Recorder/RecordingEngine.js",
+    "functionLoc": {
+      "line": 566,
+      "column": 22
+    },
+    "paramName": "debugSeedPropCanShare",
+    "paramIndex": 0,
+    "paramHasDefault": true,
+    "paramReferenceCount": 0,
+    "callCount": 1,
+    "onlyExplicitUndefined": false,
+    "calls": [
+      {
+        "filePath": "src/SettingsPanel.jsx",
+        "loc": {
+          "line": 71,
+          "column": 49
+        },
+        "count": 0,
+        "hasSpread": false
+      }
+    ]
+  },
+  {
+    "type": "never-passed-and-unused",
+    "functionId": "src/Recorder/RecordingEngine.js::RecordingEngine.getUiSnapshot",
+    "functionName": "getUiSnapshot",
+    "ownerClass": "RecordingEngine",
+    "filePath": "src/Recorder/RecordingEngine.js",
+    "functionLoc": {
+      "line": 642,
+      "column": 19
+    },
+    "paramName": "debugSeedPropRecordingSnapshot",
+    "paramIndex": 0,
+    "paramHasDefault": true,
+    "paramReferenceCount": 0,
+    "callCount": 2,
+    "onlyExplicitUndefined": false,
+    "calls": [
+      {
+        "filePath": "src/Recorder/Recorder.jsx",
+        "loc": {
+          "line": 29,
+          "column": 50
+        },
+        "count": 0,
+        "hasSpread": false
+      },
+      {
+        "filePath": "src/SettingsPanel.jsx",
+        "loc": {
+          "line": 60,
+          "column": 54
+        },
+        "count": 0,
+        "hasSpread": false
+      }
+    ]
+  },
+  {
+    "type": "never-passed-and-unused",
+    "functionId": "src/ScalesPage/PlaybackEngine.js::PlaybackEngine.getUiSnapshot",
+    "functionName": "getUiSnapshot",
+    "ownerClass": "PlaybackEngine",
+    "filePath": "src/ScalesPage/PlaybackEngine.js",
+    "functionLoc": {
+      "line": 503,
+      "column": 19
+    },
+    "paramName": "debugSeedPropPlaybackSnapshot",
+    "paramIndex": 0,
+    "paramHasDefault": true,
+    "paramReferenceCount": 0,
+    "callCount": 1,
+    "onlyExplicitUndefined": false,
+    "calls": [
+      {
+        "filePath": "src/ScalesPage/ScalesPage.jsx",
+        "loc": {
+          "line": 24,
+          "column": 50
+        },
+        "count": 0,
+        "hasSpread": false
+      }
+    ]
+  }
+]
