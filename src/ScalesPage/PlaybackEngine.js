@@ -67,12 +67,12 @@ function sanitizeScaleName(name) {
 }
 
 export class PlaybackEngine {
-  constructor() {
+  constructor(config) {
     this.listeners = new Set();
-    const initialScaleMin = readScaleMinNote();
-    const initialScaleMax = readScaleMaxNote();
-    const initialScaleName = sanitizeScaleName(readScaleSelectedName());
-    const initialBpm = clamp(readScaleBpm(), SCALE_BPM_MIN, SCALE_BPM_MAX);
+    const initialScaleMin = config.scaleMinNote;
+    const initialScaleMax = config.scaleMaxNote;
+    const initialScaleName = sanitizeScaleName(config.selectedScaleName);
+    const initialBpm = clamp(config.bpm, SCALE_BPM_MIN, SCALE_BPM_MAX);
     this.state = {
       ui: {
         bpm: initialBpm,
@@ -83,8 +83,8 @@ export class PlaybackEngine {
         isPianoReady: false,
         gestureFlashSignal: null,
       },
-      keepRunningInBackground: false,
-      isForeground: true,
+      keepRunningInBackground: config.keepRunningInBackground,
+      isForeground: config.isForeground,
       activeNotes: [],
       playbackTimeoutId: 0,
       timelineIndex: 0,

@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { RecordingEngine } from "../../src/Recorder/RecordingEngine.js";
+import { createRecordingEngineConfig } from "../utils/engineConfig.js";
 
 function deferred() {
   let resolve;
@@ -31,7 +32,7 @@ test("pending audio start is cancelled if app backgrounds before start completes
   const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
   navigator.mediaDevices.getUserMedia = vi.fn(() => getUserMediaDeferred.promise);
 
-  const engine = new RecordingEngine();
+  const engine = new RecordingEngine(createRecordingEngineConfig());
   try {
     engine.updateSettings({
       keepRunningInBackground: false,

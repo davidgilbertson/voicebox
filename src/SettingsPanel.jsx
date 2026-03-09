@@ -1,7 +1,6 @@
 import { Circle, Share, Share2, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import StepperControl from "./components/StepperControl.jsx";
-import { getRecordingEngine } from "./Recorder/RecordingEngine.js";
 import { PITCH_LINE_COLOR_MODES } from "./Recorder/colorTools.js";
 
 const settingsCheckboxClass = "settings-checkbox h-5 w-5 shrink-0";
@@ -17,6 +16,7 @@ const PITCH_LINE_MODE_PREVIEW_CLASS_BY_MODE = {
 };
 
 export default function SettingsPanel({
+  recorderEngine,
   open,
   onClose,
   scaleMinNote,
@@ -49,7 +49,6 @@ export default function SettingsPanel({
   batteryUsagePerMinute,
   showRecorderShare,
 }) {
-  const recorderEngine = getRecordingEngine();
   const dialogRef = useRef(null);
   const [spectrogramMinHzDraft, setSpectrogramMinHzDraft] = useState(() =>
     String(spectrogramMinHz),
@@ -65,7 +64,9 @@ export default function SettingsPanel({
   const pitchMaxIndex = pitchNoteOptions.indexOf(pitchMaxNote);
   const useIosShareIcon =
     /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent) &&
-    (!navigator.platform || navigator.platform === "MacIntel" ? navigator.maxTouchPoints > 1 : true);
+    (!navigator.platform || navigator.platform === "MacIntel"
+      ? navigator.maxTouchPoints > 1
+      : true);
   const ShareIcon = useIosShareIcon ? Share : Share2;
   const canShareRawAudio = showRecorderShare && recorderEngine.canShareRawAudio();
 

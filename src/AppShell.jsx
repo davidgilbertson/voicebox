@@ -3,30 +3,14 @@ import { useEffect, useState } from "react";
 import Recorder from "./Recorder/Recorder.jsx";
 import ScalesPage from "./ScalesPage/ScalesPage.jsx";
 import SettingsPanel from "./SettingsPanel.jsx";
-import { getRecordingEngine } from "./Recorder/RecordingEngine.js";
-import { getPlaybackEngine } from "./ScalesPage/PlaybackEngine.js";
+import { RecordingEngine } from "./Recorder/RecordingEngine.js";
+import { PlaybackEngine } from "./ScalesPage/PlaybackEngine.js";
 import { calibrateMinVolumeThreshold } from "./Recorder/micCalibration.js";
-import { readActiveView, writeActiveView } from "./AppShell/config.js";
+import { writeActiveView } from "./AppShell/config.js";
 import { PITCH_NOTE_OPTIONS } from "./pitchScale.js";
 import { computeIsForeground, subscribeToForegroundChanges } from "./foreground.js";
+import { writeScaleMaxNote, writeScaleMinNote } from "./ScalesPage/config.js";
 import {
-  readScaleMaxNote,
-  readScaleMinNote,
-  writeScaleMaxNote,
-  writeScaleMinNote,
-} from "./ScalesPage/config.js";
-import {
-  readAutoPauseOnSilence,
-  readHighResSpectrogram,
-  readHalfResolutionCanvas,
-  readKeepRunningInBackground,
-  readMinVolumeThreshold,
-  readPitchMaxNote,
-  readPitchMinNote,
-  readPitchLineColorMode,
-  readRunAt30Fps,
-  readSpectrogramMaxHz,
-  readSpectrogramMinHz,
   writeAutoPauseOnSilence,
   writeHighResSpectrogram,
   writeHalfResolutionCanvas,
@@ -39,40 +23,76 @@ import {
   writeSpectrogramMaxHz,
   writeSpectrogramMinHz,
 } from "./Recorder/config.js";
+import { readConfig } from "./config.js";
 
 export default function AppShell({ downloadingUpdate = false }) {
-  const recorderEngine = getRecordingEngine();
-  const scalesPlaybackEngine = getPlaybackEngine();
-  const [activeView, setActiveView] = useState(() => readActiveView());
+  const [isForeground, setIsForeground] = useState(computeIsForeground);
+  const [config] = useState(readConfig);
+  const [recorderEngine] = useState(
+    () => new RecordingEngine({ ...config.shared, ...config.recorder, isForeground }),
+  );
+  const [scalesPlaybackEngine] = useState(
+    () =>
+      new PlaybackEngine({
+        ...config.shared,
+        ...config.scales,
+        isForeground,
+      }),
+  );
+  const [activeView, setActiveView] = useState(() => config.app.activeView);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [scaleMinNote, setScaleMinNote] = useState(() => readScaleMinNote());
-  const [scaleMaxNote, setScaleMaxNote] = useState(() => readScaleMaxNote());
-  const [keepRunningInBackground, setKeepRunningInBackground] = useState(() =>
-    readKeepRunningInBackground(),
+  const [scaleMinNote, setScaleMinNote] = useState(() => config.scales.scaleMinNote);
+  const [scaleMaxNote, setScaleMaxNote] = useState(() => config.scales.scaleMaxNote);
+  const [keepRunningInBackground, setKeepRunningInBackground] = useState(
+    () => config.shared.keepRunningInBackground,
   );
-  const [autoPauseOnSilence, setAutoPauseOnSilence] = useState(() => readAutoPauseOnSilence());
-  const [runAt30Fps, setRunAt30Fps] = useState(() => readRunAt30Fps());
-  const [halfResolutionCanvas, setHalfResolutionCanvas] = useState(() =>
-    readHalfResolutionCanvas(),
+  const [autoPauseOnSilence, setAutoPauseOnSilence] = useState(
+    () => config.recorder.autoPauseOnSilence,
   );
-  const [highResSpectrogram, setHighResSpectrogram] = useState(() => readHighResSpectrogram());
-  const [minVolumeThreshold, setMinVolumeThreshold] = useState(() => readMinVolumeThreshold());
-  const [pitchMinNote, setPitchMinNote] = useState(() => readPitchMinNote());
-  const [pitchMaxNote, setPitchMaxNote] = useState(() => readPitchMaxNote());
-  const [pitchLineColorMode, setPitchLineColorMode] = useState(() => readPitchLineColorMode());
-  const [spectrogramMinHz, setSpectrogramMinHz] = useState(() => readSpectrogramMinHz());
-  const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => readSpectrogramMaxHz());
-  const [isForeground, setIsForeground] = useState(() => computeIsForeground());
+  const [runAt30Fps, setRunAt30Fps] = useState(() => config.recorder.runAt30Fps);
+  const [halfResolutionCanvas, setHalfResolutionCanvas] = useState(
+    () => config.recorder.halfResolutionCanvas,
+  );
+  const [highResSpectrogram, setHighResSpectrogram] = useState(
+    () => config.recorder.highResSpectrogram,
+  );
+  const [minVolumeThreshold, setMinVolumeThreshold] = useState(
+    () => config.recorder.minVolumeThreshold,
+  );
+  const [pitchMinNote, setPitchMinNote] = useState(() => config.recorder.pitchMinNote);
+  const [pitchMaxNote, setPitchMaxNote] = useState(() => config.recorder.pitchMaxNote);
+  const [pitchLineColorMode, setPitchLineColorMode] = useState(
+    () => config.recorder.pitchLineColorMode,
+  );
+  const [spectrogramMinHz, setSpectrogramMinHz] = useState(() => config.recorder.spectrogramMinHz);
+  const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => config.recorder.spectrogramMaxHz);
   const [runtimeSettings, setRuntimeSettings] = useState({
     batteryUsagePerMinute: null,
   });
   const onScalesPage = activeView === "scales";
 
   useEffect(() => {
+    if (import.meta.env.MODE !== "test") return;
+    globalThis.__appRecordingEngineForTests = recorderEngine;
+    globalThis.__appPlaybackEngineForTests = scalesPlaybackEngine;
+    return () => {
+      delete globalThis.__appRecordingEngineForTests;
+      delete globalThis.__appPlaybackEngineForTests;
+    };
+  }, [recorderEngine, scalesPlaybackEngine]);
+
+  useEffect(() => {
     writeActiveView(activeView);
   }, [activeView]);
 
   useEffect(() => subscribeToForegroundChanges(setIsForeground), []);
+
+  useEffect(() => {
+    return () => {
+      recorderEngine.destroy();
+      scalesPlaybackEngine.destroy();
+    };
+  }, [recorderEngine, scalesPlaybackEngine]);
 
   useEffect(() => {
     writeScaleMinNote(scaleMinNote);
@@ -347,6 +367,7 @@ export default function AppShell({ downloadingUpdate = false }) {
         </main>
         {settingsOpen ? (
           <SettingsPanel
+            recorderEngine={recorderEngine}
             open={settingsOpen}
             onClose={() => setSettingsOpen(false)}
             scaleMinNote={scaleMinNote}

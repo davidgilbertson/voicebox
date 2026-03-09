@@ -229,6 +229,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete globalThis.__appRecordingEngineForTests;
+  delete globalThis.__appPlaybackEngineForTests;
   globalThis.__resetRecordingEngineSingletonForTests?.();
   globalThis.__resetPlaybackEngineSingletonForTests?.();
   cleanup();

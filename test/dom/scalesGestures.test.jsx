@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import ScalesPage from "../../src/ScalesPage/ScalesPage.jsx";
 import { PlaybackEngine } from "../../src/ScalesPage/PlaybackEngine.js";
+import { createPlaybackEngineConfig } from "../utils/engineConfig.js";
 
 const playNoteMock = vi.fn(async () => ({ stop: vi.fn() }));
 
@@ -45,7 +46,9 @@ async function waitForReady() {
 }
 
 function renderScales(props) {
-  return render(<ScalesPage engine={new PlaybackEngine()} {...props} />);
+  return render(
+    <ScalesPage engine={new PlaybackEngine(createPlaybackEngineConfig())} {...props} />,
+  );
 }
 
 test("right swipe shows right-direction gesture feedback", async () => {

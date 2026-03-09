@@ -53,11 +53,14 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
       if (this.pendingSampleCount >= this.batchSize) {
         const volume = rmsToVolume(Math.sqrt(this.pendingSumSquares / this.pendingSampleCount));
         const samples = this.pendingSamples;
-        this.port.postMessage({
-          sampleCount: this.pendingSampleCount,
-          volume,
-          samples,
-        }, [samples.buffer]);
+        this.port.postMessage(
+          {
+            sampleCount: this.pendingSampleCount,
+            volume,
+            samples,
+          },
+          [samples.buffer],
+        );
         this.pendingSampleCount = 0;
         this.pendingSumSquares = 0;
         this.pendingSamples = new Float32Array(this.batchSize);

@@ -68,7 +68,7 @@ function setStreamListeningEnabled(stream, enabled) {
 }
 
 export class RecordingEngine {
-  constructor() {
+  constructor(config) {
     this.listeners = new Set();
     this.chartRefs = {
       pitchChartRef: null,
@@ -77,7 +77,6 @@ export class RecordingEngine {
       containerRef: null,
     };
     this.resizeObserver = null;
-    this.batteryUsageMonitor = createBatteryUsageMonitor();
     // Decay the remembered max a little on each session start so it can adapt downward over time
     // while still retaining a device-specific sense of "loud enough" between runs.
     const initialMaxVolume = readMaxVolume() * STARTUP_MAX_VOLUME_DECAY_FACTOR;
@@ -97,22 +96,22 @@ export class RecordingEngine {
       },
       isStarting: false,
       startAttempt: 0,
-      isForeground: computeIsForeground(),
-      keepRunningInBackground: false,
+      isForeground: config.isForeground,
+      keepRunningInBackground: config.keepRunningInBackground,
       activeView: "spectrogram",
-      autoPauseOnSilence: true,
-      runAt30Fps: false,
-      highResSpectrogram: false,
+      autoPauseOnSilence: config.autoPauseOnSilence,
+      runAt30Fps: config.runAt30Fps,
+      highResSpectrogram: config.highResSpectrogram,
       pitchRange: {
-        minHz: noteNameToHz(PITCH_MIN_NOTE_DEFAULT),
-        maxHz: noteNameToHz(PITCH_MAX_NOTE_DEFAULT),
-        minCents: noteNameToCents(PITCH_MIN_NOTE_DEFAULT),
-        maxCents: noteNameToCents(PITCH_MAX_NOTE_DEFAULT),
+        minHz: noteNameToHz(config.pitchMinNote),
+        maxHz: noteNameToHz(config.pitchMaxNote),
+        minCents: noteNameToCents(config.pitchMinNote),
+        maxCents: noteNameToCents(config.pitchMaxNote),
       },
       chartWidthPx: Math.max(1, Math.floor(window.innerWidth)),
       hopSize: Math.round(48_000 / DISPLAY_PIXELS_PER_SECOND),
       volume: 0,
-      minVolumeThreshold: MIN_VOLUME_THRESHOLD_DEFAULT,
+      minVolumeThreshold: config.minVolumeThreshold,
       lineStrengthEma: 0,
       skipNextSpectrumFrame: false,
       frameDirty: false,
@@ -156,6 +155,7 @@ export class RecordingEngine {
       sampleRate: this.audioSessionState.sampleRate,
       seconds: getChartSeconds(this.state.chartWidthPx),
     });
+    this.batteryUsageMonitor = createBatteryUsageMonitor();
     this.pendingAudioRestart = false;
     this.unsubscribeForeground = subscribeToForegroundChanges(this.onForegroundChange);
 

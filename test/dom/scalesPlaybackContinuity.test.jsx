@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import ScalesPage from "../../src/ScalesPage/ScalesPage.jsx";
 import { PlaybackEngine } from "../../src/ScalesPage/PlaybackEngine.js";
+import { createPlaybackEngineConfig } from "../utils/engineConfig.js";
 
 const playNoteMock = vi.fn(async () => ({ stop: vi.fn() }));
 const playMetronomeTickMock = vi.fn(async () => {});
@@ -36,7 +37,9 @@ async function waitForReady() {
 }
 
 function renderScales(props) {
-  return render(<ScalesPage engine={new PlaybackEngine()} {...props} />);
+  return render(
+    <ScalesPage engine={new PlaybackEngine(createPlaybackEngineConfig())} {...props} />,
+  );
 }
 
 test("changing BPM while playing applies on the next pulse", async () => {
@@ -202,7 +205,7 @@ test("metronome shares the scales pulse loop and ducks on simultaneous notes", a
 });
 
 test("scales playback and metronome pause in background and resume in foreground", async () => {
-  const engine = new PlaybackEngine();
+  const engine = new PlaybackEngine(createPlaybackEngineConfig());
   const { rerender } = render(
     <ScalesPage
       engine={engine}

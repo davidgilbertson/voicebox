@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { test, expect, vi } from "vitest";
 import AppShell from "../../src/AppShell.jsx";
-import { getRecordingEngine } from "../../src/Recorder/RecordingEngine.js";
 import { appendRawAudioSamples } from "../../src/Recorder/rawAudio.js";
 import {
   readAutoPauseOnSilence,
@@ -240,7 +239,7 @@ test("share button only appears for paused recorder views with captured audio", 
   await user.click(screen.getByLabelText("Open settings"));
   expect(screen.queryByRole("button", { name: /Share paused recording/i })).toBeNull();
 
-  const engine = getRecordingEngine();
+  const engine = globalThis.__appRecordingEngineForTests;
   appendRawAudioSamples(engine.rawAudioState, new Float32Array(48_000).fill(0.25));
   engine.setUi({ hasEverRun: true, isWantedRunning: false });
 

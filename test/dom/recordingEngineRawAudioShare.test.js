@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { RecordingEngine } from "../../src/Recorder/RecordingEngine.js";
 import { appendRawAudioSamples } from "../../src/Recorder/rawAudio.js";
+import { createRecordingEngineConfig } from "../utils/engineConfig.js";
 
 test("shared wav filename uses the actual captured duration", async () => {
   vi.useFakeTimers();
@@ -9,7 +10,7 @@ test("shared wav filename uses the actual captured duration", async () => {
   navigator.share = vi.fn(async () => {});
   navigator.canShare = vi.fn(() => true);
 
-  const engine = new RecordingEngine();
+  const engine = new RecordingEngine(createRecordingEngineConfig());
   try {
     appendRawAudioSamples(engine.rawAudioState, new Float32Array(48_000 * 3).fill(0.25));
     engine.rawAudioState.seconds = 22;
