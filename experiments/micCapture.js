@@ -1,6 +1,4 @@
-export async function recordMicrophoneAudio({
-  maxDurationMs = 10_000,
-} = {}) {
+export async function recordMicrophoneAudio({ maxDurationMs = 10_000 } = {}) {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error("Microphone capture is not supported in this browser.");
   }
@@ -35,11 +33,14 @@ export async function recordMicrophoneAudio({
     });
     recorder.addEventListener("stop", finish);
     recorder.start();
-    setTimeout(() => {
-      if (recorder.state !== "inactive") {
-        recorder.stop();
-      }
-    }, Math.max(250, Math.floor(maxDurationMs)));
+    setTimeout(
+      () => {
+        if (recorder.state !== "inactive") {
+          recorder.stop();
+        }
+      },
+      Math.max(250, Math.floor(maxDurationMs)),
+    );
   });
 
   stream.getTracks().forEach((track) => track.stop());
@@ -47,7 +48,7 @@ export async function recordMicrophoneAudio({
     throw new Error("No audio was captured.");
   }
 
-  const blob = new Blob(chunks, {type: recorder.mimeType || "audio/webm"});
+  const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
   const bytes = await blob.arrayBuffer();
   const audioContext = new AudioContext();
   try {

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import {fileURLToPath} from "node:url";
+import { fileURLToPath } from "node:url";
 
 function parseWav(buffer) {
   if (buffer.toString("ascii", 0, 4) !== "RIFF" || buffer.toString("ascii", 8, 12) !== "WAVE") {
@@ -52,20 +52,22 @@ function parseWav(buffer) {
 
   if (formatTag === 1 && bitsPerSample === 16) {
     for (let i = 0; i < frameCount; i += 1) {
-      const frameStart = dataOffset + (i * frameSize);
+      const frameStart = dataOffset + i * frameSize;
       const sampleInt16 = buffer.readInt16LE(frameStart);
       samples[i] = sampleInt16 / 32768;
     }
   } else if (formatTag === 3 && bitsPerSample === 32) {
     for (let i = 0; i < frameCount; i += 1) {
-      const frameStart = dataOffset + (i * frameSize);
+      const frameStart = dataOffset + i * frameSize;
       samples[i] = buffer.readFloatLE(frameStart);
     }
   } else {
-    throw new Error(`Unsupported WAV format. formatTag=${formatTag}, bitsPerSample=${bitsPerSample}`);
+    throw new Error(
+      `Unsupported WAV format. formatTag=${formatTag}, bitsPerSample=${bitsPerSample}`,
+    );
   }
 
-  return {sampleRate, channels, bitsPerSample, frameCount, samples};
+  return { sampleRate, channels, bitsPerSample, frameCount, samples };
 }
 
 function maxSignalLevelWithWorkletMath(samples, batchSize) {
@@ -91,7 +93,7 @@ function maxSignalLevelWithWorkletMath(samples, batchSize) {
     }
   }
 
-  return {maxSignalLevel, batchCount, batchSignalLevels};
+  return { maxSignalLevel, batchCount, batchSignalLevels };
 }
 
 function percentile(values, p) {
@@ -101,12 +103,7 @@ function percentile(values, p) {
   return sorted[index];
 }
 
-function generateVoiceLikeSignal({
-  sampleRate,
-  durationSeconds,
-  fundamentalHz,
-  harmonics,
-}) {
+function generateVoiceLikeSignal({ sampleRate, durationSeconds, fundamentalHz, harmonics }) {
   const length = Math.floor(sampleRate * durationSeconds);
   const samples = new Float32Array(length);
 
@@ -120,8 +117,8 @@ function generateVoiceLikeSignal({
     const t = i / sampleRate;
     let value = 0;
     for (let n = 1; n <= harmonics; n += 1) {
-      const amplitude = 1 / (n ** 1.3);
-      value += amplitude * Math.sin((2 * Math.PI * fundamentalHz * n * t) + phases[n - 1]);
+      const amplitude = 1 / n ** 1.3;
+      value += amplitude * Math.sin(2 * Math.PI * fundamentalHz * n * t + phases[n - 1]);
     }
     samples[i] = value;
   }
@@ -148,13 +145,17 @@ function main() {
   const buffer = fs.readFileSync(wavPath);
   const wav = parseWav(buffer);
   const batchSize = Math.round(wav.sampleRate / 80);
-  const {maxSignalLevel, batchCount, batchSignalLevels} = maxSignalLevelWithWorkletMath(wav.samples, batchSize);
+  const { maxSignalLevel, batchCount, batchSignalLevels } = maxSignalLevelWithWorkletMath(
+    wav.samples,
+    batchSize,
+  );
   const nearMaxThreshold = maxSignalLevel * 0.95;
   let nearMaxCount = 0;
   for (const level of batchSignalLevels) {
     if (level >= nearMaxThreshold) nearMaxCount += 1;
   }
-  const nearMaxPct = batchSignalLevels.length > 0 ? (nearMaxCount / batchSignalLevels.length) * 100 : 0;
+  const nearMaxPct =
+    batchSignalLevels.length > 0 ? (nearMaxCount / batchSignalLevels.length) * 100 : 0;
   const thresholdForTop10Pct = percentile(batchSignalLevels, 90);
 
   const syntheticSamples = generateVoiceLikeSignal({

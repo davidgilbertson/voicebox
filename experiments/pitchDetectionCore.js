@@ -16,22 +16,38 @@ function clamp(value, min, max) {
 function resolvePitchTuning(tuning = null) {
   if (!tuning) return DEFAULT_PITCH_TUNING;
   return {
-    maxP: Number.isFinite(tuning.maxP) ? Math.max(1, Math.floor(tuning.maxP)) : DEFAULT_PITCH_TUNING.maxP,
-    pCount: Number.isFinite(tuning.pCount) ? Math.max(1, Math.floor(tuning.pCount)) : DEFAULT_PITCH_TUNING.pCount,
-    pRefineCount: Number.isFinite(tuning.pRefineCount) ? Math.max(1, Math.floor(tuning.pRefineCount)) : DEFAULT_PITCH_TUNING.pRefineCount,
-    offWeight: Number.isFinite(tuning.offWeight) ? tuning.offWeight : DEFAULT_PITCH_TUNING.offWeight,
-    expectedP0MinRatio: Number.isFinite(tuning.expectedP0MinRatio) ? tuning.expectedP0MinRatio : DEFAULT_PITCH_TUNING.expectedP0MinRatio,
-    expectedP0PenaltyWeight: Number.isFinite(tuning.expectedP0PenaltyWeight) ? tuning.expectedP0PenaltyWeight : DEFAULT_PITCH_TUNING.expectedP0PenaltyWeight,
-    downwardBiasPerP: Number.isFinite(tuning.downwardBiasPerP) ? tuning.downwardBiasPerP : DEFAULT_PITCH_TUNING.downwardBiasPerP,
-    searchRadiusBins: Number.isFinite(tuning.searchRadiusBins) ? Math.max(0, Math.floor(tuning.searchRadiusBins)) : DEFAULT_PITCH_TUNING.searchRadiusBins,
+    maxP: Number.isFinite(tuning.maxP)
+      ? Math.max(1, Math.floor(tuning.maxP))
+      : DEFAULT_PITCH_TUNING.maxP,
+    pCount: Number.isFinite(tuning.pCount)
+      ? Math.max(1, Math.floor(tuning.pCount))
+      : DEFAULT_PITCH_TUNING.pCount,
+    pRefineCount: Number.isFinite(tuning.pRefineCount)
+      ? Math.max(1, Math.floor(tuning.pRefineCount))
+      : DEFAULT_PITCH_TUNING.pRefineCount,
+    offWeight: Number.isFinite(tuning.offWeight)
+      ? tuning.offWeight
+      : DEFAULT_PITCH_TUNING.offWeight,
+    expectedP0MinRatio: Number.isFinite(tuning.expectedP0MinRatio)
+      ? tuning.expectedP0MinRatio
+      : DEFAULT_PITCH_TUNING.expectedP0MinRatio,
+    expectedP0PenaltyWeight: Number.isFinite(tuning.expectedP0PenaltyWeight)
+      ? tuning.expectedP0PenaltyWeight
+      : DEFAULT_PITCH_TUNING.expectedP0PenaltyWeight,
+    downwardBiasPerP: Number.isFinite(tuning.downwardBiasPerP)
+      ? tuning.downwardBiasPerP
+      : DEFAULT_PITCH_TUNING.downwardBiasPerP,
+    searchRadiusBins: Number.isFinite(tuning.searchRadiusBins)
+      ? Math.max(0, Math.floor(tuning.searchRadiusBins))
+      : DEFAULT_PITCH_TUNING.searchRadiusBins,
   };
 }
 
-export function detectPitchFromSpectrumDetailed(spectrumBins, sampleRate, {
-  minHz,
-  maxHz,
-  tuning = null,
-}) {
+export function detectPitchFromSpectrumDetailed(
+  spectrumBins,
+  sampleRate,
+  { minHz, maxHz, tuning = null },
+) {
   if (!spectrumBins || spectrumBins.length < 8) {
     return {
       hz: 0,
@@ -43,7 +59,7 @@ export function detectPitchFromSpectrumDetailed(spectrumBins, sampleRate, {
   }
 
   const nyquistBin = spectrumBins.length - 1;
-  const binSizeHz = (sampleRate / 2) / spectrumBins.length;
+  const binSizeHz = sampleRate / 2 / spectrumBins.length;
   const minBin = Math.max(1, Math.floor(minHz / binSizeHz));
   const maxBin = Math.min(nyquistBin, Math.floor(maxHz / binSizeHz));
   if (maxBin <= minBin) {
@@ -77,11 +93,11 @@ export function detectPitchFromSpectrumDetailed(spectrumBins, sampleRate, {
     if (middle < left || middle < right) {
       return clampedBin;
     }
-    const denominator = left - (2 * middle) + right;
+    const denominator = left - 2 * middle + right;
     if (!Number.isFinite(denominator) || denominator === 0) {
       return clampedBin;
     }
-    const offset = 0.5 * (left - right) / denominator;
+    const offset = (0.5 * (left - right)) / denominator;
     return clampedBin + clamp(offset, -1, 1);
   }
 
@@ -92,12 +108,12 @@ export function detectPitchFromSpectrumDetailed(spectrumBins, sampleRate, {
     const left = spectrumBins[centerBin - 1];
     const middle = spectrumBins[centerBin];
     const right = spectrumBins[centerBin + 1];
-    return middle + (0.5 * frac * (right - left)) + (0.5 * frac * frac * (left - (2 * middle) + right));
+    return middle + 0.5 * frac * (right - left) + 0.5 * frac * frac * (left - 2 * middle + right);
   }
 
   function scoreHypothesis(f0Bin) {
     if (!Number.isFinite(f0Bin) || f0Bin < minBin || f0Bin > maxBin) {
-      return {score: Number.NEGATIVE_INFINITY, p0Magnitude: 0};
+      return { score: Number.NEGATIVE_INFINITY, p0Magnitude: 0 };
     }
     let score = 0;
     let p0Magnitude = 0;
@@ -108,9 +124,9 @@ export function detectPitchFromSpectrumDetailed(spectrumBins, sampleRate, {
       if (p === 1) p0Magnitude = onMagnitude;
       const offBin = f0Bin * (p + 0.5);
       const offMagnitude = offBin >= minBin && offBin <= maxBin ? sampleMagnitude3Bin(offBin) : 0;
-      score += onMagnitude - (offWeight * offMagnitude);
+      score += onMagnitude - offWeight * offMagnitude;
     }
-    return {score, p0Magnitude};
+    return { score, p0Magnitude };
   }
 
   function findTopSeedPeak() {
@@ -120,7 +136,7 @@ export function detectPitchFromSpectrumDetailed(spectrumBins, sampleRate, {
       const center = spectrumBins[bin];
       const right = spectrumBins[bin + 1];
       if (!(center >= left && center > right)) continue;
-      localPeaks.push({bin, magnitude: center});
+      localPeaks.push({ bin, magnitude: center });
     }
     localPeaks.sort((a, b) => b.magnitude - a.magnitude);
     return localPeaks[0] ?? null;
@@ -164,7 +180,7 @@ export function detectPitchFromSpectrumDetailed(spectrumBins, sampleRate, {
   for (let p = 1; p <= maxP; p += 1) {
     const f0Bin = seedPeak.bin / p;
     if (f0Bin < minBin || f0Bin > maxBin) continue;
-    const {score, p0Magnitude} = scoreHypothesis(f0Bin);
+    const { score, p0Magnitude } = scoreHypothesis(f0Bin);
     let hypothesisScore = score;
     if (p > 1) {
       const expectedP0Magnitude = seedPeak.magnitude * expectedP0MinRatio;
@@ -182,7 +198,9 @@ export function detectPitchFromSpectrumDetailed(spectrumBins, sampleRate, {
     });
   }
 
-  const hypothesisScores = [...individualHypotheses].sort((a, b) => b.hypothesisScore - a.hypothesisScore);
+  const hypothesisScores = [...individualHypotheses].sort(
+    (a, b) => b.hypothesisScore - a.hypothesisScore,
+  );
   const bestContributor = hypothesisScores[0] ?? null;
   const bestP = bestContributor?.p ?? 1;
   const bestF0Bin = bestContributor?.f0Bin ?? seedPeak.bin;
@@ -206,7 +224,9 @@ export function detectPitchFromSpectrumDetailed(spectrumBins, sampleRate, {
     }
     const refinedPBin = refineLocalPeakBinParabolic(bestBin);
     const f0FromPBin = refinedPBin / p;
-    const localBaseline = (spectrumBins[Math.max(0, bestBin - 1)] + spectrumBins[Math.min(nyquistBin, bestBin + 1)]) / 2;
+    const localBaseline =
+      (spectrumBins[Math.max(0, bestBin - 1)] + spectrumBins[Math.min(nyquistBin, bestBin + 1)]) /
+      2;
     const peakiness = Math.max(0, bestMagnitude - localBaseline);
     const weight = bestMagnitude * peakiness;
     selectedPartials.push({
@@ -224,7 +244,7 @@ export function detectPitchFromSpectrumDetailed(spectrumBins, sampleRate, {
     totalWeight += weight;
   }
 
-  const refinedF0Bin = totalWeight > 0 ? (weightedSum / totalWeight) : Number.NaN;
+  const refinedF0Bin = totalWeight > 0 ? weightedSum / totalWeight : Number.NaN;
   const finalF0Bin = Number.isFinite(refinedF0Bin) ? refinedF0Bin : bestF0Bin;
   const hz = finalF0Bin * binSizeHz;
   if (!Number.isFinite(hz) || hz < minHz || hz > maxHz) {

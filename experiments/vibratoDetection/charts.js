@@ -20,11 +20,11 @@ function finiteMin(values, fallback) {
 
 function hzToMidi(hz) {
   if (!Number.isFinite(hz) || hz <= 0) return Number.NaN;
-  return 69 + (12 * Math.log2(hz / 440));
+  return 69 + 12 * Math.log2(hz / 440);
 }
 
 function midiToHz(midi) {
-  return 440 * (2 ** ((midi - 69) / 12));
+  return 440 * 2 ** ((midi - 69) / 12);
 }
 
 function hzToCents(hz) {
@@ -49,17 +49,17 @@ function buildCentsNoteTicks(minHz, maxHz) {
     tickvals.push(hzToCents(midiToHz(midi)));
     ticktext.push(midiToNoteName(midi));
   }
-  return {tickvals, ticktext};
+  return { tickvals, ticktext };
 }
 
 function plotTheme() {
   return {
     paper_bgcolor: "#050505",
     plot_bgcolor: "#050505",
-    font: {color: "#e2e8f0"},
-    margin: {l: 52, r: 24, t: 44, b: 44},
-    xaxis: {title: "Time (s)", gridcolor: "#1f2937"},
-    yaxis: {gridcolor: "#1f2937"},
+    font: { color: "#e2e8f0" },
+    margin: { l: 52, r: 24, t: 44, b: 44 },
+    xaxis: { title: "Time (s)", gridcolor: "#1f2937" },
+    yaxis: { gridcolor: "#1f2937" },
   };
 }
 
@@ -80,7 +80,7 @@ function smoothPitchForDisplay(values) {
   const raw = Float32Array.from(values, (value) => (Number.isFinite(value) ? value : Number.NaN));
   const output = new Float32Array(raw.length);
   output.set(raw);
-  if (raw.length < (SMOOTH_RADIUS * 2) + 1) {
+  if (raw.length < SMOOTH_RADIUS * 2 + 1) {
     return Array.from(output);
   }
   const indices = new Uint32Array(raw.length);
@@ -109,14 +109,14 @@ function vibratoTrace(timeSec, values, color) {
     x: timeSec,
     y: values,
     mode: "lines",
-    line: {width: 3, color},
+    line: { width: 3, color },
     connectgaps: false,
     hovertemplate: "t=%{x:.3f}s<br>Vibrato=%{y:.2f} Hz<extra></extra>",
   };
 }
 
 export async function renderVibratoCharts(result, options = {}) {
-  const {onTopChartClick = null, getTopChartHoverWindow = null} = options;
+  const { onTopChartClick = null, getTopChartHoverWindow = null } = options;
   const plotly = globalThis.Plotly;
   if (!plotly) {
     throw new Error("Plotly is not loaded");
@@ -130,77 +130,86 @@ export async function renderVibratoCharts(result, options = {}) {
   const pitchPadding = centsRangeSpan * 0.08;
   const centsTicks = buildCentsNoteTicks(pitchMinHz, pitchMaxHz);
   const smoothedPitchCents = result.smoothedPitchCents ?? smoothPitchForDisplay(result.pitchCents);
-  await plotly.newPlot("pitchChart", [{
-    x: result.timeSec,
-    y: result.pitchCents,
-    mode: "lines",
-    line: {width: 3, color: "rgba(56, 189, 248, 0.7)"},
-    connectgaps: false,
-    hovertemplate: "t=%{x:.3f}s<br>Pitch=%{y:.1f} cents<extra></extra>",
-    name: "Pitch (raw)",
-  }, {
-    x: result.timeSec,
-    y: smoothedPitchCents,
-    mode: "lines",
-    line: {width: 3, color: "rgba(74, 222, 128, 0.7)"},
-    connectgaps: false,
-    hovertemplate: "t=%{x:.3f}s<br>Pitch=%{y:.1f} cents<extra></extra>",
-    name: "Pitch (smoothed)",
-  }, {
-    x: [],
-    y: [],
-    mode: "markers",
-    marker: {size: 8, color: "#f97316"},
-    name: "Selected peaks",
-    hovertemplate: "Peak t=%{x:.3f}s<br>Pitch=%{y:.1f} cents<extra></extra>",
-  }], {
-    ...plotTheme(),
-    title: "Pitch",
-    showlegend: true,
-    yaxis: {
-      title: "Pitch (cents)",
-      gridcolor: "#1f2937",
-      range: [pitchMinCents - pitchPadding, pitchMaxCents + pitchPadding],
-      tickvals: centsTicks.tickvals,
-      ticktext: centsTicks.ticktext,
+  await plotly.newPlot(
+    "pitchChart",
+    [
+      {
+        x: result.timeSec,
+        y: result.pitchCents,
+        mode: "lines",
+        line: { width: 3, color: "rgba(56, 189, 248, 0.7)" },
+        connectgaps: false,
+        hovertemplate: "t=%{x:.3f}s<br>Pitch=%{y:.1f} cents<extra></extra>",
+        name: "Pitch (raw)",
+      },
+      {
+        x: result.timeSec,
+        y: smoothedPitchCents,
+        mode: "lines",
+        line: { width: 3, color: "rgba(74, 222, 128, 0.7)" },
+        connectgaps: false,
+        hovertemplate: "t=%{x:.3f}s<br>Pitch=%{y:.1f} cents<extra></extra>",
+        name: "Pitch (smoothed)",
+      },
+      {
+        x: [],
+        y: [],
+        mode: "markers",
+        marker: { size: 8, color: "#f97316" },
+        name: "Selected peaks",
+        hovertemplate: "Peak t=%{x:.3f}s<br>Pitch=%{y:.1f} cents<extra></extra>",
+      },
+    ],
+    {
+      ...plotTheme(),
+      title: "Pitch",
+      showlegend: true,
+      yaxis: {
+        title: "Pitch (cents)",
+        gridcolor: "#1f2937",
+        range: [pitchMinCents - pitchPadding, pitchMaxCents + pitchPadding],
+        tickvals: centsTicks.tickvals,
+        ticktext: centsTicks.ticktext,
+      },
+      shapes: [],
     },
-    shapes: [],
-  }, {responsive: true});
+    { responsive: true },
+  );
 
   const vibratoMinHz = 3;
   const vibratoMaxHz = 11;
 
   const lastTwoShapeRawTrace = vibratoTrace(
-      result.timeSec,
-      result.vibrato.lastTwoShapePeaksRawInput?.hz ?? [],
-      "rgba(96, 165, 250, 0.7)"
+    result.timeSec,
+    result.vibrato.lastTwoShapePeaksRawInput?.hz ?? [],
+    "rgba(96, 165, 250, 0.7)",
   );
   lastTwoShapeRawTrace.name = "Rate from raw pitch";
   const lastTwoShapeSmoothedTrace = vibratoTrace(
-      result.timeSec,
-      result.vibrato.lastTwoShapePeaksSmoothedInput?.hz ?? result.vibrato.lastTwoShapePeaks?.hz ?? [],
-      "rgba(74, 222, 128, 0.7)"
+    result.timeSec,
+    result.vibrato.lastTwoShapePeaksSmoothedInput?.hz ?? result.vibrato.lastTwoShapePeaks?.hz ?? [],
+    "rgba(74, 222, 128, 0.7)",
   );
   lastTwoShapeSmoothedTrace.name = "Rate from smoothed pitch";
-  await plotly.newPlot("vibratoLastTwoShapePeaksChart", [
-    lastTwoShapeRawTrace,
-    lastTwoShapeSmoothedTrace,
-  ], {
-    ...plotTheme(),
-    title: "Vibrato Rate - Last Two Shape Peaks",
-    showlegend: true,
-    yaxis: {title: "Hz", gridcolor: "#1f2937", range: [vibratoMinHz, vibratoMaxHz]},
-  }, {responsive: true});
+  await plotly.newPlot(
+    "vibratoLastTwoShapePeaksChart",
+    [lastTwoShapeRawTrace, lastTwoShapeSmoothedTrace],
+    {
+      ...plotTheme(),
+      title: "Vibrato Rate - Last Two Shape Peaks",
+      showlegend: true,
+      yaxis: { title: "Hz", gridcolor: "#1f2937", range: [vibratoMinHz, vibratoMaxHz] },
+    },
+    { responsive: true },
+  );
 
   const methodWindows = {
     vibratoLastTwoShapePeaksChart: result.vibrato.lastTwoShapePeaks.windows,
   };
-  const lowerChartIds = [
-    "vibratoLastTwoShapePeaksChart",
-  ];
+  const lowerChartIds = ["vibratoLastTwoShapePeaksChart"];
 
   function clearHighlight() {
-    plotly.relayout("pitchChart", {shapes: []});
+    plotly.relayout("pitchChart", { shapes: [] });
   }
 
   function highlightWindow(windowRange) {
@@ -219,7 +228,7 @@ export async function renderVibratoCharts(result, options = {}) {
           y0: 0,
           y1: 1,
           fillcolor: "rgba(56, 189, 248, 0.20)",
-          line: {width: 1, color: "rgba(56, 189, 248, 0.8)"},
+          line: { width: 1, color: "rgba(56, 189, 248, 0.8)" },
         },
       ],
     });
@@ -227,7 +236,7 @@ export async function renderVibratoCharts(result, options = {}) {
 
   function setVerticalLine(chartId, xTimeSec) {
     const shapes = Number.isFinite(xTimeSec)
-        ? [
+      ? [
           {
             type: "line",
             xref: "x",
@@ -236,11 +245,11 @@ export async function renderVibratoCharts(result, options = {}) {
             x1: xTimeSec,
             y0: 0,
             y1: 1,
-            line: {color: "rgba(226, 232, 240, 0.8)", width: 1},
+            line: { color: "rgba(226, 232, 240, 0.8)", width: 1 },
           },
         ]
-        : [];
-    plotly.relayout(chartId, {shapes});
+      : [];
+    plotly.relayout(chartId, { shapes });
   }
 
   function syncVerticalLinesFromHover(sourceChartId, xTimeSec) {
@@ -282,7 +291,7 @@ export async function renderVibratoCharts(result, options = {}) {
 
   function setPeakMarkers(timelineIndices) {
     if (!Array.isArray(timelineIndices) || timelineIndices.length === 0) {
-      plotly.restyle("pitchChart", {x: [[]], y: [[]]}, [2]);
+      plotly.restyle("pitchChart", { x: [[]], y: [[]] }, [2]);
       return;
     }
     const x = [];
@@ -295,7 +304,7 @@ export async function renderVibratoCharts(result, options = {}) {
       x.push(result.timeSec[index]);
       y.push(pitchValue);
     }
-    plotly.restyle("pitchChart", {x: [x], y: [y]}, [2]);
+    plotly.restyle("pitchChart", { x: [x], y: [y] }, [2]);
   }
 
   const pitchChartElement = document.getElementById("pitchChart");

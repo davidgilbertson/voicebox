@@ -1,161 +1,266 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Pitch Detection Debug</title>
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-  <style>
-    :root {
-      color-scheme: dark;
-    }
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pitch Detection Debug</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
 
-    * {
-      box-sizing: border-box;
-    }
+      * {
+        box-sizing: border-box;
+      }
 
-    html {
-      height: 100dvh;
-    }
+      html {
+        height: 100dvh;
+      }
 
-    body {
-      margin: 0;
-      height: 100%;
-      background: #050505;
-      color: #e2e8f0;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
-    }
+      body {
+        margin: 0;
+        height: 100%;
+        background: #050505;
+        color: #e2e8f0;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          sans-serif;
+      }
 
-    #app {
-      height: 100%;
-      display: grid;
-      grid-template-rows: auto minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr) auto;
-    }
+      #app {
+        height: 100%;
+        display: grid;
+        grid-template-rows: auto minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr) auto;
+      }
 
-    #toolbar {
-      padding: 10px 14px;
-      border-bottom: 1px solid #1f2937;
-      background: #0b0b0b;
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 8px;
-      font-size: 12px;
-    }
+      #toolbar {
+        padding: 10px 14px;
+        border-bottom: 1px solid #1f2937;
+        background: #0b0b0b;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: 12px;
+      }
 
-    #status {
-      color: #a7f3d0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      min-width: 0;
-      flex: 1;
-    }
+      #status {
+        color: #a7f3d0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+        flex: 1;
+      }
 
-    #perfInfo {
-      color: #93c5fd;
-      white-space: nowrap;
-    }
+      #perfInfo {
+        color: #93c5fd;
+        white-space: nowrap;
+      }
 
-    .toolbar-field {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      color: #94a3b8;
-      white-space: nowrap;
-    }
+      .toolbar-field {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #94a3b8;
+        white-space: nowrap;
+      }
 
-    .toolbar-btn {
-      border: 1px solid #334155;
-      background: #111827;
-      color: #e2e8f0;
-      border-radius: 6px;
-      padding: 6px 10px;
-      font-size: 12px;
-      cursor: pointer;
-    }
+      .toolbar-btn {
+        border: 1px solid #334155;
+        background: #111827;
+        color: #e2e8f0;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
 
-    .toolbar-btn:disabled {
-      opacity: 0.45;
-      cursor: default;
-    }
+      .toolbar-btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
 
-    .toolbar-select {
-      border: 1px solid #334155;
-      background: #111827;
-      color: #e2e8f0;
-      border-radius: 6px;
-      padding: 6px 10px;
-      font-size: 12px;
-      min-width: 220px;
-    }
+      .toolbar-select {
+        border: 1px solid #334155;
+        background: #111827;
+        color: #e2e8f0;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        min-width: 220px;
+      }
 
-    .toolbar-number {
-      border: 1px solid #334155;
-      background: #111827;
-      color: #e2e8f0;
-      border-radius: 6px;
-      padding: 6px 8px;
-      font-size: 12px;
-      width: 74px;
-    }
+      .toolbar-number {
+        border: 1px solid #334155;
+        background: #111827;
+        color: #e2e8f0;
+        border-radius: 6px;
+        padding: 6px 8px;
+        font-size: 12px;
+        width: 74px;
+      }
 
-    #pitchChart,
-    #flatnessChart,
-    #point1Chart {
-      width: 100%;
-      height: 100%;
-      min-height: 0;
-      transition: opacity 120ms linear;
-    }
+      #pitchChart,
+      #flatnessChart,
+      #point1Chart {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        transition: opacity 120ms linear;
+      }
 
-    body.loading #pitchChart,
-    body.loading #flatnessChart,
-    body.loading #point1Chart {
-      opacity: 0.55;
-    }
+      body.loading #pitchChart,
+      body.loading #flatnessChart,
+      body.loading #point1Chart {
+        opacity: 0.55;
+      }
 
-    #bottomControls {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 14px;
-      border-top: 1px solid #1f2937;
-      background: #0b0b0b;
-      font-size: 12px;
-      color: #94a3b8;
-    }
+      #bottomControls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-top: 1px solid #1f2937;
+        background: #0b0b0b;
+        font-size: 12px;
+        color: #94a3b8;
+      }
 
-    #whiteHypothesisInfo {
-      color: #cbd5e1;
-    }
-  </style>
-</head>
-<body>
-<div id="app">
-  <div id="toolbar">
-    <button id="recordButton" class="toolbar-btn" type="button">Record 5s</button>
-    <select id="sourceSelect" class="toolbar-select" aria-label="Audio source"></select>
-    <label class="toolbar-field">maxP <input id="tuneMaxP" class="toolbar-number" type="number" min="1" max="20" step="1" title="Try treating the main peak as p=1, p=2, ... up to this value."/></label>
-    <label class="toolbar-field">pCount <input id="tunePCount" class="toolbar-number" type="number" min="1" max="32" step="1" title="For each guessed base pitch, compare this many harmonics (1st, 2nd, 3rd, ...)."/></label>
-    <label class="toolbar-field">offW <input id="tuneOffWeight" class="toolbar-number" type="number" min="0" step="0.05" title="How strongly to punish energy between harmonics."/></label>
-    <label class="toolbar-field">p0Ratio <input id="tuneExpectedP0MinRatio" class="toolbar-number" type="number" min="0" max="1" step="0.01" title="How strong you expect the base pitch to be compared with the main peak."/></label>
-    <label class="toolbar-field">p0Penalty <input id="tuneExpectedP0PenaltyWeight" class="toolbar-number" type="number" min="0" max="20" step="0.1" title="How much to penalize guesses where the base pitch looks too weak."/></label>
-    <label class="toolbar-field">pBias <input id="tuneDownwardBiasPerP" class="toolbar-number" type="number" min="0" max="1" step="0.005" title="Small bias against very large p values (very low guessed base pitches)."/></label>
-    <label class="toolbar-field">radius <input id="tuneSearchRadiusBins" class="toolbar-number" type="number" min="0" max="8" step="1" title="After choosing a winner, how far to search around each harmonic during final cleanup."/></label>
-    <label class="toolbar-field">pRefine <input id="tunePRefineCount" class="toolbar-number" type="number" min="1" max="12" step="1" title="After choosing a winner, use this many harmonics in the final cleanup step."/></label>
-    <label class="toolbar-field">peakCut <input id="peakinessCutoff" class="toolbar-number" type="number" min="0" max="1" step="0.01" title="Only report pitch when peakiness (1-flatness) is at least this value."/></label>
-    <div id="perfInfo">Speed: n/a</div>
-    <div id="status">Ready to record.</div>
-  </div>
-  <div id="pitchChart"></div>
-  <div id="flatnessChart"></div>
-  <div id="point1Chart"></div>
-  <div id="bottomControls">
-    <label class="toolbar-field">whiteP <input id="whiteHypothesisP" class="toolbar-number" type="number" min="1" max="20" step="1" value="2" title="Force the white dotted overlay to this hypothesis divisor (p)."/></label>
-    <span id="whiteHypothesisInfo">white f0: n/a</span>
-  </div>
-</div>
-<script type="module" src="main.js"></script>
-</body>
+      #whiteHypothesisInfo {
+        color: #cbd5e1;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="toolbar">
+        <button id="recordButton" class="toolbar-btn" type="button">Record 5s</button>
+        <select id="sourceSelect" class="toolbar-select" aria-label="Audio source"></select>
+        <label class="toolbar-field"
+          >maxP
+          <input
+            id="tuneMaxP"
+            class="toolbar-number"
+            type="number"
+            min="1"
+            max="20"
+            step="1"
+            title="Try treating the main peak as p=1, p=2, ... up to this value."
+        /></label>
+        <label class="toolbar-field"
+          >pCount
+          <input
+            id="tunePCount"
+            class="toolbar-number"
+            type="number"
+            min="1"
+            max="32"
+            step="1"
+            title="For each guessed base pitch, compare this many harmonics (1st, 2nd, 3rd, ...)."
+        /></label>
+        <label class="toolbar-field"
+          >offW
+          <input
+            id="tuneOffWeight"
+            class="toolbar-number"
+            type="number"
+            min="0"
+            step="0.05"
+            title="How strongly to punish energy between harmonics."
+        /></label>
+        <label class="toolbar-field"
+          >p0Ratio
+          <input
+            id="tuneExpectedP0MinRatio"
+            class="toolbar-number"
+            type="number"
+            min="0"
+            max="1"
+            step="0.01"
+            title="How strong you expect the base pitch to be compared with the main peak."
+        /></label>
+        <label class="toolbar-field"
+          >p0Penalty
+          <input
+            id="tuneExpectedP0PenaltyWeight"
+            class="toolbar-number"
+            type="number"
+            min="0"
+            max="20"
+            step="0.1"
+            title="How much to penalize guesses where the base pitch looks too weak."
+        /></label>
+        <label class="toolbar-field"
+          >pBias
+          <input
+            id="tuneDownwardBiasPerP"
+            class="toolbar-number"
+            type="number"
+            min="0"
+            max="1"
+            step="0.005"
+            title="Small bias against very large p values (very low guessed base pitches)."
+        /></label>
+        <label class="toolbar-field"
+          >radius
+          <input
+            id="tuneSearchRadiusBins"
+            class="toolbar-number"
+            type="number"
+            min="0"
+            max="8"
+            step="1"
+            title="After choosing a winner, how far to search around each harmonic during final cleanup."
+        /></label>
+        <label class="toolbar-field"
+          >pRefine
+          <input
+            id="tunePRefineCount"
+            class="toolbar-number"
+            type="number"
+            min="1"
+            max="12"
+            step="1"
+            title="After choosing a winner, use this many harmonics in the final cleanup step."
+        /></label>
+        <label class="toolbar-field"
+          >peakCut
+          <input
+            id="peakinessCutoff"
+            class="toolbar-number"
+            type="number"
+            min="0"
+            max="1"
+            step="0.01"
+            title="Only report pitch when peakiness (1-flatness) is at least this value."
+        /></label>
+        <div id="perfInfo">Speed: n/a</div>
+        <div id="status">Ready to record.</div>
+      </div>
+      <div id="pitchChart"></div>
+      <div id="flatnessChart"></div>
+      <div id="point1Chart"></div>
+      <div id="bottomControls">
+        <label class="toolbar-field"
+          >whiteP
+          <input
+            id="whiteHypothesisP"
+            class="toolbar-number"
+            type="number"
+            min="1"
+            max="20"
+            step="1"
+            value="2"
+            title="Force the white dotted overlay to this hypothesis divisor (p)."
+        /></label>
+        <span id="whiteHypothesisInfo">white f0: n/a</span>
+      </div>
+    </div>
+    <script type="module" src="main.js"></script>
+  </body>
 </html>

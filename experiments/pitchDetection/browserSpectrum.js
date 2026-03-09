@@ -8,13 +8,13 @@ function dbToMagnitude(db) {
 }
 
 export async function createWindowSpectrumComputer({
-                                                     samples,
-                                                     sampleRate,
-                                                     binCount,
-                                                     windowSize,
-                                                     hopSamples,
-                                                     windowCount,
-                                                   }) {
+  samples,
+  sampleRate,
+  binCount,
+  windowSize,
+  hopSamples,
+  windowCount,
+}) {
   const context = new OfflineAudioContext(1, samples.length, sampleRate);
   const buffer = context.createBuffer(1, samples.length, sampleRate);
   buffer.copyToChannel(samples, 0);
@@ -38,7 +38,7 @@ export async function createWindowSpectrumComputer({
   const durationSeconds = samples.length / sampleRate;
   for (let index = 0; index < windowCount; index += 1) {
     const startSample = index * hopSamples;
-    let snapshotTime = (startSample + (windowSize / 2)) / sampleRate;
+    let snapshotTime = (startSample + windowSize / 2) / sampleRate;
     snapshotTime = clamp(snapshotTime, 0, Math.max(0, durationSeconds - epsilon));
     if (snapshotTime <= previousTime) {
       snapshotTime = Math.min(durationSeconds - epsilon, previousTime + epsilon);

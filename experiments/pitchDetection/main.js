@@ -1,6 +1,11 @@
-import {analyzePitchSample, buildWindowDebugObject, DEFAULT_PEAKINESS_CUTOFF, DEFAULT_PITCH_TUNING} from "./analysis.js";
-import {renderPitchCharts} from "./charts.js";
-import {recordMicrophoneAudio} from "../micCapture.js";
+import {
+  analyzePitchSample,
+  buildWindowDebugObject,
+  DEFAULT_PEAKINESS_CUTOFF,
+  DEFAULT_PITCH_TUNING,
+} from "./analysis.js";
+import { renderPitchCharts } from "./charts.js";
+import { recordMicrophoneAudio } from "../micCapture.js";
 import {
   getAudioSources,
   loadAudioInputForSource,
@@ -46,13 +51,15 @@ function updateWhiteHypothesisInfo(result, whiteHypothesisInput, windowIndex) {
     return;
   }
   const f0Hz = (sourcePeakBin * result.binSizeHz) / p;
-  infoElement.textContent = Number.isFinite(f0Hz) ? `white f0: ${f0Hz.toFixed(2)} Hz` : "white f0: n/a";
+  infoElement.textContent = Number.isFinite(f0Hz)
+    ? `white f0: ${f0Hz.toFixed(2)} Hz`
+    : "white f0: n/a";
 }
 
 function updatePerformanceInfo(result) {
   const infoElement = document.getElementById("perfInfo");
   if (!infoElement || !result?.perf) return;
-  const {voiceboxMsPerSecondAudio, pitchyMsPerSecondAudio, timeRatio} = result.perf;
+  const { voiceboxMsPerSecondAudio, pitchyMsPerSecondAudio, timeRatio } = result.perf;
   if (!Number.isFinite(voiceboxMsPerSecondAudio) || !Number.isFinite(pitchyMsPerSecondAudio)) {
     infoElement.textContent = "Speed: n/a";
     return;
@@ -63,8 +70,8 @@ function updatePerformanceInfo(result) {
     infoElement.textContent = "Speed: n/a";
     return;
   }
-  const voiceboxText = voiceboxRealtime.toLocaleString("en-US", {maximumFractionDigits: 1});
-  const pitchyText = pitchyRealtime.toLocaleString("en-US", {maximumFractionDigits: 1});
+  const voiceboxText = voiceboxRealtime.toLocaleString("en-US", { maximumFractionDigits: 1 });
+  const pitchyText = pitchyRealtime.toLocaleString("en-US", { maximumFractionDigits: 1 });
   const ratioText = Number.isFinite(timeRatio) ? ` (${timeRatio.toFixed(2)}x)` : "";
   infoElement.textContent = `Realtime - Voicebox ${voiceboxText}x, Pitchy ${pitchyText}x${ratioText}`;
 }
@@ -101,10 +108,18 @@ function readPitchTuningFromControls(controls) {
     pCount: Number.isFinite(pCount) ? pCount : DEFAULT_PITCH_TUNING.pCount,
     pRefineCount: Number.isFinite(pRefineCount) ? pRefineCount : DEFAULT_PITCH_TUNING.pRefineCount,
     offWeight: Number.isFinite(offWeight) ? offWeight : DEFAULT_PITCH_TUNING.offWeight,
-    expectedP0MinRatio: Number.isFinite(expectedP0MinRatio) ? expectedP0MinRatio : DEFAULT_PITCH_TUNING.expectedP0MinRatio,
-    expectedP0PenaltyWeight: Number.isFinite(expectedP0PenaltyWeight) ? expectedP0PenaltyWeight : DEFAULT_PITCH_TUNING.expectedP0PenaltyWeight,
-    downwardBiasPerP: Number.isFinite(downwardBiasPerP) ? downwardBiasPerP : DEFAULT_PITCH_TUNING.downwardBiasPerP,
-    searchRadiusBins: Number.isFinite(searchRadiusBins) ? searchRadiusBins : DEFAULT_PITCH_TUNING.searchRadiusBins,
+    expectedP0MinRatio: Number.isFinite(expectedP0MinRatio)
+      ? expectedP0MinRatio
+      : DEFAULT_PITCH_TUNING.expectedP0MinRatio,
+    expectedP0PenaltyWeight: Number.isFinite(expectedP0PenaltyWeight)
+      ? expectedP0PenaltyWeight
+      : DEFAULT_PITCH_TUNING.expectedP0PenaltyWeight,
+    downwardBiasPerP: Number.isFinite(downwardBiasPerP)
+      ? downwardBiasPerP
+      : DEFAULT_PITCH_TUNING.downwardBiasPerP,
+    searchRadiusBins: Number.isFinite(searchRadiusBins)
+      ? searchRadiusBins
+      : DEFAULT_PITCH_TUNING.searchRadiusBins,
   };
 }
 
@@ -139,9 +154,9 @@ function renderSourceOptions(sourceSelect, sources, selectedKey) {
 function getCurrentSelection(sourceSelect) {
   const sources = getAudioSources();
   const selected = resolveSelectedSource(
-      sources,
-      sourceSelect.value || readSelectedAudioSourceKey(),
-      DEFAULT_ASSET_URL
+    sources,
+    sourceSelect.value || readSelectedAudioSourceKey(),
+    DEFAULT_ASSET_URL,
   );
   if (!selected) {
     throw new Error("No audio sources available.");
@@ -151,7 +166,13 @@ function getCurrentSelection(sourceSelect) {
   return selected;
 }
 
-async function renderResult(result, selectedWindowIndex, onWindowSelect, whiteHypothesisP = null, peakinessCutoff = DEFAULT_PEAKINESS_CUTOFF) {
+async function renderResult(
+  result,
+  selectedWindowIndex,
+  onWindowSelect,
+  whiteHypothesisP = null,
+  peakinessCutoff = DEFAULT_PEAKINESS_CUTOFF,
+) {
   await renderPitchCharts(result, {
     selectedWindowIndex,
     whiteHypothesisP,
@@ -179,16 +200,30 @@ async function analyzeSelectedSource({
   const result = await analyzePitchSample(input, readPitchTuningFromControls(tuningControls), {
     peakinessCutoff,
   });
-  await renderResult(result, selectedWindowIndex, (windowIndex) => {
-    writeSelectedWindowIndex(windowIndex);
-    updateWhiteHypothesisInfo(result, whiteHypothesisInput, windowIndex);
-  }, whiteHypothesisP, peakinessCutoff);
+  await renderResult(
+    result,
+    selectedWindowIndex,
+    (windowIndex) => {
+      writeSelectedWindowIndex(windowIndex);
+      updateWhiteHypothesisInfo(result, whiteHypothesisInput, windowIndex);
+    },
+    whiteHypothesisP,
+    peakinessCutoff,
+  );
   updatePerformanceInfo(result);
-  setStatus(`Loaded ${source.label}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, step=${(1000 / result.samplesPerSecond).toFixed(2)} ms`);
+  setStatus(
+    `Loaded ${source.label}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, step=${(1000 / result.samplesPerSecond).toFixed(2)} ms`,
+  );
   return result;
 }
 
-async function analyzeFromMicrophone(recordButton, sourceSelect, tuningControls, whiteHypothesisInput, peakinessCutoffInput) {
+async function analyzeFromMicrophone(
+  recordButton,
+  sourceSelect,
+  tuningControls,
+  whiteHypothesisInput,
+  peakinessCutoffInput,
+) {
   recordButton.disabled = true;
   sourceSelect.disabled = true;
   Object.values(tuningControls).forEach((input) => {
@@ -198,7 +233,7 @@ async function analyzeFromMicrophone(recordButton, sourceSelect, tuningControls,
   let selectedWindowIndex = readSelectedWindowIndex();
   try {
     setStatus("Recording from microphone...");
-    const capturedAudio = await recordMicrophoneAudio({maxDurationMs: RECORD_DURATION_MS});
+    const capturedAudio = await recordMicrophoneAudio({ maxDurationMs: RECORD_DURATION_MS });
     const saveResult = saveRecordedAudio(capturedAudio);
     if (saveResult.stored) {
       const sources = getAudioSources();
@@ -210,16 +245,28 @@ async function analyzeFromMicrophone(recordButton, sourceSelect, tuningControls,
     }
     setStatus("Analyzing recorded audio...");
     const peakinessCutoff = readPeakinessCutoff(peakinessCutoffInput);
-    const result = await analyzePitchSample(capturedAudio, readPitchTuningFromControls(tuningControls), {
+    const result = await analyzePitchSample(
+      capturedAudio,
+      readPitchTuningFromControls(tuningControls),
+      {
+        peakinessCutoff,
+      },
+    );
+    await renderResult(
+      result,
+      selectedWindowIndex,
+      (windowIndex) => {
+        selectedWindowIndex = windowIndex;
+        writeSelectedWindowIndex(windowIndex);
+        updateWhiteHypothesisInfo(result, whiteHypothesisInput, windowIndex);
+      },
+      readWhiteHypothesisP(whiteHypothesisInput),
       peakinessCutoff,
-    });
-    await renderResult(result, selectedWindowIndex, (windowIndex) => {
-      selectedWindowIndex = windowIndex;
-      writeSelectedWindowIndex(windowIndex);
-      updateWhiteHypothesisInfo(result, whiteHypothesisInput, windowIndex);
-    }, readWhiteHypothesisP(whiteHypothesisInput), peakinessCutoff);
+    );
     updatePerformanceInfo(result);
-    setStatus(`Done. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, step=${(1000 / result.samplesPerSecond).toFixed(2)} ms`);
+    setStatus(
+      `Done. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, step=${(1000 / result.samplesPerSecond).toFixed(2)} ms`,
+    );
     return result;
   } catch (error) {
     console.error(error);
@@ -236,7 +283,12 @@ async function analyzeFromMicrophone(recordButton, sourceSelect, tuningControls,
   }
 }
 
-async function analyzeInitialSelection(sourceSelect, tuningControls, whiteHypothesisInput, peakinessCutoffInput) {
+async function analyzeInitialSelection(
+  sourceSelect,
+  tuningControls,
+  whiteHypothesisInput,
+  peakinessCutoffInput,
+) {
   document.body.classList.add("loading");
   try {
     setStatus("Analyzing selected source...");
@@ -277,9 +329,9 @@ function main() {
   peakinessCutoffInput.value = String(DEFAULT_PEAKINESS_CUTOFF);
   let latestResult = null;
   const selectedSource = resolveSelectedSource(
-      getAudioSources(),
-      readSelectedAudioSourceKey(),
-      DEFAULT_ASSET_URL
+    getAudioSources(),
+    readSelectedAudioSourceKey(),
+    DEFAULT_ASSET_URL,
   );
   if (selectedSource) {
     renderSourceOptions(sourceSelect, getAudioSources(), selectedSource.key);
@@ -287,7 +339,13 @@ function main() {
   }
 
   recordButton.addEventListener("click", async () => {
-    latestResult = await analyzeFromMicrophone(recordButton, sourceSelect, tuningControls, whiteHypothesisInput, peakinessCutoffInput);
+    latestResult = await analyzeFromMicrophone(
+      recordButton,
+      sourceSelect,
+      tuningControls,
+      whiteHypothesisInput,
+      peakinessCutoffInput,
+    );
     if (latestResult) {
       updateWhiteHypothesisInfo(latestResult, whiteHypothesisInput, readSelectedWindowIndex());
     }
@@ -341,23 +399,27 @@ function main() {
     if (!latestResult) return;
     updateWhiteHypothesisInfo(latestResult, whiteHypothesisInput, readSelectedWindowIndex());
     await renderResult(
-        latestResult,
-        readSelectedWindowIndex(),
-        (windowIndex) => {
-          writeSelectedWindowIndex(windowIndex);
-          updateWhiteHypothesisInfo(latestResult, whiteHypothesisInput, windowIndex);
-        },
-        readWhiteHypothesisP(whiteHypothesisInput),
-        readPeakinessCutoff(peakinessCutoffInput)
+      latestResult,
+      readSelectedWindowIndex(),
+      (windowIndex) => {
+        writeSelectedWindowIndex(windowIndex);
+        updateWhiteHypothesisInfo(latestResult, whiteHypothesisInput, windowIndex);
+      },
+      readWhiteHypothesisP(whiteHypothesisInput),
+      readPeakinessCutoff(peakinessCutoffInput),
     );
   });
-  analyzeInitialSelection(sourceSelect, tuningControls, whiteHypothesisInput, peakinessCutoffInput)
-      .then((result) => {
-        latestResult = result;
-        if (latestResult) {
-          updateWhiteHypothesisInfo(latestResult, whiteHypothesisInput, readSelectedWindowIndex());
-        }
-      });
+  analyzeInitialSelection(
+    sourceSelect,
+    tuningControls,
+    whiteHypothesisInput,
+    peakinessCutoffInput,
+  ).then((result) => {
+    latestResult = result;
+    if (latestResult) {
+      updateWhiteHypothesisInfo(latestResult, whiteHypothesisInput, readSelectedWindowIndex());
+    }
+  });
 }
 
 main();
