@@ -20,7 +20,11 @@ export class RingBuffer {
   }
 
   values() {
-    return this.slice();
+    const ordered = new Float32Array(this.#sampleCount);
+    for (let i = 0; i < this.#sampleCount; i += 1) {
+      ordered[i] = this.at(i);
+    }
+    return ordered;
   }
 
   at(index) {
@@ -33,14 +37,6 @@ export class RingBuffer {
     const rawIndex = (firstIndex + orderedIndex) % this.#values.length;
     if (rawIndex < 0) return undefined;
     return this.#values[rawIndex];
-  }
-
-  slice(start = 0, end = this.#sampleCount) {
-    const ordered = new Float32Array(this.#sampleCount);
-    for (let i = 0; i < this.#sampleCount; i += 1) {
-      ordered[i] = this.at(i);
-    }
-    return ordered.slice(start, end);
   }
 
   newest() {
@@ -80,7 +76,7 @@ export class RingBuffer {
     const targetLength = Math.max(1, Math.floor(nextLength));
     if (targetLength === this.#values.length) return;
 
-    const ordered = this.slice();
+    const ordered = this.values();
     const nextValues = new Float32Array(targetLength);
     nextValues.fill(Number.NaN);
     if (this.#sampleCount > 0) {

@@ -2,11 +2,8 @@ import {
   CENTER_SECONDS,
   DISPLAY_PIXELS_PER_SECOND,
   FFT_SIZE,
-  PITCH_MAX_NOTE_DEFAULT,
-  PITCH_MIN_NOTE_DEFAULT,
   SILENCE_PAUSE_THRESHOLD_MS,
   SPECTROGRAM_BIN_COUNT,
-  MIN_VOLUME_THRESHOLD_DEFAULT,
   readMaxVolume,
   writeMaxVolume,
 } from "./config.js";
@@ -19,7 +16,7 @@ import {
 import { createRecorderAudioSession, destroyRecorderAudioSession } from "./audioSession.js";
 import { BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor } from "./batteryUsage.js";
 import { calibrateMinVolumeThreshold as runVolumeCalibration } from "./micCalibration.js";
-import { computeIsForeground, subscribeToForegroundChanges } from "../foreground.js";
+import { subscribeToForegroundChanges } from "../foreground.js";
 import { noteNameToCents, noteNameToHz } from "../pitchScale.js";
 import { clamp } from "../tools.js";
 import {

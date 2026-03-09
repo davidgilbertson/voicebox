@@ -10,19 +10,19 @@ function silencePauseStepThreshold(columnRateHz, silencePauseThresholdMs) {
 }
 
 function orderedValues(state) {
-  return Array.from(state.rawPitchCentsRing.slice());
+  return Array.from(state.rawPitchCentsRing.values());
 }
 
 function orderedIntensities(state) {
-  return Array.from(state.lineStrengthRing.slice());
+  return Array.from(state.lineStrengthRing.values());
 }
 
 function orderedDisplayValues(state) {
-  return Array.from(state.smoothedPitchCentsRing.slice());
+  return Array.from(state.smoothedPitchCentsRing.values());
 }
 
 function orderedVibratoRates(state) {
-  return Array.from(state.vibratoRateHzRing.slice());
+  return Array.from(state.vibratoRateHzRing.values());
 }
 
 function hzToCents(hz) {

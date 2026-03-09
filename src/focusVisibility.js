@@ -1,7 +1,7 @@
 const DISABLE_FOCUS_CLASS = "disable-focus-rings";
 
-export function installFocusVisibilityPolicy(doc = document) {
-  const root = doc.documentElement;
+export function installFocusVisibilityPolicy() {
+  const root = document.documentElement;
   root.classList.add(DISABLE_FOCUS_CLASS);
 
   const enableFocusRings = (event) => {
@@ -10,10 +10,10 @@ export function installFocusVisibilityPolicy(doc = document) {
     }
 
     root.classList.remove(DISABLE_FOCUS_CLASS);
-    doc.removeEventListener("keydown", enableFocusRings, true);
+    document.removeEventListener("keydown", enableFocusRings, true);
   };
 
-  doc.addEventListener("keydown", enableFocusRings, true);
+  document.addEventListener("keydown", enableFocusRings, true);
 }
 
 export { DISABLE_FOCUS_CLASS };
