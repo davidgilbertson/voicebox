@@ -46,8 +46,23 @@ async function waitForReady() {
 }
 
 function renderScales(props) {
+  const { scaleMinNote, scaleMaxNote, keepRunningInBackground, isForeground, ...pageProps } = props ?? {};
+  const engine = new PlaybackEngine({
+    ...createPlaybackEngineConfig(),
+    ...(scaleMinNote ? { scaleMinNote } : {}),
+    ...(scaleMaxNote ? { scaleMaxNote } : {}),
+    ...(typeof keepRunningInBackground === "boolean" ? { keepRunningInBackground } : {}),
+    ...(typeof isForeground === "boolean" ? { isForeground } : {}),
+  });
   return render(
-    <ScalesPage engine={new PlaybackEngine(createPlaybackEngineConfig())} {...props} />,
+    <ScalesPage
+      engine={engine}
+      scaleMinNote={scaleMinNote}
+      scaleMaxNote={scaleMaxNote}
+      keepRunningInBackground={keepRunningInBackground}
+      isForeground={isForeground}
+      {...pageProps}
+    />,
   );
 }
 

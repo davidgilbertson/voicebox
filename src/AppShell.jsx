@@ -28,8 +28,9 @@ import { readConfig } from "./config.js";
 export default function AppShell({ downloadingUpdate = false }) {
   const [isForeground, setIsForeground] = useState(computeIsForeground);
   const [config] = useState(readConfig);
+  const [activeView, setActiveView] = useState(() => config.app.activeView);
   const [recorderEngine] = useState(
-    () => new RecordingEngine({ ...config.shared, ...config.recorder, isForeground }),
+    () => new RecordingEngine({ ...config.shared, ...config.recorder, isForeground, activeView }),
   );
   const [scalesPlaybackEngine] = useState(
     () =>
@@ -39,7 +40,6 @@ export default function AppShell({ downloadingUpdate = false }) {
         isForeground,
       }),
   );
-  const [activeView, setActiveView] = useState(() => config.app.activeView);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scaleMinNote, setScaleMinNote] = useState(() => config.scales.scaleMinNote);
   const [scaleMaxNote, setScaleMaxNote] = useState(() => config.scales.scaleMaxNote);
@@ -138,13 +138,29 @@ export default function AppShell({ downloadingUpdate = false }) {
   }, [spectrogramMaxHz, spectrogramMinHz]);
 
   useEffect(() => {
-    if (onScalesPage) {
-      recorderEngine.setWantsToRun(false);
-      return;
-    }
-    recorderEngine.setWantsToRun(true);
-    recorderEngine.startIfNeeded();
-  }, [recorderEngine, onScalesPage]);
+    recorderEngine.setActiveView(activeView);
+  }, [activeView, recorderEngine]);
+
+  useEffect(() => {
+    recorderEngine.updateSettings({
+      keepRunningInBackground,
+      autoPauseOnSilence,
+      runAt30Fps,
+      highResSpectrogram,
+      minVolumeThreshold,
+      pitchMinNote,
+      pitchMaxNote,
+    });
+  }, [
+    autoPauseOnSilence,
+    highResSpectrogram,
+    keepRunningInBackground,
+    minVolumeThreshold,
+    pitchMaxNote,
+    pitchMinNote,
+    recorderEngine,
+    runAt30Fps,
+  ]);
 
   useEffect(() => {
     scalesPlaybackEngine.updateSettings({
@@ -267,20 +283,13 @@ export default function AppShell({ downloadingUpdate = false }) {
             <ScalesPage
               scaleMinNote={scaleMinNote}
               scaleMaxNote={scaleMaxNote}
-              keepRunningInBackground={keepRunningInBackground}
-              isForeground={isForeground}
               engine={scalesPlaybackEngine}
             />
           ) : (
             <Recorder
               activeView={activeView}
               settingsOpen={settingsOpen}
-              keepRunningInBackground={keepRunningInBackground}
-              autoPauseOnSilence={autoPauseOnSilence}
-              runAt30Fps={runAt30Fps}
               halfResolutionCanvas={halfResolutionCanvas}
-              highResSpectrogram={highResSpectrogram}
-              minVolumeThreshold={minVolumeThreshold}
               pitchMinNote={pitchMinNote}
               pitchMaxNote={pitchMaxNote}
               pitchLineColorMode={pitchLineColorMode}

@@ -37,8 +37,23 @@ async function waitForReady() {
 }
 
 function renderScales(props) {
+  const { scaleMinNote, scaleMaxNote, keepRunningInBackground, isForeground, ...pageProps } = props ?? {};
+  const engine = new PlaybackEngine({
+    ...createPlaybackEngineConfig(),
+    ...(scaleMinNote ? { scaleMinNote } : {}),
+    ...(scaleMaxNote ? { scaleMaxNote } : {}),
+    ...(typeof keepRunningInBackground === "boolean" ? { keepRunningInBackground } : {}),
+    ...(typeof isForeground === "boolean" ? { isForeground } : {}),
+  });
   return render(
-    <ScalesPage engine={new PlaybackEngine(createPlaybackEngineConfig())} {...props} />,
+    <ScalesPage
+      engine={engine}
+      scaleMinNote={scaleMinNote}
+      scaleMaxNote={scaleMaxNote}
+      keepRunningInBackground={keepRunningInBackground}
+      isForeground={isForeground}
+      {...pageProps}
+    />,
   );
 }
 
@@ -206,7 +221,7 @@ test("metronome shares the scales pulse loop and ducks on simultaneous notes", a
 
 test("scales playback and metronome pause in background and resume in foreground", async () => {
   const engine = new PlaybackEngine(createPlaybackEngineConfig());
-  const { rerender } = render(
+  render(
     <ScalesPage
       engine={engine}
       scaleMinNote="C3"
@@ -231,15 +246,7 @@ test("scales playback and metronome pause in background and resume in foreground
   expect(notesBeforeBackground).toBeGreaterThan(0);
   expect(ticksBeforeBackground).toBeGreaterThan(0);
 
-  rerender(
-    <ScalesPage
-      engine={engine}
-      scaleMinNote="C3"
-      scaleMaxNote="E4"
-      keepRunningInBackground={false}
-      isForeground={false}
-    />,
-  );
+  engine.updateSettings({ keepRunningInBackground: false, isForeground: false });
 
   await act(async () => {
     await vi.advanceTimersByTimeAsync(900);
@@ -247,15 +254,7 @@ test("scales playback and metronome pause in background and resume in foreground
   expect(playNoteMock.mock.calls.length).toBe(notesBeforeBackground);
   expect(playMetronomeTickMock.mock.calls.length).toBe(ticksBeforeBackground);
 
-  rerender(
-    <ScalesPage
-      engine={engine}
-      scaleMinNote="C3"
-      scaleMaxNote="E4"
-      keepRunningInBackground={false}
-      isForeground={true}
-    />,
-  );
+  engine.updateSettings({ keepRunningInBackground: false, isForeground: true });
 
   await act(async () => {
     await vi.advanceTimersByTimeAsync(900);

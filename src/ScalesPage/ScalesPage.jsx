@@ -17,23 +17,12 @@ import { SCALE_PATTERNS } from "./PlaybackEngine.js";
 export default function ScalesPage({
   scaleMinNote = readScaleMinNote(),
   scaleMaxNote = readScaleMaxNote(),
-  keepRunningInBackground = false,
-  isForeground = true,
   engine,
 }) {
   const [engineUi, setEngineUi] = useState(() => engine.getUiSnapshot());
   const [showGestureHelp, setShowGestureHelp] = useState(() => !readScaleGestureHelpDismissed());
 
   useEffect(() => engine.subscribeUi(setEngineUi), [engine]);
-
-  useEffect(() => {
-    engine.updateSettings({
-      scaleMinNote,
-      scaleMaxNote,
-      keepRunningInBackground,
-      isForeground,
-    });
-  }, [engine, isForeground, keepRunningInBackground, scaleMaxNote, scaleMinNote]);
 
   const onDismissGestureHelp = () => {
     setShowGestureHelp(false);

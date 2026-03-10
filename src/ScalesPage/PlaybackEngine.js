@@ -470,19 +470,6 @@ export class PlaybackEngine {
     this.restartPulseLoop(false);
   };
 
-  resetForInactivePage = () => {
-    this.stopPlayback();
-    this.state.timelineIndex = 0;
-    this.state.currentSetRootMidi = this.state.scaleMinMidi;
-    this.state.rapidVerticalSwipe.direction = null;
-    this.state.rapidVerticalSwipe.count = 0;
-    this.setUi({
-      isPlaying: false,
-      isMetronomeEnabled: false,
-      repeatDirection: "up",
-    });
-  };
-
   stop = () => {
     this.stopPlayback();
   };
@@ -501,13 +488,6 @@ export class PlaybackEngine {
   };
 
   getUiSnapshot = () => this.state.ui;
-}
-
-export function getPlaybackEngine() {
-  if (!playbackEngineSingleton) {
-    playbackEngineSingleton = new PlaybackEngine();
-  }
-  return playbackEngineSingleton;
 }
 
 if (import.meta.env.MODE === "test") {

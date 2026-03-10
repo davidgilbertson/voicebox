@@ -95,7 +95,7 @@ export class RecordingEngine {
       startAttempt: 0,
       isForeground: config.isForeground,
       keepRunningInBackground: config.keepRunningInBackground,
-      activeView: "spectrogram",
+      activeView: config.activeView,
       autoPauseOnSilence: config.autoPauseOnSilence,
       runAt30Fps: config.runAt30Fps,
       highResSpectrogram: config.highResSpectrogram,
@@ -349,8 +349,10 @@ export class RecordingEngine {
 
   syncAudioState = () => {
     const shouldRun =
+      this.state.activeView !== "scales" &&
       (this.state.keepRunningInBackground || this.state.isForeground) &&
       this.state.ui.isWantedRunning;
+
     if (!shouldRun) {
       if (this.state.isStarting) {
         this.state.startAttempt += 1;
@@ -553,6 +555,7 @@ export class RecordingEngine {
   setActiveView = (view) => {
     this.state.activeView = view;
     this.state.forceRedraw = true;
+    this.syncAudioState();
   };
 
   setWantsToRun = (isWanted) => {
@@ -637,13 +640,6 @@ export class RecordingEngine {
   };
 
   getUiSnapshot = () => this.state.ui;
-}
-
-export function getRecordingEngine() {
-  if (!recordingEngineSingleton) {
-    recordingEngineSingleton = new RecordingEngine();
-  }
-  return recordingEngineSingleton;
 }
 
 if (import.meta.env.MODE === "test") {

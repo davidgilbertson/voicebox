@@ -8,12 +8,7 @@ import { noteNameToCents } from "../pitchScale.js";
 export default function Recorder({
   activeView,
   settingsOpen,
-  keepRunningInBackground,
-  autoPauseOnSilence,
-  runAt30Fps,
   halfResolutionCanvas,
-  highResSpectrogram,
-  minVolumeThreshold,
   pitchMinNote,
   pitchMaxNote,
   pitchLineColorMode,
@@ -41,32 +36,6 @@ export default function Recorder({
       engine.detachCharts();
     };
   }, [engine]);
-
-  useEffect(() => {
-    engine.setActiveView(activeView);
-  }, [activeView, engine]);
-
-  useEffect(() => {
-    engine.updateSettings({
-      keepRunningInBackground,
-      autoPauseOnSilence,
-      runAt30Fps,
-      highResSpectrogram,
-      minVolumeThreshold,
-      pitchMinNote,
-      pitchMaxNote,
-    });
-    engine.startIfNeeded();
-  }, [
-    autoPauseOnSilence,
-    engine,
-    keepRunningInBackground,
-    pitchMaxNote,
-    pitchMinNote,
-    runAt30Fps,
-    highResSpectrogram,
-    minVolumeThreshold,
-  ]);
 
   useEffect(() => {
     onSettingsRuntimeChange({
