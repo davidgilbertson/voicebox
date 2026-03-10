@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef } from "react";
 import { clamp } from "../../tools.js";
 import {
   VIBRATO_RATE_MAX_HZ,
@@ -6,37 +6,8 @@ import {
   VIBRATO_SWEET_MAX_HZ,
   VIBRATO_SWEET_MIN_HZ,
 } from "../config.js";
-import { VibratoChartRenderer } from "./vibratoTools.js";
 
-const VibratoChart = forwardRef(function VibratoChart(
-  { lineColorMode, vibratoRate, renderScale },
-  ref,
-) {
-  const canvasRef = useRef(null);
-  const rendererRef = useRef(new VibratoChartRenderer());
-
-  useEffect(() => {
-    rendererRef.current.setCanvas(canvasRef.current);
-  }, []);
-
-  useEffect(() => {
-    rendererRef.current.updateOptions({
-      lineColorMode,
-      renderScale,
-    });
-  }, [lineColorMode, renderScale]);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      draw(data) {
-        rendererRef.current.setCanvas(canvasRef.current);
-        rendererRef.current.draw(data);
-      },
-    }),
-    [],
-  );
-
+const VibratoChart = forwardRef(function VibratoChart({ vibratoRate }, ref) {
   const vibratoRatePositionPct =
     vibratoRate === null
       ? null
@@ -65,7 +36,7 @@ const VibratoChart = forwardRef(function VibratoChart(
   return (
     <>
       <div className="relative min-h-0 flex-[2] p-0">
-        <canvas ref={canvasRef} className="h-full w-full" style={{ imageRendering: "auto" }} />
+        <canvas ref={ref} className="h-full w-full" style={{ imageRendering: "auto" }} />
       </div>
       <div className="pointer-events-none px-2 pt-1 pb-2">
         <div className="relative">

@@ -61,11 +61,11 @@ function drawColumnImage({
 }
 
 export class SpectrogramChartRenderer {
-  constructor() {
+  constructor({ minHz, maxHz, renderScale }) {
     this.canvas = null;
-    this.renderScale = 0;
-    this.minHz = 30;
-    this.maxHz = 11_000;
+    this.renderScale = renderScale;
+    this.minHz = minHz;
+    this.maxHz = maxHz;
     this.palette = getColorPalette();
     this.viewportState = createCanvasViewportState();
     this.renderCanvas = null;

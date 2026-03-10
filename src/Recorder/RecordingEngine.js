@@ -19,6 +19,9 @@ import { calibrateMinVolumeThreshold as runVolumeCalibration } from "./micCalibr
 import { subscribeToForegroundChanges } from "../foreground.js";
 import { noteNameToCents, noteNameToHz } from "../pitchScale.js";
 import { clamp } from "../tools.js";
+import { PitchChartRenderer } from "./Pitch/pitchTools.js";
+import { SpectrogramChartRenderer } from "./Spectrogram/spectrogramTools.js";
+import { VibratoChartRenderer } from "./Vibrato/vibratoTools.js";
 import {
   appendRawAudioSamples,
   createRawAudioState,
@@ -67,11 +70,25 @@ function setStreamListeningEnabled(stream, enabled) {
 export class RecordingEngine {
   constructor(config) {
     this.listeners = new Set();
-    this.chartRefs = {
-      pitchChartRef: null,
-      vibratoChartRef: null,
-      spectrogramChartRef: null,
-      containerRef: null,
+
+    this.containerRef = null;
+    const renderScale = config.halfResolutionCanvas ? 0.5 : 1;
+    this.chartRenderers = {
+      pitch: new PitchChartRenderer({
+        minCents: noteNameToCents(config.pitchMinNote),
+        maxCents: noteNameToCents(config.pitchMaxNote),
+        lineColorMode: config.pitchLineColorMode,
+        renderScale,
+      }),
+      vibrato: new VibratoChartRenderer({
+        lineColorMode: config.pitchLineColorMode,
+        renderScale,
+      }),
+      spectrogram: new SpectrogramChartRenderer({
+        minHz: config.spectrogramMinHz,
+        maxHz: config.spectrogramMaxHz,
+        renderScale,
+      }),
     };
     this.resizeObserver = null;
     // Decay the remembered max a little on each session start so it can adapt downward over time
@@ -219,7 +236,7 @@ export class RecordingEngine {
       writeMaxVolume(this.state.volume);
     }
     if (result.spectrumDb) {
-      this.chartRefs.spectrogramChartRef?.current?.appendColumn(
+      this.chartRenderers.spectrogram.appendColumn(
         result.spectrumDb,
         this.volumeTracking.maxHeardVolume,
       );
@@ -373,7 +390,7 @@ export class RecordingEngine {
 
   drawActiveChart = () => {
     if (this.state.activeView === "vibrato") {
-      this.chartRefs.vibratoChartRef?.current?.draw({
+      this.chartRenderers.vibrato.draw({
         smoothedPitchCentsRing: this.pitchProcessingState.smoothedPitchCentsRing,
         lineStrengthRing: this.pitchProcessingState.lineStrengthRing,
         vibratoRateHzRing: this.pitchProcessingState.vibratoRateHzRing,
@@ -381,13 +398,13 @@ export class RecordingEngine {
       return;
     }
     if (this.state.activeView === "spectrogram") {
-      this.chartRefs.spectrogramChartRef?.current?.draw({
+      this.chartRenderers.spectrogram.draw({
         binCount: this.state.highResSpectrogram ? SPECTROGRAM_BIN_COUNT * 2 : SPECTROGRAM_BIN_COUNT,
         sampleRate: this.audioSessionState.sampleRate,
       });
       return;
     }
-    this.chartRefs.pitchChartRef?.current?.draw({
+    this.chartRenderers.pitch.draw({
       smoothedPitchCentsRing: this.pitchProcessingState.smoothedPitchCentsRing,
       lineStrengthRing: this.pitchProcessingState.lineStrengthRing,
     });
@@ -467,7 +484,7 @@ export class RecordingEngine {
 
   setupResizeObserver = () => {
     this.teardownResizeObserver();
-    const container = this.chartRefs.containerRef?.current;
+    const container = this.containerRef?.current;
     if (!container || typeof ResizeObserver !== "function") return;
     const onResize = () => {
       const nextWidth = Math.max(1, Math.floor(container.clientWidth ?? window.innerWidth));
@@ -489,20 +506,20 @@ export class RecordingEngine {
     onResize();
   };
 
-  attachCharts = ({ pitchChart, vibratoChart, spectrogramChart, container }) => {
-    this.chartRefs.pitchChartRef = pitchChart ?? null;
-    this.chartRefs.vibratoChartRef = vibratoChart ?? null;
-    this.chartRefs.spectrogramChartRef = spectrogramChart ?? null;
-    this.chartRefs.containerRef = container ?? null;
+  attachCharts = ({ pitchCanvas, vibratoCanvas, spectrogramCanvas, container }) => {
+    this.containerRef = container ?? null;
+    this.chartRenderers.pitch.setCanvas(pitchCanvas ?? null);
+    this.chartRenderers.vibrato.setCanvas(vibratoCanvas ?? null);
+    this.chartRenderers.spectrogram.setCanvas(spectrogramCanvas ?? null);
     this.setupResizeObserver();
     this.state.forceRedraw = true;
   };
 
   detachCharts = () => {
-    this.chartRefs.pitchChartRef = null;
-    this.chartRefs.vibratoChartRef = null;
-    this.chartRefs.spectrogramChartRef = null;
-    this.chartRefs.containerRef = null;
+    this.containerRef = null;
+    this.chartRenderers.pitch.setCanvas(null);
+    this.chartRenderers.vibrato.setCanvas(null);
+    this.chartRenderers.spectrogram.setCanvas(null);
     this.teardownResizeObserver();
   };
 
@@ -514,6 +531,10 @@ export class RecordingEngine {
     minVolumeThreshold,
     pitchMinNote,
     pitchMaxNote,
+    pitchLineColorMode,
+    halfResolutionCanvas,
+    spectrogramMinHz,
+    spectrogramMaxHz,
   }) => {
     if (typeof keepRunningInBackground === "boolean") {
       this.state.keepRunningInBackground = keepRunningInBackground;
@@ -545,6 +566,21 @@ export class RecordingEngine {
         maxCents: noteNameToCents(pitchMaxNote),
       };
     }
+    this.chartRenderers.pitch.updateOptions({
+      minCents: this.state.pitchRange.minCents,
+      maxCents: this.state.pitchRange.maxCents,
+      lineColorMode: pitchLineColorMode,
+      renderScale: halfResolutionCanvas ? 0.5 : 1,
+    });
+    this.chartRenderers.vibrato.updateOptions({
+      lineColorMode: pitchLineColorMode,
+      renderScale: halfResolutionCanvas ? 0.5 : 1,
+    });
+    this.chartRenderers.spectrogram.updateOptions({
+      minHz: spectrogramMinHz,
+      maxHz: spectrogramMaxHz,
+      renderScale: halfResolutionCanvas ? 0.5 : 1,
+    });
     this.state.forceRedraw = true;
     if (shouldRestartAudio && this.state.ui.isAudioRunning) {
       this.stopAudio();

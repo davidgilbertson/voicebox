@@ -3,17 +3,10 @@ import { Pause } from "lucide-react";
 import VibratoChart from "./Vibrato/VibratoChart.jsx";
 import PitchChart from "./Pitch/PitchChart.jsx";
 import SpectrogramChart from "./Spectrogram/SpectrogramChart.jsx";
-import { noteNameToCents } from "../pitchScale.js";
 
 export default function Recorder({
   activeView,
   settingsOpen,
-  halfResolutionCanvas,
-  pitchMinNote,
-  pitchMaxNote,
-  pitchLineColorMode,
-  spectrogramMinHz,
-  spectrogramMaxHz,
   onSettingsRuntimeChange,
   engine,
 }) {
@@ -27,9 +20,9 @@ export default function Recorder({
 
   useEffect(() => {
     engine.attachCharts({
-      pitchChart: pitchChartRef,
-      vibratoChart: vibratoChartRef,
-      spectrogramChart: spectrogramChartRef,
+      pitchCanvas: pitchChartRef.current,
+      vibratoCanvas: vibratoChartRef.current,
+      spectrogramCanvas: spectrogramChartRef.current,
       container: chartContainerRef,
     });
     return () => {
@@ -76,12 +69,7 @@ export default function Recorder({
               : "hidden min-h-0 flex-1 flex-col"
           }
         >
-          <VibratoChart
-            ref={vibratoChartRef}
-            vibratoRate={engineUi.vibratoRate}
-            renderScale={halfResolutionCanvas ? 0.5 : 1}
-            lineColorMode={pitchLineColorMode}
-          />
+          <VibratoChart ref={vibratoChartRef} vibratoRate={engineUi.vibratoRate} />
         </div>
         <div
           className={
@@ -90,13 +78,7 @@ export default function Recorder({
               : "hidden min-h-0 flex-1 flex-col"
           }
         >
-          <SpectrogramChart
-            ref={spectrogramChartRef}
-            className="h-full w-full"
-            minHz={spectrogramMinHz}
-            maxHz={spectrogramMaxHz}
-            renderScale={halfResolutionCanvas ? 0.5 : 1}
-          />
+          <SpectrogramChart ref={spectrogramChartRef} className="h-full w-full" />
         </div>
         <div
           className={
@@ -105,13 +87,7 @@ export default function Recorder({
               : "hidden min-h-0 flex-1 flex-col"
           }
         >
-          <PitchChart
-            ref={pitchChartRef}
-            minCents={noteNameToCents(pitchMinNote)}
-            maxCents={noteNameToCents(pitchMaxNote)}
-            renderScale={halfResolutionCanvas ? 0.5 : 1}
-            lineColorMode={pitchLineColorMode}
-          />
+          <PitchChart ref={pitchChartRef} />
         </div>
         {showStartOverlay ? (
           <div

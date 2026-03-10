@@ -20,12 +20,12 @@ const PLOT_LEFT = 21;
 const PLOT_Y_INSET = 5;
 
 export class PitchChartRenderer {
-  constructor() {
+  constructor({ minCents, maxCents, lineColorMode, renderScale }) {
     this.canvas = null;
-    this.renderScale = 0;
-    this.minCents = 0;
-    this.maxCents = 0;
-    this.lineColorMode = "";
+    this.renderScale = renderScale;
+    this.minCents = minCents;
+    this.maxCents = maxCents;
+    this.lineColorMode = lineColorMode;
     this.viewportState = createCanvasViewportState();
     this.backgroundCache = null;
   }

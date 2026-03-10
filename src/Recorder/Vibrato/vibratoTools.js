@@ -202,10 +202,10 @@ export function drawSemitoneLabels(ctx, width, height, waveRange, options) {
 }
 
 export class VibratoChartRenderer {
-  constructor() {
+  constructor({ lineColorMode, renderScale }) {
     this.canvas = null;
-    this.lineColorMode = "";
-    this.renderScale = 0;
+    this.lineColorMode = lineColorMode;
+    this.renderScale = renderScale;
     this.viewportState = createCanvasViewportState();
     this.backgroundCache = null;
     this.centerCents = DEFAULT_CENTER_CENTS;

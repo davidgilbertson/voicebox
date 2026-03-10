@@ -150,16 +150,24 @@ export default function AppShell({ downloadingUpdate = false }) {
       minVolumeThreshold,
       pitchMinNote,
       pitchMaxNote,
+      pitchLineColorMode,
+      halfResolutionCanvas,
+      spectrogramMinHz,
+      spectrogramMaxHz,
     });
   }, [
     autoPauseOnSilence,
+    halfResolutionCanvas,
     highResSpectrogram,
     keepRunningInBackground,
     minVolumeThreshold,
     pitchMaxNote,
     pitchMinNote,
+    pitchLineColorMode,
     recorderEngine,
     runAt30Fps,
+    spectrogramMaxHz,
+    spectrogramMinHz,
   ]);
 
   useEffect(() => {
@@ -289,12 +297,6 @@ export default function AppShell({ downloadingUpdate = false }) {
             <Recorder
               activeView={activeView}
               settingsOpen={settingsOpen}
-              halfResolutionCanvas={halfResolutionCanvas}
-              pitchMinNote={pitchMinNote}
-              pitchMaxNote={pitchMaxNote}
-              pitchLineColorMode={pitchLineColorMode}
-              spectrogramMinHz={spectrogramMinHz}
-              spectrogramMaxHz={spectrogramMaxHz}
               onSettingsRuntimeChange={setRuntimeSettings}
               engine={recorderEngine}
             />

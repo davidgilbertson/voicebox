@@ -48,14 +48,13 @@ test("pitch renderer draws background even when there is no waveform data", () =
   const drawImage = vi.fn();
   const ctx = createCanvasContext(drawImage);
   const canvas = createCanvas(ctx);
-  const renderer = new PitchChartRenderer();
-  renderer.setCanvas(canvas);
-  renderer.updateOptions({
+  const renderer = new PitchChartRenderer({
     minCents: 0,
     maxCents: 1200,
     lineColorMode: readPitchLineColorMode(),
     renderScale: 1,
   });
+  renderer.setCanvas(canvas);
   renderer.draw({
     smoothedPitchCentsRing: createRing([]),
     lineStrengthRing: createRing([]),
