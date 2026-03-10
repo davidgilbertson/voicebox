@@ -69,6 +69,12 @@ export default function SettingsPanel({
       : true);
   const ShareIcon = useIosShareIcon ? Share : Share2;
   const canShareRawAudio = showRecorderShare && recorderEngine.canShareRawAudio();
+  const batteryUsageDisplay =
+    batteryUsagePerMinute === null
+      ? "NA"
+      : batteryUsagePerMinute === "--"
+        ? "-- %/min"
+        : `${batteryUsagePerMinute.toFixed(3)} %/min`;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -109,12 +115,6 @@ export default function SettingsPanel({
     }
     onSpectrogramMaxHzChange(nextValue);
   };
-  const batteryUsageDisplay =
-    batteryUsagePerMinute === null
-      ? "NA"
-      : batteryUsagePerMinute === "--"
-        ? "-- %/min"
-        : `${batteryUsagePerMinute.toFixed(2)} %/min`;
 
   const onCalibrateMicFloorClick = async () => {
     if (isCalibratingMic) return;

@@ -14,7 +14,6 @@ import {
   processOneAudioHop,
 } from "./hopProcessing.js";
 import { createRecorderAudioSession, destroyRecorderAudioSession } from "./audioSession.js";
-import { BATTERY_SAMPLE_INTERVAL_MS, createBatteryUsageMonitor } from "./batteryUsage.js";
 import { calibrateMinVolumeThreshold as runVolumeCalibration } from "./micCalibration.js";
 import { subscribeToForegroundChanges } from "../foreground.js";
 import { noteNameToCents, noteNameToHz } from "../pitchScale.js";
@@ -103,7 +102,6 @@ export class RecordingEngine {
         hasRejectedMicPermission: false,
         hasEverRun: false,
         isWantedRunning: true,
-        batteryUsagePerMinute: null,
         vibratoRate: null,
         isSharingRawAudio: false,
         rawAudioShareError: "",
@@ -130,7 +128,6 @@ export class RecordingEngine {
       skipNextSpectrumFrame: false,
       frameDirty: false,
       forceRedraw: true,
-      batteryIntervalId: 0,
     };
 
     this.renderState = {
@@ -169,17 +166,14 @@ export class RecordingEngine {
       sampleRate: this.audioSessionState.sampleRate,
       seconds: getChartSeconds(this.state.chartWidthPx),
     });
-    this.batteryUsageMonitor = createBatteryUsageMonitor();
     this.pendingAudioRestart = false;
     this.unsubscribeForeground = subscribeToForegroundChanges(this.onForegroundChange);
 
-    this.syncBatteryPolling();
     this.ensureRenderLoop();
   }
 
   onForegroundChange = (isForeground) => {
     this.state.isForeground = isForeground;
-    this.syncBatteryPolling();
     this.syncAudioState();
   };
 
@@ -187,25 +181,6 @@ export class RecordingEngine {
     this.state.ui = { ...this.state.ui, ...nextPartial };
     for (const listener of this.listeners) {
       listener(this.state.ui);
-    }
-  };
-
-  sampleBatteryUsage = async () => {
-    const usage = await this.batteryUsageMonitor.readUsagePerMinute();
-    this.setUi({ batteryUsagePerMinute: usage });
-  };
-
-  syncBatteryPolling = () => {
-    if (this.state.batteryIntervalId) {
-      window.clearInterval(this.state.batteryIntervalId);
-      this.state.batteryIntervalId = 0;
-    }
-    this.sampleBatteryUsage();
-    if (this.state.isForeground) {
-      this.state.batteryIntervalId = window.setInterval(
-        this.sampleBatteryUsage,
-        BATTERY_SAMPLE_INTERVAL_MS,
-      );
     }
   };
 
@@ -656,10 +631,6 @@ export class RecordingEngine {
     if (this.renderState.rafId) {
       cancelAnimationFrame(this.renderState.rafId);
       this.renderState.rafId = 0;
-    }
-    if (this.state.batteryIntervalId) {
-      window.clearInterval(this.state.batteryIntervalId);
-      this.state.batteryIntervalId = 0;
     }
     this.unsubscribeForeground?.();
     this.unsubscribeForeground = null;

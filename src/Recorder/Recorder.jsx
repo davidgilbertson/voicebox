@@ -7,7 +7,6 @@ import SpectrogramChart from "./Spectrogram/SpectrogramChart.jsx";
 export default function Recorder({
   activeView,
   settingsOpen,
-  onSettingsRuntimeChange,
   engine,
 }) {
   const vibratoChartRef = useRef(null);
@@ -29,13 +28,6 @@ export default function Recorder({
       engine.detachCharts();
     };
   }, [engine]);
-
-  useEffect(() => {
-    onSettingsRuntimeChange({
-      batteryUsagePerMinute: engineUi.batteryUsagePerMinute,
-    });
-  }, [engineUi, onSettingsRuntimeChange]);
-
   const onStartButtonClick = () => {
     engine.setWantsToRun(true);
     engine.startIfNeeded();

@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { createBatteryUsageMonitor } from "../../src/Recorder/batteryUsage.js";
+import { BatteryUsageMonitor, createBatteryUsageMonitor } from "../../src/Recorder/batteryUsage.js";
 
 test("returns -- until at least one minute has elapsed", async () => {
   vi.useFakeTimers();
@@ -52,4 +52,24 @@ test("returns null when charging or battery info is unavailable", async () => {
   }));
   const unavailableMonitor = createBatteryUsageMonitor();
   expect(await unavailableMonitor.readUsagePerMinute()).toBeNull();
+});
+
+test("polls on an interval and publishes updates to subscribers", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(20_000);
+  const battery = { level: 0.8, charging: false };
+  navigator.getBattery = vi.fn(async () => battery);
+  const monitor = new BatteryUsageMonitor();
+  const listener = vi.fn();
+
+  const unsubscribe = monitor.subscribe(listener);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(listener).toHaveBeenLastCalledWith("--");
+
+  battery.level = 0.78;
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(listener.mock.calls.at(-1)?.[0]).toBeCloseTo(2, 6);
+
+  unsubscribe();
+  monitor.destroy();
 });

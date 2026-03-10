@@ -4,6 +4,7 @@ import Recorder from "./Recorder/Recorder.jsx";
 import ScalesPage from "./ScalesPage/ScalesPage.jsx";
 import SettingsPanel from "./SettingsPanel.jsx";
 import { RecordingEngine } from "./Recorder/RecordingEngine.js";
+import { createBatteryUsageMonitor } from "./Recorder/batteryUsage.js";
 import { PlaybackEngine } from "./ScalesPage/PlaybackEngine.js";
 import { calibrateMinVolumeThreshold } from "./Recorder/micCalibration.js";
 import { writeActiveView } from "./AppShell/config.js";
@@ -32,6 +33,7 @@ export default function AppShell({ downloadingUpdate = false }) {
   const [recorderEngine] = useState(
     () => new RecordingEngine({ ...config.shared, ...config.recorder, isForeground, activeView }),
   );
+  const [batteryUsageMonitor] = useState(createBatteryUsageMonitor);
   const [scalesPlaybackEngine] = useState(
     () =>
       new PlaybackEngine({
@@ -66,9 +68,7 @@ export default function AppShell({ downloadingUpdate = false }) {
   );
   const [spectrogramMinHz, setSpectrogramMinHz] = useState(() => config.recorder.spectrogramMinHz);
   const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => config.recorder.spectrogramMaxHz);
-  const [runtimeSettings, setRuntimeSettings] = useState({
-    batteryUsagePerMinute: null,
-  });
+  const [batteryUsagePerMinute, setBatteryUsagePerMinute] = useState(null);
   const onScalesPage = activeView === "scales";
 
   useEffect(() => {
@@ -89,10 +89,13 @@ export default function AppShell({ downloadingUpdate = false }) {
 
   useEffect(() => {
     return () => {
+      batteryUsageMonitor.destroy();
       recorderEngine.destroy();
       scalesPlaybackEngine.destroy();
     };
-  }, [recorderEngine, scalesPlaybackEngine]);
+  }, [batteryUsageMonitor, recorderEngine, scalesPlaybackEngine]);
+
+  useEffect(() => batteryUsageMonitor.subscribe(setBatteryUsagePerMinute), [batteryUsageMonitor]);
 
   useEffect(() => {
     writeScaleMinNote(scaleMinNote);
@@ -297,7 +300,6 @@ export default function AppShell({ downloadingUpdate = false }) {
             <Recorder
               activeView={activeView}
               settingsOpen={settingsOpen}
-              onSettingsRuntimeChange={setRuntimeSettings}
               engine={recorderEngine}
             />
           )}
@@ -409,7 +411,7 @@ export default function AppShell({ downloadingUpdate = false }) {
             spectrogramMaxHz={spectrogramMaxHz}
             onSpectrogramMinHzChange={onSpectrogramMinHzChange}
             onSpectrogramMaxHzChange={onSpectrogramMaxHzChange}
-            batteryUsagePerMinute={runtimeSettings.batteryUsagePerMinute}
+            batteryUsagePerMinute={batteryUsagePerMinute}
             showRecorderShare={!onScalesPage}
           />
         ) : null}
