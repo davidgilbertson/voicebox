@@ -430,7 +430,17 @@ export default function SettingsPanel({
                 </button>
               ) : null}
             </div>
-            <div className="text-right text-xs text-slate-500">Build: {__BUILD_TIME_SYDNEY__}</div>
+            <div className="text-right text-xs text-slate-500">
+              {/* A hidden reload button because reloading a fullscreen PWA on iOS is hard */}
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="cursor-pointer text-inherit"
+              >
+                Build
+              </button>
+              : {__BUILD_TIME_SYDNEY__}
+            </div>
           </div>
           {showRecorderShare && recorderUi.rawAudioShareError ? (
             <div className="pt-2 text-xs text-slate-400">{recorderUi.rawAudioShareError}</div>
