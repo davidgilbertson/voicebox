@@ -21,6 +21,7 @@ import { clamp } from "../tools.js";
 import { PitchChartRenderer } from "./Pitch/pitchTools.js";
 import { SpectrogramChartRenderer } from "./Spectrogram/spectrogramTools.js";
 import { VibratoChartRenderer } from "./Vibrato/vibratoTools.js";
+import { queryMicrophonePermissionState } from "../permissions.js";
 import {
   appendRawAudioSamples,
   createRawAudioState,
@@ -102,6 +103,7 @@ export class RecordingEngine {
         hasRejectedMicPermission: false,
         hasEverRun: false,
         isWantedRunning: true,
+        isResolvingInitialMicPermission: true,
         vibratoRate: null,
         isSharingRawAudio: false,
         rawAudioShareError: "",
@@ -340,6 +342,8 @@ export class RecordingEngine {
   };
 
   syncAudioState = () => {
+    if (this.state.ui.isResolvingInitialMicPermission) return;
+
     const shouldRun =
       this.state.activeView !== "scales" &&
       (this.state.keepRunningInBackground || this.state.isForeground) &&
@@ -572,6 +576,35 @@ export class RecordingEngine {
   setWantsToRun = (isWanted) => {
     this.setUi({ isWantedRunning: Boolean(isWanted), rawAudioShareError: "" });
     this.syncAudioState();
+  };
+
+  resolveInitialMicPermission = async () => {
+    const permissionState = await queryMicrophonePermissionState();
+    if (!this.state.ui.isResolvingInitialMicPermission) {
+      return permissionState;
+    }
+
+    if (permissionState === "prompt") {
+      this.setUi({
+        isWantedRunning: false,
+        hasRejectedMicPermission: false,
+        isResolvingInitialMicPermission: false,
+      });
+      return permissionState;
+    }
+
+    if (permissionState === "denied") {
+      this.setUi({
+        isWantedRunning: false,
+        hasRejectedMicPermission: true,
+        isResolvingInitialMicPermission: false,
+      });
+      return permissionState;
+    }
+
+    this.setUi({ isResolvingInitialMicPermission: false });
+    this.syncAudioState();
+    return permissionState;
   };
 
   canShareRawAudio = () => {

@@ -2,6 +2,7 @@ import { Circle, Share, Share2, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import StepperControl from "./components/StepperControl.jsx";
 import { PITCH_LINE_COLOR_MODES } from "./Recorder/colorTools.js";
+import { isAppleTouchDevice } from "./platform.js";
 
 const settingsCheckboxClass = "settings-checkbox h-5 w-5 shrink-0";
 const settingsSectionHeadingClass = "font-semibold uppercase tracking-[0.18em] text-blue-400";
@@ -62,11 +63,7 @@ export default function SettingsPanel({
   const scaleMaxIndex = scaleNoteOptions.indexOf(scaleMaxNote);
   const pitchMinIndex = pitchNoteOptions.indexOf(pitchMinNote);
   const pitchMaxIndex = pitchNoteOptions.indexOf(pitchMaxNote);
-  const useIosShareIcon =
-    /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent) &&
-    (!navigator.platform || navigator.platform === "MacIntel"
-      ? navigator.maxTouchPoints > 1
-      : true);
+  const useIosShareIcon = isAppleTouchDevice();
   const ShareIcon = useIosShareIcon ? Share : Share2;
   const canShareRawAudio = showRecorderShare && recorderEngine.canShareRawAudio();
   const batteryUsageDisplay =

@@ -36,6 +36,7 @@ export default function Recorder({ activeView, settingsOpen, engine }) {
   };
 
   const showStartOverlay =
+    !engineUi.isResolvingInitialMicPermission &&
     !engineUi.isAudioRunning &&
     !engineUi.isWantedRunning &&
     (engineUi.error || !engineUi.hasEverRun);

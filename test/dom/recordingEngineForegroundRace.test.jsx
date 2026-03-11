@@ -34,6 +34,7 @@ test("pending audio start is cancelled if app backgrounds before start completes
 
   const engine = new RecordingEngine(createRecordingEngineConfig());
   try {
+    engine.setUi({ isResolvingInitialMicPermission: false });
     engine.updateSettings({
       keepRunningInBackground: false,
       autoPauseOnSilence: true,

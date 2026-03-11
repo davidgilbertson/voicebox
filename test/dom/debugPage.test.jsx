@@ -10,8 +10,8 @@ test("debug page shows a localStorage snapshot above the audio controls", () => 
   render(<DebugPage />);
 
   const localStorageHeading = screen.getByText("Local Storage");
-  const localStorageSection = localStorageHeading.closest("section");
-  const controlsSection = screen.getByLabelText("autoGainControl").closest("section");
+  const localStorageSection = localStorageHeading.closest("details");
+  const controlsSection = screen.getByLabelText("autoGainControl").closest("details");
 
   expect(localStorageSection).toBeInTheDocument();
   expect(localStorageSection).toHaveTextContent('"voicebox.alpha": "1"');

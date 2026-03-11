@@ -89,6 +89,10 @@ export default function AppShell({ downloadingUpdate = false }) {
   useEffect(() => subscribeToForegroundChanges(setIsForeground), []);
 
   useEffect(() => {
+    recorderEngine.resolveInitialMicPermission();
+  }, [recorderEngine]);
+
+  useEffect(() => {
     return () => {
       batteryUsageMonitor.destroy();
       recorderEngine.destroy();
