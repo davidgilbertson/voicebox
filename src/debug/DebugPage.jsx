@@ -17,6 +17,14 @@ function stringifyJson(value) {
   return JSON.stringify(value, null, 2);
 }
 
+function readLocalStorageSnapshot() {
+  return Object.fromEntries(
+    Object.keys(localStorage)
+      .sort()
+      .map((key) => [key, localStorage.getItem(key)]),
+  );
+}
+
 function listSupportedConstraints(constraints) {
   return Object.entries(constraints)
     .filter(([, supported]) => supported === true)
@@ -37,6 +45,7 @@ function readAnalyserFrame(analyser, samples) {
 }
 
 export default function DebugPage() {
+  const [localStorageSnapshot] = useState(() => readLocalStorageSnapshot());
   const [supportedConstraints, setSupportedConstraints] = useState({});
   const [autoGainControl, setAutoGainControl] = useState(false);
   const [echoCancellation, setEchoCancellation] = useState(false);
@@ -270,6 +279,15 @@ export default function DebugPage() {
             constraint changes without touching the recorder UI.
           </p>
         </header>
+
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+          <div className="text-xs font-semibold tracking-[0.2em] text-slate-400 uppercase">
+            Local Storage
+          </div>
+          <pre className="mt-4 overflow-x-auto rounded-xl bg-slate-950 p-3 text-xs leading-5 text-slate-200">
+            {stringifyJson(localStorageSnapshot)}
+          </pre>
+        </section>
 
         <section className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
           <label className="flex items-center justify-between gap-3 text-sm">
