@@ -46,7 +46,8 @@ async function waitForReady() {
 }
 
 function renderScales(props) {
-  const { scaleMinNote, scaleMaxNote, keepRunningInBackground, isForeground, ...pageProps } = props ?? {};
+  const { scaleMinNote, scaleMaxNote, keepRunningInBackground, isForeground, ...pageProps } =
+    props ?? {};
   const engine = new PlaybackEngine({
     ...createPlaybackEngineConfig(),
     ...(scaleMinNote ? { scaleMinNote } : {}),
