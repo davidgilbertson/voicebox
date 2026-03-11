@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import AppShell from "./AppShell.jsx";
 import AboutPage from "./AboutPage.jsx";
 import DebugPage from "./debug/DebugPage.jsx";
+import TestOverlay from "./TestOverlay.jsx";
 import { installFocusVisibilityPolicy } from "./focusVisibility.js";
 import "./index.css";
 import { registerSW } from "virtual:pwa-register";
@@ -70,6 +71,9 @@ function CurrentRoute() {
   }
   if (pathname === "/debug") {
     return <DebugPage />;
+  }
+  if (pathname === "/overlay") {
+    return <TestOverlay />;
   }
   return <Root />;
 }

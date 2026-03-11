@@ -137,7 +137,7 @@ export default function SettingsPanel({
           onClose();
         }
       }}
-      className="fixed inset-0 m-0 hidden h-[var(--app-height)] max-h-none w-screen max-w-none border-0 bg-transparent p-2 backdrop:bg-slate-950/60 backdrop:backdrop-blur-sm open:grid open:place-items-center sm:p-3"
+      className="fixed inset-0 m-0 hidden h-[var(--app-height)] max-h-none w-screen max-w-none border-0 bg-transparent p-2 backdrop:bg-slate-950/60 backdrop:backdrop-blur-sm open:grid open:place-items-center sm:p-5"
     >
       <section className="relative flex h-full max-h-none w-full max-w-[600px] flex-col overflow-hidden rounded-lg border border-slate-400/70 bg-slate-900/90 text-slate-100 shadow-2xl">
         <div className="flex items-center justify-between px-4 pt-4 pb-2">

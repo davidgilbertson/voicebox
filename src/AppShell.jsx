@@ -70,6 +70,7 @@ export default function AppShell({ downloadingUpdate = false }) {
   const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => config.recorder.spectrogramMaxHz);
   const [batteryUsagePerMinute, setBatteryUsagePerMinute] = useState(null);
   const onScalesPage = activeView === "scales";
+  const isLiveHost = document.location.host === "voicebox.dgapps.io";
 
   useEffect(() => {
     if (import.meta.env.MODE !== "test") return;
@@ -276,7 +277,7 @@ export default function AppShell({ downloadingUpdate = false }) {
   };
 
   return (
-    <div className="h-[var(--app-height)] w-full overflow-hidden bg-black text-slate-100 select-none">
+    <div className="app-shell h-(--app-height) w-full overflow-hidden bg-black text-slate-100 select-none">
       <div
         data-testid="sw-update-banner"
         aria-live="polite"
@@ -297,14 +298,11 @@ export default function AppShell({ downloadingUpdate = false }) {
               engine={scalesPlaybackEngine}
             />
           ) : (
-            <Recorder
-              activeView={activeView}
-              settingsOpen={settingsOpen}
-              engine={recorderEngine}
-            />
+            <Recorder activeView={activeView} settingsOpen={settingsOpen} engine={recorderEngine} />
           )}
           <footer className="relative flex h-12 items-stretch gap-2 pt-0 pr-2 pb-0 pl-0 text-xs text-slate-300">
             <div className="flex flex-1 items-stretch">
+              <button onClick={() => location.reload()}>Reload</button>
               <button
                 type="button"
                 onClick={() => onViewChange("scales")}
@@ -370,7 +368,11 @@ export default function AppShell({ downloadingUpdate = false }) {
               <button
                 type="button"
                 onClick={onOpenSettings}
-                className="inline-flex h-full w-full items-center justify-center rounded-none text-slate-400 transition-colors hover:text-slate-100 active:text-white disabled:opacity-40 disabled:hover:text-slate-400"
+                className={`inline-flex h-full w-full items-center justify-center rounded-none transition-colors disabled:opacity-40 ${
+                  isLiveHost
+                    ? "text-slate-400 hover:text-slate-100 active:text-white disabled:hover:text-slate-400"
+                    : "text-blue-400 hover:text-blue-300 active:text-blue-200 disabled:hover:text-blue-400"
+                }`}
                 aria-label="Open settings"
               >
                 <Settings aria-hidden="true" className="h-5 w-5" strokeWidth={1.8} />
