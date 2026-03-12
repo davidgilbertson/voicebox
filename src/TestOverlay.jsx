@@ -12,8 +12,6 @@ function readMetrics() {
   const bodyStyles = getComputedStyle(document.body);
 
   return [
-    `host: ${document.location.host}`,
-    `path: ${document.location.pathname}`,
     `standalone(matchMedia): ${window.matchMedia("(display-mode: standalone)").matches}`,
     `standalone(navigator): ${String(window.navigator.standalone ?? "n/a")}`,
     `screen.height: ${window.screen.height}`,

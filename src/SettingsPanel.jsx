@@ -20,6 +20,8 @@ export default function SettingsPanel({
   recorderEngine,
   open,
   onClose,
+  developerMode,
+  onDeveloperModeChange,
   scaleMinNote,
   scaleMaxNote,
   scaleNoteOptions,
@@ -59,6 +61,7 @@ export default function SettingsPanel({
   );
   const [isCalibratingMic, setIsCalibratingMic] = useState(false);
   const [recorderUi, setRecorderUi] = useState(() => recorderEngine.getUiSnapshot());
+  const settingsTapTimesRef = useRef([]);
   const scaleMinIndex = scaleNoteOptions.indexOf(scaleMinNote);
   const scaleMaxIndex = scaleNoteOptions.indexOf(scaleMaxNote);
   const pitchMinIndex = pitchNoteOptions.indexOf(pitchMinNote);
@@ -125,6 +128,18 @@ export default function SettingsPanel({
     }
   };
 
+  const onSettingsHeadingClick = () => {
+    if (developerMode) return;
+    const now = performance.now();
+    const recentTapTimes = settingsTapTimesRef.current.filter((time) => now - time < 1000);
+    recentTapTimes.push(now);
+    settingsTapTimesRef.current = recentTapTimes;
+    if (recentTapTimes.length >= 4) {
+      settingsTapTimesRef.current = [];
+      onDeveloperModeChange(true);
+    }
+  };
+
   return (
     <dialog
       ref={dialogRef}
@@ -138,9 +153,13 @@ export default function SettingsPanel({
     >
       <section className="relative flex h-full max-h-none w-full max-w-[600px] flex-col overflow-hidden rounded-lg border border-slate-400/70 bg-slate-900/90 text-slate-100 shadow-2xl">
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
-          <div className="text-sm font-semibold tracking-[0.24em] text-slate-300 uppercase">
+          <button
+            type="button"
+            onClick={onSettingsHeadingClick}
+            className="text-sm font-semibold tracking-[0.24em] text-slate-300 uppercase"
+          >
             Settings
-          </div>
+          </button>
           <button
             type="button"
             onClick={onClose}
@@ -151,6 +170,25 @@ export default function SettingsPanel({
           </button>
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto px-4 pt-2 pb-4">
+          {developerMode ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onDeveloperModeChange(false)}
+                className="flex h-12 w-full items-center justify-center rounded-md bg-red-600 px-4 text-sm font-semibold text-white"
+              >
+                Exit dev mode
+              </button>
+              <div className="flex flex-wrap gap-4 text-sm">
+                <a
+                  href="/debug"
+                  className="font-semibold text-blue-300 underline decoration-blue-300/90 underline-offset-4 transition hover:text-blue-200"
+                >
+                  /debug
+                </a>
+              </div>
+            </>
+          ) : null}
           <div className="font-semibold tracking-[0.18em] text-blue-400 uppercase">General</div>
           <label className="flex items-start justify-between gap-4 text-sm">
             <div className="flex flex-col gap-1">

@@ -1,4 +1,4 @@
-import { readActiveView } from "./AppShell/config.js";
+import { readActiveView, readDeveloperMode } from "./AppShell/config.js";
 import {
   readScaleBpm,
   readScaleGestureHelpDismissed,
@@ -24,6 +24,7 @@ export function readConfig() {
   return {
     app: {
       activeView: readActiveView(),
+      developerMode: readDeveloperMode(),
     },
     shared: {
       keepRunningInBackground: readKeepRunningInBackground(),

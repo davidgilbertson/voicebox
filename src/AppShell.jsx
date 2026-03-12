@@ -7,7 +7,7 @@ import { RecordingEngine } from "./Recorder/RecordingEngine.js";
 import { createBatteryUsageMonitor } from "./Recorder/batteryUsage.js";
 import { PlaybackEngine } from "./ScalesPage/PlaybackEngine.js";
 import { calibrateMinVolumeThreshold } from "./Recorder/micCalibration.js";
-import { writeActiveView } from "./AppShell/config.js";
+import { writeActiveView, writeDeveloperMode } from "./AppShell/config.js";
 import { PITCH_NOTE_OPTIONS } from "./pitchScale.js";
 import { computeIsForeground, subscribeToForegroundChanges } from "./foreground.js";
 import { writeScaleMaxNote, writeScaleMinNote } from "./ScalesPage/config.js";
@@ -43,6 +43,7 @@ export default function AppShell({ downloadingUpdate = false }) {
       }),
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [developerMode, setDeveloperMode] = useState(() => config.app.developerMode);
   const [scaleMinNote, setScaleMinNote] = useState(() => config.scales.scaleMinNote);
   const [scaleMaxNote, setScaleMaxNote] = useState(() => config.scales.scaleMaxNote);
   const [keepRunningInBackground, setKeepRunningInBackground] = useState(
@@ -85,6 +86,10 @@ export default function AppShell({ downloadingUpdate = false }) {
   useEffect(() => {
     writeActiveView(activeView);
   }, [activeView]);
+
+  useEffect(() => {
+    writeDeveloperMode(developerMode);
+  }, [developerMode]);
 
   useEffect(() => subscribeToForegroundChanges(setIsForeground), []);
 
@@ -388,6 +393,8 @@ export default function AppShell({ downloadingUpdate = false }) {
             recorderEngine={recorderEngine}
             open={settingsOpen}
             onClose={() => setSettingsOpen(false)}
+            developerMode={developerMode}
+            onDeveloperModeChange={setDeveloperMode}
             scaleMinNote={scaleMinNote}
             scaleMaxNote={scaleMaxNote}
             scaleNoteOptions={PITCH_NOTE_OPTIONS}

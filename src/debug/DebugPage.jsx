@@ -12,6 +12,7 @@ const LATENCY_OPTIONS = [
 const LEVEL_PUBLISH_INTERVAL_MS = 100;
 const DEBUG_LOCAL_STORAGE_OPEN_KEY = "voicebox.debug.localStorageOpen";
 const DEBUG_MICROPHONE_OPEN_KEY = "voicebox.debug.microphoneOpen";
+const DEBUG_OVERLAY_METRICS_OPEN_KEY = "voicebox.debug.overlayMetricsOpen";
 
 function roundValue(value, digits = 4) {
   return Number.isFinite(value) ? value.toFixed(digits) : "n/a";
@@ -66,14 +67,54 @@ function readPageDiagnostics() {
   };
 }
 
+function readOverlayMetrics() {
+  const root = document.getElementById("root");
+  const rootRect = root?.getBoundingClientRect();
+  const shell = document.getElementById("test-overlay-shell");
+  const shellRect = shell?.getBoundingClientRect();
+  const footer = document.getElementById("test-overlay-footer");
+  const footerRect = footer?.getBoundingClientRect();
+  const visualViewport = window.visualViewport;
+  const htmlStyles = getComputedStyle(document.documentElement);
+  const bodyStyles = getComputedStyle(document.body);
+
+  return [
+    `standalone(matchMedia): ${window.matchMedia("(display-mode: standalone)").matches}`,
+    `standalone(navigator): ${String(window.navigator.standalone ?? "n/a")}`,
+    `screen.height: ${window.screen.height}`,
+    `outerHeight: ${window.outerHeight}`,
+    `innerHeight: ${window.innerHeight}`,
+    `visualViewport.height: ${visualViewport?.height ?? "n/a"}`,
+    `documentElement.clientHeight: ${document.documentElement.clientHeight}`,
+    `documentElement.computedHeight: ${htmlStyles.height}`,
+    `body.clientHeight: ${document.body.clientHeight}`,
+    `body.computedHeight: ${bodyStyles.height}`,
+    `--app-height: ${htmlStyles.getPropertyValue("--app-height").trim()}`,
+    `--app-safe-area-top: ${htmlStyles.getPropertyValue("--app-safe-area-top").trim()}`,
+    `root.top: ${rootRect ? Math.round(rootRect.top) : "n/a"}`,
+    `root.bottom: ${rootRect ? Math.round(rootRect.bottom) : "n/a"}`,
+    `root.height: ${rootRect ? Math.round(rootRect.height) : "n/a"}`,
+    `shell.top: ${shellRect ? Math.round(shellRect.top) : "n/a"}`,
+    `shell.bottom: ${shellRect ? Math.round(shellRect.bottom) : "n/a"}`,
+    `shell.height: ${shellRect ? Math.round(shellRect.height) : "n/a"}`,
+    `footer.top: ${footerRect ? Math.round(footerRect.top) : "n/a"}`,
+    `footer.bottom: ${footerRect ? Math.round(footerRect.bottom) : "n/a"}`,
+    `footer.height: ${footerRect ? Math.round(footerRect.height) : "n/a"}`,
+  ];
+}
+
 export default function DebugPage() {
   const [localStorageSnapshot] = useState(() => readLocalStorageSnapshot());
   const [isLocalStorageOpen, setIsLocalStorageOpen] = useState(() =>
     readStoredSectionOpenState(DEBUG_LOCAL_STORAGE_OPEN_KEY, true),
   );
+  const [isOverlayMetricsOpen, setIsOverlayMetricsOpen] = useState(() =>
+    readStoredSectionOpenState(DEBUG_OVERLAY_METRICS_OPEN_KEY, true),
+  );
   const [isMicrophoneOpen, setIsMicrophoneOpen] = useState(() =>
     readStoredSectionOpenState(DEBUG_MICROPHONE_OPEN_KEY, true),
   );
+  const [overlayMetrics, setOverlayMetrics] = useState(() => readOverlayMetrics());
   const [supportedConstraints, setSupportedConstraints] = useState({});
   const [autoGainControl, setAutoGainControl] = useState(false);
   const [echoCancellation, setEchoCancellation] = useState(false);
@@ -185,8 +226,34 @@ export default function DebugPage() {
   }, [isLocalStorageOpen]);
 
   useEffect(() => {
+    writeStoredSectionOpenState(DEBUG_OVERLAY_METRICS_OPEN_KEY, isOverlayMetricsOpen);
+  }, [isOverlayMetricsOpen]);
+
+  useEffect(() => {
     writeStoredSectionOpenState(DEBUG_MICROPHONE_OPEN_KEY, isMicrophoneOpen);
   }, [isMicrophoneOpen]);
+
+  useEffect(() => {
+    const update = () => setOverlayMetrics(readOverlayMetrics());
+    const updateNextFrame = () => requestAnimationFrame(update);
+
+    update();
+    window.addEventListener("resize", updateNextFrame, { passive: true });
+    window.addEventListener("pageshow", updateNextFrame, { passive: true });
+    window.visualViewport?.addEventListener("resize", updateNextFrame, {
+      passive: true,
+    });
+    window.visualViewport?.addEventListener("scroll", updateNextFrame, {
+      passive: true,
+    });
+
+    return () => {
+      window.removeEventListener("resize", updateNextFrame);
+      window.removeEventListener("pageshow", updateNextFrame);
+      window.visualViewport?.removeEventListener("resize", updateNextFrame);
+      window.visualViewport?.removeEventListener("scroll", updateNextFrame);
+    };
+  }, []);
 
   useEffect(() => {
     const refreshPageDiagnostics = () => {
@@ -427,6 +494,11 @@ export default function DebugPage() {
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
         <header className="space-y-2">
           <p className="text-xs font-semibold tracking-[0.22em] text-sky-400 uppercase">Debug</p>
+          <nav className="flex gap-4 text-sm">
+            <a href="/" className="text-sky-300 underline underline-offset-4">
+              Main app
+            </a>
+          </nav>
         </header>
 
         <details
@@ -440,6 +512,21 @@ export default function DebugPage() {
           <div className="px-4 pb-4">
             <pre className="overflow-x-auto rounded-xl bg-slate-950 p-3 text-xs leading-5 text-slate-200">
               {stringifyJson(localStorageSnapshot)}
+            </pre>
+          </div>
+        </details>
+
+        <details
+          open={isOverlayMetricsOpen}
+          onToggle={(event) => setIsOverlayMetricsOpen(event.currentTarget.open)}
+          className="rounded-2xl border border-slate-800 bg-slate-900/80"
+        >
+          <summary className="cursor-pointer list-none px-4 py-4 text-xs font-semibold tracking-[0.2em] text-slate-400 uppercase">
+            Overlay Metrics
+          </summary>
+          <div className="px-4 pb-4">
+            <pre className="overflow-x-auto rounded-xl bg-slate-950 p-3 text-xs leading-5 text-slate-200">
+              {overlayMetrics.join("\n")}
             </pre>
           </div>
         </details>

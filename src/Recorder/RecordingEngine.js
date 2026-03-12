@@ -31,7 +31,7 @@ import {
 } from "./rawAudio.js";
 
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
-const STARTUP_MAX_VOLUME_DECAY_FACTOR = 0.8;
+const STARTUP_MAX_VOLUME_DECAY_FACTOR = 0.9;
 let recordingEngineSingleton = null;
 
 function createHzBuffer(length) {

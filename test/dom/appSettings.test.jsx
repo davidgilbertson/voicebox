@@ -14,6 +14,7 @@ import {
   readSpectrogramMaxHz,
   readSpectrogramMinHz,
 } from "../../src/Recorder/config.js";
+import { readDeveloperMode as readAppDeveloperMode } from "../../src/AppShell/config.js";
 
 test("settings defaults and persistence work via localStorage", async () => {
   const user = userEvent.setup();
@@ -227,6 +228,32 @@ test("settings about link points to the local about page", async () => {
   const aboutLink = screen.getByRole("link", { name: "Help" });
 
   expect(aboutLink).toHaveAttribute("href", "/about");
+});
+
+test("developer mode unlocks after four quick taps on the settings heading and can be exited", async () => {
+  const user = userEvent.setup();
+  const tapTimes = [0, 200, 400, 600];
+  vi.spyOn(performance, "now").mockImplementation(() => tapTimes.shift() ?? 600);
+  render(<AppShell />);
+
+  await user.click(screen.getByLabelText("Open settings"));
+  const headingButton = screen.getByRole("button", { name: "Settings" });
+
+  await user.click(headingButton);
+  await user.click(headingButton);
+  await user.click(headingButton);
+  await user.click(headingButton);
+
+  expect(screen.getByRole("button", { name: "Exit dev mode" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "/debug" })).toHaveAttribute("href", "/debug");
+  expect(readAppDeveloperMode()).toBe(true);
+
+  await user.click(screen.getByRole("button", { name: "Exit dev mode" }));
+
+  await waitFor(() => {
+    expect(screen.queryByRole("button", { name: "Exit dev mode" })).toBeNull();
+    expect(readAppDeveloperMode()).toBe(false);
+  });
 });
 
 test("share button only appears for paused recorder views with captured audio", async () => {

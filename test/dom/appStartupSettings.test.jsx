@@ -11,6 +11,7 @@ test("readConfig groups persisted values for initial app initialization", () => 
   localStorage.setItem("voicebox.pitchMaxNote", "A5");
   localStorage.setItem("voicebox.minVolumeThreshold", "3.5");
   localStorage.setItem("voicebox.keepRunningInBackground", "true");
+  localStorage.setItem("voicebox.developerMode", "true");
   localStorage.setItem("voicebox.scales.bpm", "320");
   localStorage.setItem("voicebox.scales.minNote", "B2");
   localStorage.setItem("voicebox.scales.maxNote", "F4");
@@ -19,6 +20,7 @@ test("readConfig groups persisted values for initial app initialization", () => 
   expect(readConfig()).toEqual({
     app: {
       activeView: "pitch",
+      developerMode: true,
     },
     shared: {
       keepRunningInBackground: true,
