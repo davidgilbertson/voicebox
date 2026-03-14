@@ -4,11 +4,12 @@ import {
 } from "../pitchDetection/analysis.js";
 import { getRawSampleWindowSize } from "./windowing.js";
 
-const DEFAULT_PEAK_COUNT = 10;
-const DEFAULT_LOG_CORRELATION_CUTOFF = 1.8;
-const DEFAULT_MAX_COMPARISON_PATCHES = 2;
+const DEFAULT_MAX_EXTREMA_PER_FOLD = 2;
+const DEFAULT_MAX_CROSSINGS_PER_PERIOD = 20;
+const DEFAULT_MAX_COMPARISON_PATCHES = 3;
 const DEFAULT_MAX_WALK_STEPS = 10;
-const RAW_GLOBAL_LOG_CORRELATION_CUTOFF = 1;
+const DEFAULT_RAW_GLOBAL_LOG_CORRELATION_CUTOFF = 0;
+const DEFAULT_OCTAVE_BIAS = 0;
 const RAW_MIN_WINDOW_MAX_AMPLITUDE = 0.01;
 const RAW_MIN_HZ = 40;
 const RAW_MAX_HZ = 2200;
@@ -19,11 +20,13 @@ function toLogCorrelation(correlation) {
   return -Math.log10(1 - Math.min(correlation, MAX_LOG_CORRELATION));
 }
 
-function getSortedCandidateFamilies(rawDebug, sampleRate) {
-  const families = rawDebug?.candidateFamilies ?? [];
-  return [...families].sort(
-    (a, b) => sampleRate / a.originalPeriodSamples - sampleRate / b.originalPeriodSamples,
-  );
+function getCandidateWeightedScore(periodSamples, sampleRate, correlation, octaveBias) {
+  if (!(periodSamples > 0) || !(sampleRate > 0) || !Number.isFinite(correlation)) {
+    return Number.NEGATIVE_INFINITY;
+  }
+  const candidateHz = sampleRate / periodSamples;
+  if (!(candidateHz > 0)) return Number.NEGATIVE_INFINITY;
+  return toLogCorrelation(correlation) + octaveBias * Math.log2(candidateHz / RAW_MIN_HZ);
 }
 
 function centsDifference(aHz, bHz) {
@@ -59,21 +62,18 @@ function scoreRawAccuracy(referenceHz, predictedHz) {
   };
 }
 
-function findHighestExtrema(samples, peakCount, type) {
-  const extrema = [];
-  for (let index = 1; index < samples.length - 1; index += 1) {
-    const left = samples[index - 1];
-    const center = samples[index];
-    const right = samples[index + 1];
-    const isPeak = center >= left && center > right;
-    const isTrough = center <= left && center < right;
-    if ((type === "peak" && !isPeak) || (type === "trough" && !isTrough)) continue;
-    extrema.push({ index, value: center, type });
+function hasZeroCrossing(a, b) {
+  return a === 0 || b === 0 || (a < 0 && b > 0) || (a > 0 && b < 0);
+}
+
+function countZeroCrossings(samples) {
+  let count = 0;
+  for (let index = 1; index < samples.length; index += 1) {
+    if (hasZeroCrossing(samples[index - 1], samples[index])) {
+      count += 1;
+    }
   }
-  extrema.sort((a, b) =>
-    type === "peak" ? b.value - a.value : a.value - b.value,
-  );
-  return extrema.slice(0, peakCount).sort((a, b) => a.index - b.index);
+  return count;
 }
 
 function measurePeriodPatchCorrelation(samples, periodSamples, maxComparisonPatches) {
@@ -125,75 +125,6 @@ export function buildRawCorrelationHistogram(samples, sampleRate, maxComparisonP
   };
 }
 
-export function getHigherCandidateDiagnosticForWindow(result, windowIndex, minRatio = 1.2) {
-  const fftHz = result.pitchHz?.[windowIndex];
-  if (!(fftHz > 0)) return null;
-  const rawDebug = result.rawDebug?.[windowIndex];
-  if (!rawDebug) return null;
-  const minCandidateHz = fftHz * minRatio;
-  const sortedFamilies = getSortedCandidateFamilies(rawDebug, result.sampleRate);
-  let best = null;
-
-  for (let columnIndex = 0; columnIndex < sortedFamilies.length; columnIndex += 1) {
-    const family = sortedFamilies[columnIndex];
-    for (const variant of ["half", "original", "double"]) {
-      const isEnabled = variant !== "double" || family.allowDouble;
-      const candidate = family[variant];
-      if (!isEnabled || !Number.isFinite(candidate?.correlation) || !Number.isFinite(candidate?.periodSamples)) {
-        continue;
-      }
-      const candidateHz = result.sampleRate / candidate.periodSamples;
-      if (!(candidateHz > minCandidateHz)) continue;
-      const item = {
-        windowIndex,
-        timeSec: result.timeSec?.[windowIndex] ?? Number.NaN,
-        fftHz,
-        candidateHz,
-        ratio: candidateHz / fftHz,
-        logCorr: toLogCorrelation(candidate.correlation),
-        correlation: candidate.correlation,
-        variant,
-        type: family.type,
-        column: columnIndex + 1,
-        pointPair: family.pointPair,
-        periodSamples: candidate.periodSamples,
-        originalPeriodSamples: family.originalPeriodSamples,
-        sourcePeriodSamples: family.sourcePeriodSamples,
-      };
-      if (!best || item.logCorr > best.logCorr) {
-        best = item;
-      }
-    }
-  }
-
-  return best;
-}
-
-export function getSampleMaxHigherCandidateDiagnostic(result, minRatio = 1.2) {
-  let best = null;
-  for (let windowIndex = 0; windowIndex < result.timeSec.length; windowIndex += 1) {
-    const item = getHigherCandidateDiagnosticForWindow(result, windowIndex, minRatio);
-    if (!item) continue;
-    if (!best || item.logCorr > best.logCorr) {
-      best = item;
-    }
-  }
-  return best;
-}
-
-function getHistogramPeakHz(samples, sampleRate, maxComparisonPatches) {
-  const histogram = buildRawCorrelationHistogram(samples, sampleRate, maxComparisonPatches);
-  let bestHz = Number.NaN;
-  let bestCorrelation = Number.NEGATIVE_INFINITY;
-  for (let index = 0; index < histogram.hz.length; index += 1) {
-    const correlation = histogram.correlation[index];
-    if (!Number.isFinite(correlation) || correlation <= bestCorrelation) continue;
-    bestCorrelation = correlation;
-    bestHz = histogram.hz[index];
-  }
-  return bestHz;
-}
-
 function getHistogramPeak(samples, sampleRate, maxComparisonPatches) {
   const histogram = buildRawCorrelationHistogram(samples, sampleRate, maxComparisonPatches);
   let bestHz = Number.NaN;
@@ -207,6 +138,60 @@ function getHistogramPeak(samples, sampleRate, maxComparisonPatches) {
   return {
     hz: bestHz,
     logCorrelation: toLogCorrelation(bestCorrelation),
+  };
+}
+
+export function evaluateRawWindow(windowSamples, sampleRate, shouldPredict, options = null) {
+  const maxExtremaPerFold = Number.isFinite(options?.maxExtremaPerFold)
+    ? Math.max(1, Math.floor(options.maxExtremaPerFold))
+    : DEFAULT_MAX_EXTREMA_PER_FOLD;
+  const maxCrossingsPerPeriod = Number.isFinite(options?.maxCrossingsPerPeriod)
+    ? Math.max(2, Math.floor(options.maxCrossingsPerPeriod))
+    : DEFAULT_MAX_CROSSINGS_PER_PERIOD;
+  const maxComparisonPatches = Number.isFinite(options?.maxComparisonPatches)
+    ? Math.max(2, Math.floor(options.maxComparisonPatches))
+    : DEFAULT_MAX_COMPARISON_PATCHES;
+  const maxWalkSteps = Number.isFinite(options?.maxWalkSteps)
+    ? Math.max(0, Math.floor(options.maxWalkSteps))
+    : DEFAULT_MAX_WALK_STEPS;
+  const rawGlobalLogCorrelationCutoff = Number.isFinite(options?.rawGlobalLogCorrelationCutoff)
+    ? Math.max(0, options.rawGlobalLogCorrelationCutoff)
+    : DEFAULT_RAW_GLOBAL_LOG_CORRELATION_CUTOFF;
+
+  const rawResult = detectPitchFromRawWindow(windowSamples, sampleRate, {
+    maxExtremaPerFold,
+    maxCrossingsPerPeriod,
+    maxComparisonPatches,
+    maxWalkSteps,
+    rawGlobalLogCorrelationCutoff,
+  });
+  const histogramPeak = getHistogramPeak(windowSamples, sampleRate, maxComparisonPatches);
+  const maxAmplitude = getMaxAbsoluteAmplitude(windowSamples);
+  const passesRawGlobalCutoff =
+    Number.isFinite(rawResult.debug?.winningLogCorrelation) &&
+    rawResult.debug.winningLogCorrelation >= rawGlobalLogCorrelationCutoff;
+  const passesAmplitudeCutoff = maxAmplitude >= RAW_MIN_WINDOW_MAX_AMPLITUDE;
+
+  if (!shouldPredict) {
+    rawResult.debug.rejectionReason = "fft_mask";
+  } else if (!passesAmplitudeCutoff) {
+    rawResult.debug.rejectionReason = "low_amplitude";
+  } else if (!passesRawGlobalCutoff) {
+    rawResult.debug.rejectionReason = "low_log_correlation";
+  } else {
+    rawResult.debug.rejectionReason = null;
+  }
+
+  return {
+    rawResult,
+    histogramPeak,
+    maxAmplitude,
+    passesRawGlobalCutoff,
+    passesAmplitudeCutoff,
+    rawPitchHz:
+      shouldPredict && passesRawGlobalCutoff && passesAmplitudeCutoff ? rawResult.hz : Number.NaN,
+    autocorrelationPitchHz:
+      shouldPredict && passesRawGlobalCutoff && passesAmplitudeCutoff ? histogramPeak.hz : Number.NaN,
   };
 }
 
@@ -262,227 +247,342 @@ function walkToBestNearbyPeriod(
   };
 }
 
-function buildCandidatePeriods(
+function getFoldType(samples, startIndex, endIndex) {
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const sample = samples[index];
+    if (sample > 0) return "peak";
+    if (sample < 0) return "trough";
+  }
+  return null;
+}
+
+function getStrongestExtremaInFold(
+  samples,
+  startIndex,
+  endIndex,
+  type,
+  maxExtremaPerFold,
+  foldIndex,
+) {
+  const isTrailingFold = foldIndex === 0;
+  const extrema = [];
+  for (
+    let index = Math.max(1, startIndex);
+    index < Math.min(samples.length - 1, endIndex);
+    index += 1
+  ) {
+    const left = samples[index - 1];
+    const center = samples[index];
+    const right = samples[index + 1];
+    const isPeak = isTrailingFold
+      ? center > left && center > right && center > 0
+      : center >= left && center > right && center > 0;
+    const isTrough = isTrailingFold
+      ? center < left && center < right && center < 0
+      : center <= left && center < right && center < 0;
+    if ((type === "peak" && !isPeak) || (type === "trough" && !isTrough)) continue;
+    extrema.push({ index, value: center, type, foldIndex });
+  }
+
+  if (!isTrailingFold && extrema.length === 0) {
+    let bestIndex = startIndex;
+    let bestValue = samples[startIndex] ?? 0;
+    for (let index = startIndex + 1; index < endIndex; index += 1) {
+      const value = samples[index];
+      if ((type === "peak" && value > bestValue) || (type === "trough" && value < bestValue)) {
+        bestIndex = index;
+        bestValue = value;
+      }
+    }
+    if ((type === "peak" && bestValue > 0) || (type === "trough" && bestValue < 0)) {
+      extrema.push({ index: bestIndex, value: bestValue, type, foldIndex });
+    }
+  }
+
+  const strongest = [...extrema]
+    .sort((a, b) => (type === "peak" ? b.value - a.value : a.value - b.value))
+    .slice(0, maxExtremaPerFold);
+  strongest.sort((a, b) => b.index - a.index);
+  return strongest;
+}
+
+function collectRecentFoldExtrema(samples, maxExtremaPerFold, maxCrossingsPerPeriod) {
+  const folds = [];
+  const extrema = [];
+  let endIndex = samples.length;
+  let crossingCount = 0;
+  const maxCrossingsToTraverse = maxCrossingsPerPeriod * 2;
+
+  while (endIndex > 1 && crossingCount < maxCrossingsToTraverse) {
+    let crossingIndex = 0;
+    let foundCrossing = false;
+    for (let index = endIndex - 1; index > 0; index -= 1) {
+      if (hasZeroCrossing(samples[index - 1], samples[index])) {
+        crossingIndex = index;
+        foundCrossing = true;
+        break;
+      }
+    }
+
+    const startIndex = foundCrossing ? crossingIndex : 0;
+    const type = getFoldType(samples, startIndex, endIndex);
+    const fold = {
+      startIndex,
+      endIndex,
+      type,
+      extrema: type
+        ? getStrongestExtremaInFold(
+            samples,
+            startIndex,
+            endIndex,
+            type,
+            maxExtremaPerFold,
+            folds.length,
+          )
+        : [],
+    };
+    folds.push(fold);
+    extrema.push(...fold.extrema);
+
+    if (!foundCrossing) break;
+    endIndex = crossingIndex;
+    crossingCount += 1;
+  }
+
+  return {
+    folds,
+    extrema: extrema.sort((a, b) => a.index - b.index),
+    traversedCrossings: crossingCount,
+  };
+}
+
+function buildCandidateFamilies(
   samples,
   extrema,
   sampleRate,
-  logCorrelationCutoff,
   maxComparisonPatches,
   maxWalkSteps,
   type,
 ) {
-  const originalPeriods = [];
-  for (let index = 0; index < extrema.length - 1; index += 1) {
-    const periodSamples = extrema[index + 1].index - extrema[index].index;
-    if (!isPeriodInVoiceRange(periodSamples, sampleRate)) continue;
-    const originalCandidate = walkToBestNearbyPeriod(
-      samples,
-      periodSamples,
-      sampleRate,
-      maxComparisonPatches,
-      maxWalkSteps,
-    );
-    originalPeriods.push({
-      periodSamples: originalCandidate.periodSamples,
-      pointPair: [extrema[index].index, extrema[index + 1].index],
-      sourcePeriodSamples: periodSamples,
-      correlation: originalCandidate.correlation,
-      walkOffset: originalCandidate.walkOffset,
-      type,
-    });
-  }
+  const orderedExtrema = extrema
+    .filter((item) => item.type === type)
+    .sort((a, b) => b.index - a.index);
+  if (orderedExtrema.length < 2) return [];
 
-  const dedupedPeriods = [];
+  const anchor = orderedExtrema[0];
+  const families = [];
   const seenPeriods = new Set();
-  const candidateFamilies = [];
-  for (const originalPeriod of originalPeriods) {
-    const halfCandidate = walkToBestNearbyPeriod(
+  for (let index = 1; index < orderedExtrema.length; index += 1) {
+    const other = orderedExtrema[index];
+    if (other.foldIndex === anchor.foldIndex) continue;
+    const sourcePeriodSamples = anchor.index - other.index;
+    if (!isPeriodInVoiceRange(sourcePeriodSamples, sampleRate)) continue;
+    const candidate = walkToBestNearbyPeriod(
       samples,
-      originalPeriod.periodSamples / 2,
+      sourcePeriodSamples,
       sampleRate,
       maxComparisonPatches,
       maxWalkSteps,
     );
-    const doubleCandidate = walkToBestNearbyPeriod(
-      samples,
-      originalPeriod.periodSamples * 2,
-      sampleRate,
-      maxComparisonPatches,
-      maxWalkSteps,
-    );
-    const originalLogCorrelation = toLogCorrelation(originalPeriod.correlation);
-    const allowDouble =
-      !Number.isFinite(originalPeriod.correlation) ||
-      originalLogCorrelation < logCorrelationCutoff;
-    const preferHalf =
-      Number.isFinite(halfCandidate.correlation) &&
-      toLogCorrelation(halfCandidate.correlation) >= logCorrelationCutoff;
-    candidateFamilies.push({
-      pointPair: originalPeriod.pointPair,
-      originalPeriodSamples: originalPeriod.periodSamples,
-      sourcePeriodSamples: originalPeriod.sourcePeriodSamples,
+    const roundedPeriod = Math.max(1, Math.round(candidate.periodSamples));
+    if (!isPeriodInVoiceRange(roundedPeriod, sampleRate)) continue;
+    if (seenPeriods.has(roundedPeriod)) continue;
+    seenPeriods.add(roundedPeriod);
+    families.push({
       type,
-      half: {
-        periodSamples: halfCandidate.periodSamples,
-        correlation: halfCandidate.correlation,
-        walkOffset: halfCandidate.walkOffset,
-      },
-      original: {
-        periodSamples: originalPeriod.periodSamples,
-        correlation: originalPeriod.correlation,
-        walkOffset: originalPeriod.walkOffset,
-      },
-      double: {
-        periodSamples: doubleCandidate.periodSamples,
-        correlation: allowDouble ? doubleCandidate.correlation : Number.NEGATIVE_INFINITY,
-        walkOffset: doubleCandidate.walkOffset,
-      },
-      preferHalf,
-      allowDouble,
+      pointPair: [anchor.index, other.index],
+      sourcePeriodSamples,
+      periodSamples: roundedPeriod,
+      correlation: candidate.correlation,
+      walkOffset: candidate.walkOffset,
     });
-    const candidates =
-      Number.isFinite(halfCandidate.correlation) &&
-      toLogCorrelation(halfCandidate.correlation) >= logCorrelationCutoff
-        ? [{ periodSamples: halfCandidate.periodSamples, variant: "half" }]
-        : [
-            { periodSamples: originalPeriod.periodSamples, variant: "original" },
-            { periodSamples: halfCandidate.periodSamples, variant: "half" },
-          ];
-    if (allowDouble) {
-      candidates.push({ periodSamples: doubleCandidate.periodSamples, variant: "double" });
-    }
-    for (const candidate of candidates) {
-      const roundedCandidate = Math.max(1, Math.round(candidate.periodSamples));
-      if (!isPeriodInVoiceRange(roundedCandidate, sampleRate)) continue;
-      if (seenPeriods.has(roundedCandidate)) continue;
-      seenPeriods.add(roundedCandidate);
-      dedupedPeriods.push({
-        periodSamples: roundedCandidate,
-        pointPair: originalPeriod.pointPair,
-        originalPeriodSamples: originalPeriod.periodSamples,
-        variant: candidate.variant,
-        type,
-      });
-    }
   }
+  return families;
+}
+
+function buildEmptyDebug(
+  maxExtremaPerFold,
+  maxCrossingsPerPeriod,
+  maxComparisonPatches,
+  maxWalkSteps,
+  rawGlobalLogCorrelationCutoff,
+  octaveBias,
+) {
   return {
-    originalPeriods: originalPeriods.map((item) => item.periodSamples),
-    dedupedPeriods,
-    candidateFamilies,
+    maxExtremaPerFold,
+    maxCrossingsPerPeriod,
+    maxComparisonPatches,
+    maxWalkSteps,
+    rawGlobalLogCorrelationCutoff,
+    octaveBias,
+    zeroCrossingCount: 0,
+    foldExtrema: [],
+    folds: [],
+    candidatePeriods: [],
+    candidateFamilies: [],
+    winningPointPair: null,
+    winningPeriodSamples: Number.NaN,
+    winningCorrelation: Number.NEGATIVE_INFINITY,
+    winningLogCorrelation: 0,
+    winningWeightedScore: Number.NEGATIVE_INFINITY,
+    rejectionReason: null,
+    minHz: RAW_MIN_HZ,
+    maxHz: RAW_MAX_HZ,
   };
 }
 
 export function detectPitchFromRawWindow(samples, sampleRate, options = null) {
-  if (!(samples instanceof Float32Array) || samples.length < 3 || !(sampleRate > 0)) {
-    return { hz: Number.NaN, debug: null };
-  }
-
-  const peakCount = Number.isFinite(options?.peakCount)
-    ? Math.max(2, Math.floor(options.peakCount))
-    : DEFAULT_PEAK_COUNT;
-  const logCorrelationCutoff = Number.isFinite(options?.logCorrelationCutoff)
-    ? Math.max(0, Math.min(2, options.logCorrelationCutoff))
-    : DEFAULT_LOG_CORRELATION_CUTOFF;
+  const maxExtremaPerFold = Number.isFinite(options?.maxExtremaPerFold)
+    ? Math.max(1, Math.floor(options.maxExtremaPerFold))
+    : DEFAULT_MAX_EXTREMA_PER_FOLD;
+  const maxCrossingsPerPeriod = Number.isFinite(options?.maxCrossingsPerPeriod)
+    ? Math.max(2, Math.floor(options.maxCrossingsPerPeriod))
+    : DEFAULT_MAX_CROSSINGS_PER_PERIOD;
   const maxComparisonPatches = Number.isFinite(options?.maxComparisonPatches)
     ? Math.max(2, Math.floor(options.maxComparisonPatches))
     : DEFAULT_MAX_COMPARISON_PATCHES;
   const maxWalkSteps = Number.isFinite(options?.maxWalkSteps)
     ? Math.max(0, Math.floor(options.maxWalkSteps))
     : DEFAULT_MAX_WALK_STEPS;
-  const peaks = findHighestExtrema(samples, peakCount, "peak");
-  const troughs = findHighestExtrema(samples, peakCount, "trough");
-  const extrema = [...peaks, ...troughs].sort((a, b) => a.index - b.index);
-  if (peaks.length < 2 && troughs.length < 2) {
-    return {
-      hz: Number.NaN,
-      debug: {
-        peakCount,
-        logCorrelationCutoff,
-        maxComparisonPatches,
-        maxWalkSteps,
-        extrema,
-        peaks,
-        troughs,
-        originalCandidatePeriods: [],
-        candidatePeriods: [],
-        candidateFamilies: [],
-        winningPointPair: null,
-        winningPeriodSamples: Number.NaN,
-      }
-    };
-  }
-
-  const peakCandidates = buildCandidatePeriods(
-    samples,
-    peaks,
-    sampleRate,
-    logCorrelationCutoff,
-    maxComparisonPatches,
-    maxWalkSteps,
-    "peak",
-  );
-  const troughCandidates = buildCandidatePeriods(
-    samples,
-    troughs,
-    sampleRate,
-    logCorrelationCutoff,
-    maxComparisonPatches,
-    maxWalkSteps,
-    "trough",
-  );
-  const originalPeriods = [
-    ...peakCandidates.originalPeriods,
-    ...troughCandidates.originalPeriods,
-  ];
-  const dedupedPeriods = [...peakCandidates.dedupedPeriods, ...troughCandidates.dedupedPeriods];
-  const candidateFamilies = [...peakCandidates.candidateFamilies, ...troughCandidates.candidateFamilies];
-  let bestPeriodSamples = Number.NaN;
-  let bestCorrelation = Number.NEGATIVE_INFINITY;
-  let winningPointPair = null;
-  let winningOriginalPeriodSamples = Number.NaN;
-  let winningVariant = "original";
-  let winningType = "peak";
-  for (const candidate of dedupedPeriods) {
-    const correlation = measurePeriodPatchCorrelation(
-      samples,
-      candidate.periodSamples,
-      maxComparisonPatches,
-    );
-    if (correlation <= bestCorrelation) continue;
-    bestCorrelation = correlation;
-    bestPeriodSamples = candidate.periodSamples;
-    winningPointPair = candidate.pointPair;
-    winningOriginalPeriodSamples = candidate.originalPeriodSamples;
-    winningVariant = candidate.variant;
-    winningType = candidate.type;
-  }
-
-  const hz = bestPeriodSamples > 0 ? sampleRate / bestPeriodSamples : Number.NaN;
-  const winningLogCorrelation = toLogCorrelation(bestCorrelation);
-  return {
-    hz,
-    debug: {
-      peakCount,
-      logCorrelationCutoff,
+  const rawGlobalLogCorrelationCutoff = Number.isFinite(options?.rawGlobalLogCorrelationCutoff)
+    ? Math.max(0, options.rawGlobalLogCorrelationCutoff)
+    : DEFAULT_RAW_GLOBAL_LOG_CORRELATION_CUTOFF;
+  const octaveBias = Number.isFinite(options?.octaveBias) ? options.octaveBias : DEFAULT_OCTAVE_BIAS;
+  if (!(samples instanceof Float32Array) || samples.length < 3 || !(sampleRate > 0)) {
+    const debug = buildEmptyDebug(
+      maxExtremaPerFold,
+      maxCrossingsPerPeriod,
       maxComparisonPatches,
       maxWalkSteps,
-      extrema,
-      peaks,
-      troughs,
-      originalCandidatePeriods: originalPeriods,
-      candidatePeriods: dedupedPeriods.map((item) => item.periodSamples),
-      candidateFamilies,
-      winningPointPair,
-      winningPeriodSamples: bestPeriodSamples,
-      winningOriginalPeriodSamples,
-      winningVariant,
-      winningType,
-      winningCorrelation: bestCorrelation,
-      winningLogCorrelation,
-      minHz: RAW_MIN_HZ,
-      maxHz: RAW_MAX_HZ
+      rawGlobalLogCorrelationCutoff,
+      octaveBias,
+    );
+    debug.rejectionReason = "invalid_window";
+    return { hz: Number.NaN, debug };
+  }
+
+  const zeroCrossingCount = countZeroCrossings(samples);
+  const debug = buildEmptyDebug(
+    maxExtremaPerFold,
+    maxCrossingsPerPeriod,
+    maxComparisonPatches,
+    maxWalkSteps,
+    rawGlobalLogCorrelationCutoff,
+    octaveBias,
+  );
+  debug.zeroCrossingCount = zeroCrossingCount;
+
+  if (zeroCrossingCount === 0) {
+    debug.rejectionReason = "no_zero_crossings";
+    return { hz: Number.NaN, debug };
+  }
+
+  const foldData = collectRecentFoldExtrema(samples, maxExtremaPerFold, maxCrossingsPerPeriod);
+  debug.folds = foldData.folds;
+  debug.foldExtrema = foldData.extrema;
+
+  const candidateFamilies = [
+    ...buildCandidateFamilies(
+      samples,
+      foldData.extrema,
+      sampleRate,
+      maxComparisonPatches,
+      maxWalkSteps,
+      "peak",
+    ),
+    ...buildCandidateFamilies(
+      samples,
+      foldData.extrema,
+      sampleRate,
+      maxComparisonPatches,
+      maxWalkSteps,
+      "trough",
+    ),
+  ];
+  debug.candidateFamilies = candidateFamilies;
+  debug.candidatePeriods = candidateFamilies.map((family) => family.periodSamples);
+
+  let bestCandidate = null;
+  for (const family of candidateFamilies) {
+    if (!Number.isFinite(family.correlation)) continue;
+    const weightedScore = getCandidateWeightedScore(
+      family.periodSamples,
+      sampleRate,
+      family.correlation,
+      octaveBias,
+    );
+    if (!Number.isFinite(weightedScore)) continue;
+    if (!bestCandidate || weightedScore > bestCandidate.weightedScore) {
+      bestCandidate = family;
+      bestCandidate.weightedScore = weightedScore;
     }
+  }
+
+  if (!bestCandidate || !Number.isFinite(bestCandidate.periodSamples)) {
+    debug.rejectionReason = "no_candidates";
+    return { hz: Number.NaN, debug };
+  }
+
+  debug.winningPointPair = bestCandidate.pointPair;
+  debug.winningPeriodSamples = bestCandidate.periodSamples;
+  debug.winningCorrelation = bestCandidate.correlation;
+  debug.winningLogCorrelation = toLogCorrelation(bestCandidate.correlation);
+  debug.winningWeightedScore = bestCandidate.weightedScore;
+
+  return {
+    hz: sampleRate / bestCandidate.periodSamples,
+    debug,
   };
+}
+
+export function getHigherCandidateDiagnosticForWindow(result, windowIndex, minRatio = 1.2) {
+  const fftHz = result.pitchHz?.[windowIndex];
+  if (!(fftHz > 0)) return null;
+  const rawDebug = result.rawDebug?.[windowIndex];
+  if (!rawDebug) return null;
+  const minCandidateHz = fftHz * minRatio;
+  const sortedFamilies = [...(rawDebug.candidateFamilies ?? [])].sort(
+    (a, b) => result.sampleRate / a.periodSamples - result.sampleRate / b.periodSamples,
+  );
+  let best = null;
+
+  for (let columnIndex = 0; columnIndex < sortedFamilies.length; columnIndex += 1) {
+    const family = sortedFamilies[columnIndex];
+    if (!Number.isFinite(family?.correlation) || !Number.isFinite(family?.periodSamples)) continue;
+    const candidateHz = result.sampleRate / family.periodSamples;
+    if (!(candidateHz > minCandidateHz)) continue;
+    const item = {
+      windowIndex,
+      timeSec: result.timeSec?.[windowIndex] ?? Number.NaN,
+      fftHz,
+      candidateHz,
+      ratio: candidateHz / fftHz,
+      logCorr: toLogCorrelation(family.correlation),
+      correlation: family.correlation,
+      type: family.type,
+      column: columnIndex + 1,
+      pointPair: family.pointPair,
+      periodSamples: family.periodSamples,
+      sourcePeriodSamples: family.sourcePeriodSamples,
+    };
+    if (!best || item.logCorr > best.logCorr) {
+      best = item;
+    }
+  }
+
+  return best;
+}
+
+export function getSampleMaxHigherCandidateDiagnostic(result, minRatio = 1.2) {
+  let best = null;
+  for (let windowIndex = 0; windowIndex < result.timeSec.length; windowIndex += 1) {
+    const item = getHigherCandidateDiagnosticForWindow(result, windowIndex, minRatio);
+    if (!item) continue;
+    if (!best || item.logCorr > best.logCorr) {
+      best = item;
+    }
+  }
+  return best;
 }
 
 export async function loadPitchSample(audioInput = null) {
@@ -508,18 +608,22 @@ export async function loadPitchSample(audioInput = null) {
 export async function analyzePreparedPitchSample(preparedSample, options = null) {
   const { fftResult, peakinessResult, predictionMask } = preparedSample;
   const rawWindowSamples = getRawSampleWindowSize(fftResult.sampleRate);
-  const peakCount = Number.isFinite(options?.peakCount)
-    ? Math.max(2, Math.floor(options.peakCount))
-    : DEFAULT_PEAK_COUNT;
-  const logCorrelationCutoff = Number.isFinite(options?.logCorrelationCutoff)
-    ? Math.max(0, Math.min(2, options.logCorrelationCutoff))
-    : DEFAULT_LOG_CORRELATION_CUTOFF;
+  const maxExtremaPerFold = Number.isFinite(options?.maxExtremaPerFold)
+    ? Math.max(1, Math.floor(options.maxExtremaPerFold))
+    : DEFAULT_MAX_EXTREMA_PER_FOLD;
+  const maxCrossingsPerPeriod = Number.isFinite(options?.maxCrossingsPerPeriod)
+    ? Math.max(2, Math.floor(options.maxCrossingsPerPeriod))
+    : DEFAULT_MAX_CROSSINGS_PER_PERIOD;
   const maxComparisonPatches = Number.isFinite(options?.maxComparisonPatches)
     ? Math.max(2, Math.floor(options.maxComparisonPatches))
     : DEFAULT_MAX_COMPARISON_PATCHES;
   const maxWalkSteps = Number.isFinite(options?.maxWalkSteps)
     ? Math.max(0, Math.floor(options.maxWalkSteps))
     : DEFAULT_MAX_WALK_STEPS;
+  const rawGlobalLogCorrelationCutoff = Number.isFinite(options?.rawGlobalLogCorrelationCutoff)
+    ? Math.max(0, options.rawGlobalLogCorrelationCutoff)
+    : DEFAULT_RAW_GLOBAL_LOG_CORRELATION_CUTOFF;
+  const octaveBias = Number.isFinite(options?.octaveBias) ? options.octaveBias : DEFAULT_OCTAVE_BIAS;
   const rawPitchHz = new Array(fftResult.timeSec.length);
   const rawDebug = new Array(fftResult.timeSec.length);
   const fftPitchHz = new Array(fftResult.timeSec.length);
@@ -530,35 +634,25 @@ export async function analyzePreparedPitchSample(preparedSample, options = null)
   for (let windowIndex = 0; windowIndex < fftResult.timeSec.length; windowIndex += 1) {
     const endSample = Math.min(
       fftResult.samples.length,
-      Math.max(0, Math.round(fftResult.timeSec[windowIndex] * fftResult.sampleRate))
+      Math.max(0, Math.round(fftResult.timeSec[windowIndex] * fftResult.sampleRate)),
     );
     const startSample = Math.max(0, endSample - rawWindowSamples);
     const windowSamples = fftResult.samples.subarray(startSample, endSample);
     const startMs = performance.now();
-    const rawResult = detectPitchFromRawWindow(windowSamples, fftResult.sampleRate, {
-      peakCount,
-      logCorrelationCutoff,
+    const shouldPredict = predictionMask[windowIndex] === true;
+    const evaluated = evaluateRawWindow(windowSamples, fftResult.sampleRate, shouldPredict, {
+      maxExtremaPerFold,
+      maxCrossingsPerPeriod,
       maxComparisonPatches,
       maxWalkSteps,
+      rawGlobalLogCorrelationCutoff,
+      octaveBias,
     });
-    const histogramPeak = getHistogramPeak(
-      windowSamples,
-      fftResult.sampleRate,
-      maxComparisonPatches,
-    );
-    const maxAmplitude = getMaxAbsoluteAmplitude(windowSamples);
-    const shouldPredict = predictionMask[windowIndex] === true;
-    const passesRawGlobalCutoff =
-      Number.isFinite(rawResult.debug?.winningLogCorrelation) &&
-      rawResult.debug.winningLogCorrelation >= RAW_GLOBAL_LOG_CORRELATION_CUTOFF;
-    const passesAmplitudeCutoff = maxAmplitude >= RAW_MIN_WINDOW_MAX_AMPLITUDE;
     fftPitchHz[windowIndex] = shouldPredict ? fftResult.pitchHz[windowIndex] : Number.NaN;
-    rawPitchHz[windowIndex] =
-      shouldPredict && passesRawGlobalCutoff && passesAmplitudeCutoff ? rawResult.hz : Number.NaN;
-    autocorrelationPitchHz[windowIndex] =
-      shouldPredict && passesRawGlobalCutoff && passesAmplitudeCutoff ? histogramPeak.hz : Number.NaN;
-    rawMaxLogCorrelation[windowIndex] = histogramPeak.logCorrelation;
-    rawDebug[windowIndex] = rawResult.debug;
+    rawPitchHz[windowIndex] = evaluated.rawPitchHz;
+    autocorrelationPitchHz[windowIndex] = evaluated.autocorrelationPitchHz;
+    rawMaxLogCorrelation[windowIndex] = evaluated.histogramPeak.logCorrelation;
+    rawDebug[windowIndex] = evaluated.rawResult.debug;
     rawElapsedMs += performance.now() - startMs;
   }
   const accuracy = scoreRawAccuracy(fftPitchHz, rawPitchHz);
@@ -575,10 +669,12 @@ export async function analyzePreparedPitchSample(preparedSample, options = null)
     rawMaxLogCorrelation,
     rawDebug,
     rawSettings: {
-      peakCount,
-      logCorrelationCutoff,
+      maxExtremaPerFold,
+      maxCrossingsPerPeriod,
       maxComparisonPatches,
       maxWalkSteps,
+      rawGlobalLogCorrelationCutoff,
+      octaveBias,
     },
     metrics: {
       rawAccuracy: accuracy.accuracy,
@@ -594,8 +690,8 @@ export async function analyzePreparedPitchSample(preparedSample, options = null)
       rawMsPerSecondAudio:
         fftResult.timeSec.length > 0
           ? rawElapsedMs / (fftResult.timeSec.length / fftResult.samplesPerSecond)
-          : Number.NaN
-    }
+          : Number.NaN,
+    },
   };
 }
 

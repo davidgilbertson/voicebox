@@ -3,7 +3,7 @@ import {
   RAW_SAMPLE_WINDOW_DURATION_SEC,
   RAW_SAMPLE_WINDOW_SAMPLES_AT_48K,
 } from "./windowing.js";
-import { buildRawCorrelationHistogram } from "./analysis.js";
+import { buildRawCorrelationHistogram, evaluateRawWindow } from "./analysis.js";
 
 let detachWindowKeyHandler = null;
 const MAX_LOG_CORRELATION = 0.999999;
@@ -70,7 +70,7 @@ function buildPitchPeriodMarkers(waveformWindow) {
 }
 
 function buildPeakMarkers(waveformWindow) {
-  const extrema = waveformWindow.rawDebug?.extrema ?? waveformWindow.rawDebug?.peaks ?? [];
+  const extrema = waveformWindow.rawDebug?.foldExtrema ?? [];
   const x = [];
   const y = [];
   const color = [];
@@ -87,81 +87,12 @@ function buildPeakMarkers(waveformWindow) {
 }
 
 function buildWinningPeriodBox(waveformWindow) {
-  const originalPeriodSamples = waveformWindow.rawDebug?.winningOriginalPeriodSamples;
   const winningPeriodSamples = waveformWindow.rawDebug?.winningPeriodSamples;
-  const variant = waveformWindow.rawDebug?.winningVariant ?? "original";
   if (!(winningPeriodSamples > 0) || !(waveformWindow.endTimeSec > waveformWindow.timeSec[0])) {
     return [];
   }
-  const originalWidthSec =
-    originalPeriodSamples > 0 ? originalPeriodSamples / waveformWindow.sampleRate : Number.NaN;
   const winningWidthSec = winningPeriodSamples / waveformWindow.sampleRate;
   const periodEndSec = waveformWindow.endTimeSec;
-
-  if (variant === "half") {
-    const periodStartSec = periodEndSec - 2 * winningWidthSec;
-    const midpointSec = periodEndSec - winningWidthSec;
-    return [
-      {
-        type: "rect",
-        xref: "x",
-        yref: "paper",
-        x0: periodStartSec,
-        x1: midpointSec,
-        y0: 0,
-        y1: 1,
-        fillcolor: "rgba(255, 255, 255, 0.2)",
-        line: { width: 0 },
-        layer: "below",
-      },
-      {
-        type: "rect",
-        xref: "x",
-        yref: "paper",
-        x0: midpointSec,
-        x1: periodEndSec,
-        y0: 0,
-        y1: 1,
-        fillcolor: "rgba(248, 113, 113, 0.2)",
-        line: { width: 0 },
-        layer: "below",
-      },
-    ];
-  }
-
-  if (variant === "double") {
-    const periodStartSec = periodEndSec - winningWidthSec;
-    const splitSec = Number.isFinite(originalWidthSec)
-      ? periodEndSec - originalWidthSec
-      : periodStartSec + winningWidthSec / 2;
-    return [
-      {
-        type: "rect",
-        xref: "x",
-        yref: "paper",
-        x0: periodStartSec,
-        x1: splitSec,
-        y0: 0,
-        y1: 1,
-        fillcolor: "rgba(96, 165, 250, 0.2)",
-        line: { width: 0 },
-        layer: "below",
-      },
-      {
-        type: "rect",
-        xref: "x",
-        yref: "paper",
-        x0: splitSec,
-        x1: periodEndSec,
-        y0: 0,
-        y1: 1,
-        fillcolor: "rgba(255, 255, 255, 0.2)",
-        line: { width: 0 },
-        layer: "below",
-      },
-    ];
-  }
-
   return [
     {
       type: "rect",
@@ -188,13 +119,6 @@ function centsDifference(aHz, bHz) {
   return Math.abs(1200 * Math.log2(aHz / bHz));
 }
 
-function formatCandidateValue(correlation, periodSamples, sampleRate) {
-  if (!Number.isFinite(correlation) || !Number.isFinite(periodSamples) || !(sampleRate > 0)) {
-    return "n/a";
-  }
-  return `${(sampleRate / periodSamples).toFixed(1)} Hz | ${toLogCorrelation(correlation).toFixed(3)}`;
-}
-
 function getHeatmapStyle(correlation) {
   if (!Number.isFinite(correlation) || correlation <= 0) {
     return "background: rgba(15, 23, 42, 0.4);";
@@ -207,59 +131,45 @@ function getHeatmapStyle(correlation) {
 function buildCandidateTableDebugRows(waveformWindow) {
   const families = waveformWindow.rawDebug?.candidateFamilies ?? [];
   const sortedFamilies = [...families].sort(
-    (a, b) =>
-      waveformWindow.sampleRate / a.originalPeriodSamples -
-      waveformWindow.sampleRate / b.originalPeriodSamples,
+    (a, b) => waveformWindow.sampleRate / a.periodSamples - waveformWindow.sampleRate / b.periodSamples,
   );
   return sortedFamilies.map((family, index) => ({
     column: index + 1,
     type: family.type,
     pointPair: family.pointPair,
     sourcePeriodSamples: family.sourcePeriodSamples,
-    originalPeriodSamples: family.originalPeriodSamples,
-    half: {
-      enabled: Number.isFinite(family.half?.correlation),
-      hz:
-        Number.isFinite(family.half?.periodSamples) && waveformWindow.sampleRate > 0
-          ? waveformWindow.sampleRate / family.half.periodSamples
-          : Number.NaN,
-      logCorr: toLogCorrelation(family.half?.correlation),
-      periodSamples: family.half?.periodSamples,
-    },
-    original: {
-      enabled: Number.isFinite(family.original?.correlation),
-      hz:
-        Number.isFinite(family.original?.periodSamples) && waveformWindow.sampleRate > 0
-          ? waveformWindow.sampleRate / family.original.periodSamples
-          : Number.NaN,
-      logCorr: toLogCorrelation(family.original?.correlation),
-      periodSamples: family.original?.periodSamples,
-    },
-    double: {
-      enabled: family.allowDouble && Number.isFinite(family.double?.correlation),
-      hz:
-        Number.isFinite(family.double?.periodSamples) && waveformWindow.sampleRate > 0
-          ? waveformWindow.sampleRate / family.double.periodSamples
-          : Number.NaN,
-      logCorr: toLogCorrelation(family.double?.correlation),
-      periodSamples: family.double?.periodSamples,
-    },
+    periodSamples: family.periodSamples,
+    hz:
+      Number.isFinite(family.periodSamples) && waveformWindow.sampleRate > 0
+        ? waveformWindow.sampleRate / family.periodSamples
+        : Number.NaN,
+    logCorr: toLogCorrelation(family.correlation),
+    weightedScore:
+      Number.isFinite(family.periodSamples) &&
+      waveformWindow.sampleRate > 0 &&
+      Number.isFinite(family.correlation)
+        ? toLogCorrelation(family.correlation) +
+          (waveformWindow.rawDebug?.octaveBias ?? 0) *
+            Math.log2(waveformWindow.sampleRate / family.periodSamples / 40)
+        : Number.NaN,
   }));
 }
 
-function logSelectedWindowDebug(waveformWindow) {
-  console.log("rawSamplePitch:selectedWindow", {
+function logSelectedWindowDebug(waveformWindow, freshRawDebug = null) {
+  console.log("TEST rawSamplePitch:selectedWindow", {
     windowIndex: waveformWindow.windowIndex,
     endTimeSec: waveformWindow.endTimeSec,
     fftPitchHz: waveformWindow.fftPitchHz,
     displayedPitchHz: waveformWindow.pitchHz,
     rawMaxLogCorrelation: waveformWindow.result?.rawMaxLogCorrelation?.[waveformWindow.windowIndex],
-    winningVariant: waveformWindow.rawDebug?.winningVariant,
     winningPeriodSamples: waveformWindow.rawDebug?.winningPeriodSamples,
-    winningOriginalPeriodSamples: waveformWindow.rawDebug?.winningOriginalPeriodSamples,
     winningPointPair: waveformWindow.rawDebug?.winningPointPair,
     candidatePeriods: waveformWindow.rawDebug?.candidatePeriods,
+    zeroCrossingCount: waveformWindow.rawDebug?.zeroCrossingCount,
+    rejectionReason: waveformWindow.rawDebug?.rejectionReason,
+    winningWeightedScore: waveformWindow.rawDebug?.winningWeightedScore,
     table: buildCandidateTableDebugRows(waveformWindow),
+    freshRawDebug,
   });
 }
 
@@ -267,102 +177,92 @@ function renderCandidateTable(waveformWindow) {
   const panel = document.getElementById("candidatePanel");
   if (!panel) return;
   const families = waveformWindow.rawDebug?.candidateFamilies ?? [];
-  const peakCount = Math.max(2, Math.floor(waveformWindow.rawDebug?.peakCount ?? 2));
-  const familyColumnCount = Math.max(0, (peakCount - 1) * 2);
-  if (familyColumnCount === 0) {
+  if (families.length === 0) {
     panel.innerHTML = "";
     return;
   }
+
   const fftPitchHz = waveformWindow.fftPitchHz;
   let closestCandidateKey = null;
   let closestCandidateDistance = Number.POSITIVE_INFINITY;
   families.forEach((family, familyIndex) => {
-    for (const key of ["half", "original", "double"]) {
-      const candidate = family[key];
-      const isEnabled = key !== "double" || family.allowDouble;
-      const candidateHz =
-        isEnabled && Number.isFinite(candidate?.periodSamples) && waveformWindow.sampleRate > 0
-          ? waveformWindow.sampleRate / candidate.periodSamples
-          : Number.NaN;
-      const distance = centsDifference(candidateHz, fftPitchHz);
-      if (distance < closestCandidateDistance) {
-        closestCandidateDistance = distance;
-        closestCandidateKey = `${familyIndex}:${key}`;
-      }
+    const candidateHz =
+      Number.isFinite(family?.periodSamples) && waveformWindow.sampleRate > 0
+        ? waveformWindow.sampleRate / family.periodSamples
+        : Number.NaN;
+    const distance = centsDifference(candidateHz, fftPitchHz);
+    if (distance < closestCandidateDistance) {
+      closestCandidateDistance = distance;
+      closestCandidateKey = `${familyIndex}`;
     }
   });
-  const sortedFamilies = [...families].sort(
-    (a, b) =>
-      waveformWindow.sampleRate / a.originalPeriodSamples -
-      waveformWindow.sampleRate / b.originalPeriodSamples,
-  );
-  const paddedFamilies = Array.from(
-    { length: familyColumnCount },
-    (_, index) => sortedFamilies[index] ?? null,
-  );
-  const headerCells = paddedFamilies
-    .map((family, index) => {
-      if (!family) return `<th>${index + 1}</th>`;
-      return `<th>${index + 1}. ${family.type}</th>`;
-    })
-    .join("");
-  const rows = [
-    {
-      label: "Candidate",
-      render: (family) =>
-        family
-          ? `${(waveformWindow.sampleRate / family.originalPeriodSamples).toFixed(1)} Hz | ${family.originalPeriodSamples} smp`
-          : "",
-    },
-    { label: "Half", key: "half" },
-    { label: "Base", key: "original" },
-    { label: "Double", key: "double" },
-  ]
-    .map((row) => {
-      const cells = paddedFamilies
-        .map((family) => {
-          if (!family) return `<td class="candidate-value candidate-empty"></td>`;
-          if (!row.key) return `<td class="candidate-meta">${row.render(family)}</td>`;
 
-          const selectedVariant =
+  const renderFamilyTable = (type) => {
+    const sortedFamilies = families
+      .filter((family) => family.type === type)
+      .sort(
+        (a, b) =>
+          waveformWindow.sampleRate / a.periodSamples - waveformWindow.sampleRate / b.periodSamples,
+      );
+    if (sortedFamilies.length === 0) return "";
+
+    const headerCells = sortedFamilies.map((_, index) => `<th>${index + 1}</th>`).join("");
+    const rows = [
+      {
+        label: "Candidate",
+        render: (family) =>
+          `<td class="candidate-meta">${(waveformWindow.sampleRate / family.periodSamples).toFixed(1)} Hz | ${family.periodSamples} smp</td>`,
+      },
+      {
+        label: "Source gap",
+        render: (family) => `<td class="candidate-meta">${family.sourcePeriodSamples} smp</td>`,
+      },
+      {
+        label: "logCorr",
+        render: (family, originalFamilyIndex) => {
+          const selected =
             waveformWindow.rawDebug?.winningPointPair?.[0] === family.pointPair?.[0] &&
-            waveformWindow.rawDebug?.winningPointPair?.[1] === family.pointPair?.[1]
-              ? waveformWindow.rawDebug?.winningVariant
-              : null;
-          const candidate = family[row.key];
-          const isEnabled = row.key !== "double" || family.allowDouble;
-          const className =
-            !isEnabled || !Number.isFinite(candidate?.correlation)
-              ? "candidate-value candidate-empty"
-              : `candidate-value${selectedVariant === row.key ? " candidate-selected" : ""}`;
-          const style =
-            !isEnabled || !Number.isFinite(candidate?.correlation)
-              ? ""
-              : getHeatmapStyle(candidate.correlation);
-          const originalFamilyIndex = families.indexOf(family);
-          const closestClass =
-            closestCandidateKey === `${originalFamilyIndex}:${row.key}` ? " font-weight: 700;" : "";
-          return `<td class="${className}" style="${style}${closestClass}">${formatCandidateValue(
-            isEnabled ? candidate?.correlation : Number.NaN,
-            candidate?.periodSamples,
-            waveformWindow.sampleRate,
-          )}</td>`;
-        })
-        .join("");
-      return `<tr><th>${row.label}</th>${cells}</tr>`;
-    })
-    .join("");
-  panel.innerHTML = `
-    <table class="candidate-table">
-      <thead>
-        <tr>
-          <th>Row</th>
-          ${headerCells}
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
+            waveformWindow.rawDebug?.winningPointPair?.[1] === family.pointPair?.[1];
+          const className = `candidate-value${selected ? " candidate-selected" : ""}`;
+          const style = `${getHeatmapStyle(family.correlation)}${
+            closestCandidateKey === `${originalFamilyIndex}` ? " font-weight: 700;" : ""
+          }`;
+          return `<td class="${className}" style="${style}">${toLogCorrelation(family.correlation).toFixed(3)}</td>`;
+        },
+      },
+      {
+        label: "weighted",
+        render: (family) => {
+          const candidateHz = waveformWindow.sampleRate / family.periodSamples;
+          const weightedScore =
+            toLogCorrelation(family.correlation) +
+            (waveformWindow.rawDebug?.octaveBias ?? 0) * Math.log2(candidateHz / 40);
+          return `<td class="candidate-meta">${weightedScore.toFixed(3)}</td>`;
+        },
+      },
+    ]
+      .map((row) => {
+        const cells = sortedFamilies
+          .map((family) => row.render(family, families.indexOf(family)))
+          .join("");
+        return `<tr><th>${row.label}</th>${cells}</tr>`;
+      })
+      .join("");
+
+    return `
+      <table class="candidate-table">
+        <thead>
+          <tr>
+            <th>${type}</th>
+            ${headerCells}
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  };
+
+  panel.innerHTML = `${renderFamilyTable("peak")}${renderFamilyTable("trough")}`;
 }
 
 async function renderCorrelationHistogram(plotly, waveformWindow) {
@@ -373,23 +273,16 @@ async function renderCorrelationHistogram(plotly, waveformWindow) {
   );
   const logCorrelation = histogram.correlation.map(toLogCorrelation);
   const fftPitchHz = waveformWindow.fftPitchHz;
-  const fftPitchRoundedHz = Number.isFinite(fftPitchHz) ? Math.round(fftPitchHz) : null;
-  const fftPitchIndex =
-    Number.isInteger(fftPitchRoundedHz) &&
-    fftPitchRoundedHz >= histogram.minHz &&
-    fftPitchRoundedHz <= histogram.maxHz
-      ? fftPitchRoundedHz - histogram.minHz
-      : -1;
   await plotly.newPlot(
     "harmonicChart",
     [
       Number.isFinite(fftPitchHz)
         ? {
-            x: [fftPitchHz, fftPitchHz],
-            y: [0, Math.max(...logCorrelation, 0)],
-            mode: "lines",
-            line: { color: "rgba(255, 255, 255, 0.95)", width: 1.5, dash: "dot" },
-            hoverinfo: "skip",
+            x: [fftPitchHz],
+            y: [Math.max(...logCorrelation, 0)],
+            mode: "markers",
+            marker: { color: "rgba(248, 113, 113, 0.95)", size: 3 },
+            hovertemplate: "FFT=%{x:.2f} Hz<extra></extra>",
             showlegend: false,
           }
         : null,
@@ -429,28 +322,9 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
     [
       {
         x: result.timeSec,
-        y: result.autocorrelationPitchHz,
-        mode: "lines",
-        line: { width: 2, color: "rgba(74, 222, 128, 0.7)", dash: "dot" },
-        connectgaps: false,
-        hovertemplate: "t=%{x:.3f}s<br>Auto=%{y:.2f} Hz<extra></extra>",
-        name: "Autocorrelation",
-      },
-      {
-        x: result.timeSec,
-        y: result.rawMaxLogCorrelation,
-        mode: "lines",
-        line: { width: 2, color: "rgba(250, 204, 21, 0.7)", dash: "dot" },
-        connectgaps: false,
-        hovertemplate: "t=%{x:.3f}s<br>Max logCorr=%{y:.3f}<extra></extra>",
-        name: "Raw Max logCorr",
-        yaxis: "y2",
-      },
-      {
-        x: result.timeSec,
         y: result.pitchHz,
         mode: "lines",
-        line: { width: 3, color: "rgba(56, 189, 248, 0.7)", dash: "dash" },
+        line: { width: 3, color: "rgba(56, 189, 248, 0.35)", dash: "dash" },
         connectgaps: false,
         hovertemplate: "t=%{x:.3f}s<br>Pitch=%{y:.2f} Hz<extra></extra>",
         name: "Voicebox FFT",
@@ -459,7 +333,7 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
         x: result.timeSec,
         y: result.rawPitchHz,
         mode: "lines",
-        line: { width: 2.5, color: "rgba(248, 113, 113, 0.7)", dash: "dot" },
+        line: { width: 1, color: "rgba(248, 113, 113, 0.95)" },
         connectgaps: false,
         hovertemplate: "t=%{x:.3f}s<br>Raw=%{y:.2f} Hz<extra></extra>",
         name: "Voicebox Raw",
@@ -488,18 +362,11 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
         type: "log",
         range: [Math.log10(40), Math.log10(1000)],
       },
-      yaxis2: {
-        title: "Max logCorr",
-        overlaying: "y",
-        side: "right",
-        rangemode: "tozero",
-        showgrid: false,
-      },
     },
     { responsive: true },
   );
 
-  async function renderWaveformChart(windowIndex) {
+  async function renderWaveformChart(windowIndex, shouldLogDebug = false) {
     const waveformWindow = getWaveformWindow(windowIndex);
     const peakMarkers = buildPeakMarkers(waveformWindow);
     const periodMarkers = buildPitchPeriodMarkers(waveformWindow);
@@ -556,7 +423,29 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
       { responsive: true },
     );
     renderCandidateTable(waveformWindow);
-    logSelectedWindowDebug({ ...waveformWindow, result });
+    if (shouldLogDebug) {
+      const freshEvaluation = evaluateRawWindow(
+        waveformWindow.samples,
+        waveformWindow.sampleRate,
+        Number.isFinite(waveformWindow.fftPitchHz),
+        result.rawSettings,
+      );
+      logSelectedWindowDebug(
+        { ...waveformWindow, result },
+        {
+          rejectionReason: freshEvaluation.rawResult.debug?.rejectionReason,
+          zeroCrossingCount: freshEvaluation.rawResult.debug?.zeroCrossingCount,
+          winningLogCorrelation: freshEvaluation.rawResult.debug?.winningLogCorrelation,
+          winningWeightedScore: freshEvaluation.rawResult.debug?.winningWeightedScore,
+          winningPeriodSamples: freshEvaluation.rawResult.debug?.winningPeriodSamples,
+          candidatePeriods: freshEvaluation.rawResult.debug?.candidatePeriods,
+          rawPitchHz: freshEvaluation.rawPitchHz,
+          autocorrelationPitchHz: freshEvaluation.autocorrelationPitchHz,
+          maxAmplitude: freshEvaluation.maxAmplitude,
+          histogramLogCorrelation: freshEvaluation.histogramPeak.logCorrelation,
+        },
+      );
+    }
     await renderCorrelationHistogram(plotly, waveformWindow);
   }
 
@@ -564,7 +453,7 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
     const hz = getSelectedPitch(result, windowIndex);
     const x = Number.isFinite(hz) ? [[result.timeSec[windowIndex]]] : [[]];
     const y = Number.isFinite(hz) ? [[hz]] : [[]];
-    plotly.restyle("pitchChart", { x, y }, [4]);
+    plotly.restyle("pitchChart", { x, y }, [2]);
   }
 
   function updateSelectedHzTitle(windowIndex) {
@@ -576,23 +465,23 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
   const maxWindowIndex = Math.max(0, result.timeSec.length - 1);
   let activeWindowIndex = Math.max(0, Math.min(maxWindowIndex, selectedWindowIndex));
 
-  async function selectWindow(windowIndex) {
+  async function selectWindow(windowIndex, shouldLogDebug = false) {
     activeWindowIndex = Math.max(0, Math.min(maxWindowIndex, windowIndex));
     updateSelectedWindowMarker(activeWindowIndex);
     updateSelectedHzTitle(activeWindowIndex);
-    await renderWaveformChart(activeWindowIndex);
+    await renderWaveformChart(activeWindowIndex, shouldLogDebug);
     if (typeof onWindowSelect === "function") {
       onWindowSelect(activeWindowIndex);
     }
   }
 
-  await selectWindow(activeWindowIndex);
+  await selectWindow(activeWindowIndex, false);
 
   const pitchChartElement = document.getElementById("pitchChart");
   pitchChartElement.on("plotly_click", async (event) => {
     const pointIndex = event.points?.[0]?.pointIndex;
     if (!Number.isInteger(pointIndex)) return;
-    await selectWindow(pointIndex);
+    await selectWindow(pointIndex, true);
   });
 
   if (detachWindowKeyHandler) {
@@ -612,10 +501,10 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
     }
     event.preventDefault();
     if (event.key === "ArrowLeft") {
-      void selectWindow(activeWindowIndex - 1);
+      void selectWindow(activeWindowIndex - 1, true);
       return;
     }
-    void selectWindow(activeWindowIndex + 1);
+    void selectWindow(activeWindowIndex + 1, true);
   };
   window.addEventListener("keydown", keydownHandler);
   detachWindowKeyHandler = () => {

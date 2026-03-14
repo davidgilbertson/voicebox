@@ -28,10 +28,7 @@ export function getRawWaveformWindow(result, windowIndex) {
   return {
     windowIndex: clampedWindowIndex,
     fftPitchHz: result.pitchHz[clampedWindowIndex],
-    pitchHz:
-      result.rawPitchHz?.[clampedWindowIndex] > 0
-        ? result.rawPitchHz[clampedWindowIndex]
-        : result.pitchHz[clampedWindowIndex],
+    pitchHz: result.rawPitchHz?.[clampedWindowIndex],
     rawDebug: result.rawDebug?.[clampedWindowIndex] ?? null,
     sampleRate: result.sampleRate,
     endSample,

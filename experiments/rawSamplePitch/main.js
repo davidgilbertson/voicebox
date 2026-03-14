@@ -17,16 +17,21 @@ import {
 } from "../audioSource.js";
 
 const SELECTED_WINDOW_STORAGE_KEY = "voicebox.rawSamplePitch.selectedWindowIndex";
-const TOP_PEAK_COUNT_STORAGE_KEY = "voicebox.rawSamplePitch.topPeakCount";
-const LOG_CORRELATION_CUTOFF_STORAGE_KEY = "voicebox.rawSamplePitch.logCorrelationCutoff";
+const MAX_EXTREMA_PER_FOLD_STORAGE_KEY = "voicebox.rawSamplePitch.maxExtremaPerFold";
+const MAX_CROSSINGS_PER_PERIOD_STORAGE_KEY = "voicebox.rawSamplePitch.maxCrossingsPerPeriod";
 const MAX_COMPARISON_PATCHES_STORAGE_KEY = "voicebox.rawSamplePitch.maxComparisonPatches";
 const MAX_WALK_STEPS_STORAGE_KEY = "voicebox.rawSamplePitch.maxWalkSteps";
+const RAW_GLOBAL_LOG_CORRELATION_CUTOFF_STORAGE_KEY =
+  "voicebox.rawSamplePitch.rawGlobalLogCorrelationCutoff";
+const OCTAVE_BIAS_STORAGE_KEY = "voicebox.rawSamplePitch.octaveBias";
 const DEFAULT_ASSET_URL = "../../.private/assets/High ah gaps.wav";
 const RECORD_DURATION_MS = 5000;
-const DEFAULT_TOP_PEAK_COUNT = 8;
-const DEFAULT_LOG_CORRELATION_CUTOFF = 2;
+const DEFAULT_MAX_EXTREMA_PER_FOLD = 2;
+const DEFAULT_MAX_CROSSINGS_PER_PERIOD = 20;
 const DEFAULT_MAX_COMPARISON_PATCHES = 3;
 const DEFAULT_MAX_WALK_STEPS = 10;
+const DEFAULT_RAW_GLOBAL_LOG_CORRELATION_CUTOFF = 0;
+const DEFAULT_OCTAVE_BIAS = 0;
 
 function exposeResultForDebug(result) {
   window.rawSamplePitchDebug = {
@@ -57,31 +62,27 @@ function writeSelectedWindowIndex(windowIndex) {
   }
 }
 
-function readTopPeakCount() {
-  const raw = localStorage.getItem(TOP_PEAK_COUNT_STORAGE_KEY);
+function readMaxExtremaPerFold() {
+  const raw = localStorage.getItem(MAX_EXTREMA_PER_FOLD_STORAGE_KEY);
   const parsed = Number.parseInt(raw ?? "", 10);
-  return Number.isInteger(parsed) && parsed >= 2 ? parsed : DEFAULT_TOP_PEAK_COUNT;
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : DEFAULT_MAX_EXTREMA_PER_FOLD;
 }
 
-function writeTopPeakCount(topPeakCount) {
-  if (Number.isInteger(topPeakCount) && topPeakCount >= 2) {
-    localStorage.setItem(TOP_PEAK_COUNT_STORAGE_KEY, String(topPeakCount));
+function writeMaxExtremaPerFold(maxExtremaPerFold) {
+  if (Number.isInteger(maxExtremaPerFold) && maxExtremaPerFold >= 1) {
+    localStorage.setItem(MAX_EXTREMA_PER_FOLD_STORAGE_KEY, String(maxExtremaPerFold));
   }
 }
 
-function readLogCorrelationCutoff() {
-  const raw = Number(localStorage.getItem(LOG_CORRELATION_CUTOFF_STORAGE_KEY));
-  return Number.isFinite(raw)
-    ? Math.max(0, Math.min(2, raw))
-    : DEFAULT_LOG_CORRELATION_CUTOFF;
+function readMaxCrossingsPerPeriod() {
+  const raw = localStorage.getItem(MAX_CROSSINGS_PER_PERIOD_STORAGE_KEY);
+  const parsed = Number.parseInt(raw ?? "", 10);
+  return Number.isInteger(parsed) && parsed >= 2 ? parsed : DEFAULT_MAX_CROSSINGS_PER_PERIOD;
 }
 
-function writeLogCorrelationCutoff(logCorrelationCutoff) {
-  if (Number.isFinite(logCorrelationCutoff)) {
-    localStorage.setItem(
-      LOG_CORRELATION_CUTOFF_STORAGE_KEY,
-      String(Math.max(0, Math.min(2, logCorrelationCutoff))),
-    );
+function writeMaxCrossingsPerPeriod(maxCrossingsPerPeriod) {
+  if (Number.isInteger(maxCrossingsPerPeriod) && maxCrossingsPerPeriod >= 2) {
+    localStorage.setItem(MAX_CROSSINGS_PER_PERIOD_STORAGE_KEY, String(maxCrossingsPerPeriod));
   }
 }
 
@@ -107,29 +108,63 @@ function writeMaxWalkSteps(maxWalkSteps) {
   }
 }
 
+function readRawGlobalLogCorrelationCutoff() {
+  const raw = Number(localStorage.getItem(RAW_GLOBAL_LOG_CORRELATION_CUTOFF_STORAGE_KEY));
+  return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_RAW_GLOBAL_LOG_CORRELATION_CUTOFF;
+}
+
+function writeRawGlobalLogCorrelationCutoff(rawGlobalLogCorrelationCutoff) {
+  if (Number.isFinite(rawGlobalLogCorrelationCutoff) && rawGlobalLogCorrelationCutoff >= 0) {
+    localStorage.setItem(
+      RAW_GLOBAL_LOG_CORRELATION_CUTOFF_STORAGE_KEY,
+      String(rawGlobalLogCorrelationCutoff),
+    );
+  }
+}
+
+function readOctaveBias() {
+  const raw = Number(localStorage.getItem(OCTAVE_BIAS_STORAGE_KEY));
+  return Number.isFinite(raw) ? raw : DEFAULT_OCTAVE_BIAS;
+}
+
+function writeOctaveBias(octaveBias) {
+  if (Number.isFinite(octaveBias)) {
+    localStorage.setItem(OCTAVE_BIAS_STORAGE_KEY, String(octaveBias));
+  }
+}
+
 function readRawOptions(
-  topPeakCountInput,
-  logCorrelationCutoffInput,
+  maxExtremaPerFoldInput,
+  maxCrossingsPerPeriodInput,
   maxComparisonPatchesInput,
   maxWalkStepsInput,
+  rawGlobalLogCorrelationCutoffInput,
+  octaveBiasInput,
 ) {
-  const topPeakCount = Number(topPeakCountInput?.value);
-  const logCorrelationCutoff = Number(logCorrelationCutoffInput?.value);
+  const maxExtremaPerFold = Number(maxExtremaPerFoldInput?.value);
+  const maxCrossingsPerPeriod = Number(maxCrossingsPerPeriodInput?.value);
   const maxComparisonPatches = Number(maxComparisonPatchesInput?.value);
   const maxWalkSteps = Number(maxWalkStepsInput?.value);
+  const rawGlobalLogCorrelationCutoff = Number(rawGlobalLogCorrelationCutoffInput?.value);
+  const octaveBias = Number(octaveBiasInput?.value);
   return {
-    peakCount: Number.isFinite(topPeakCount)
-      ? Math.max(2, Math.floor(topPeakCount))
-      : DEFAULT_TOP_PEAK_COUNT,
-    logCorrelationCutoff: Number.isFinite(logCorrelationCutoff)
-      ? Math.max(0, Math.min(2, logCorrelationCutoff))
-      : DEFAULT_LOG_CORRELATION_CUTOFF,
+    maxExtremaPerFold: Number.isFinite(maxExtremaPerFold)
+      ? Math.max(1, Math.floor(maxExtremaPerFold))
+      : DEFAULT_MAX_EXTREMA_PER_FOLD,
+    maxCrossingsPerPeriod: Number.isFinite(maxCrossingsPerPeriod)
+      ? Math.max(2, Math.floor(maxCrossingsPerPeriod))
+      : DEFAULT_MAX_CROSSINGS_PER_PERIOD,
     maxComparisonPatches: Number.isFinite(maxComparisonPatches)
       ? Math.max(2, Math.floor(maxComparisonPatches))
       : DEFAULT_MAX_COMPARISON_PATCHES,
     maxWalkSteps: Number.isFinite(maxWalkSteps)
       ? Math.max(0, Math.floor(maxWalkSteps))
       : DEFAULT_MAX_WALK_STEPS,
+    rawGlobalLogCorrelationCutoff:
+      Number.isFinite(rawGlobalLogCorrelationCutoff) && rawGlobalLogCorrelationCutoff >= 0
+        ? rawGlobalLogCorrelationCutoff
+        : DEFAULT_RAW_GLOBAL_LOG_CORRELATION_CUTOFF,
+    octaveBias: Number.isFinite(octaveBias) ? octaveBias : DEFAULT_OCTAVE_BIAS,
   };
 }
 
@@ -200,18 +235,16 @@ async function renderResult(result, selectedWindowIndex) {
     getWaveformWindow: (windowIndex) => getRawWaveformWindow(result, windowIndex),
     onWindowSelect: writeSelectedWindowIndex,
   });
-  const selectedDiagnostic = getHigherCandidateDiagnosticForWindow(result, selectedWindowIndex, 1.2);
-  const sampleDiagnostic = getSampleMaxHigherCandidateDiagnostic(result, 1.2);
-  console.log("rawSamplePitch:higherCandidateSelected", selectedDiagnostic);
-  console.log("rawSamplePitch:higherCandidateSampleMax", sampleDiagnostic);
 }
 
 async function analyzeSelectedSource(
   sourceSelect,
-  topPeakCountInput,
-  logCorrelationCutoffInput,
+  maxExtremaPerFoldInput,
+  maxCrossingsPerPeriodInput,
   maxComparisonPatchesInput,
   maxWalkStepsInput,
+  rawGlobalLogCorrelationCutoffInput,
+  octaveBiasInput,
 ) {
   const source = getCurrentSelection(sourceSelect);
   const input = loadAudioInputForSource(source);
@@ -220,20 +253,24 @@ async function analyzeSelectedSource(
   }
   const preparedSample = await loadPitchSample(input);
   const rawOptions = readRawOptions(
-    topPeakCountInput,
-    logCorrelationCutoffInput,
+    maxExtremaPerFoldInput,
+    maxCrossingsPerPeriodInput,
     maxComparisonPatchesInput,
     maxWalkStepsInput,
+    rawGlobalLogCorrelationCutoffInput,
+    octaveBiasInput,
   );
   const result = await analyzePreparedPitchSample(preparedSample, rawOptions);
   await renderResult(result, readSelectedWindowIndex());
   updatePerformanceInfo(result);
-  writeTopPeakCount(rawOptions.peakCount);
-  writeLogCorrelationCutoff(rawOptions.logCorrelationCutoff);
+  writeMaxExtremaPerFold(rawOptions.maxExtremaPerFold);
+  writeMaxCrossingsPerPeriod(rawOptions.maxCrossingsPerPeriod);
   writeMaxComparisonPatches(rawOptions.maxComparisonPatches);
   writeMaxWalkSteps(rawOptions.maxWalkSteps);
+  writeRawGlobalLogCorrelationCutoff(rawOptions.rawGlobalLogCorrelationCutoff);
+  writeOctaveBias(rawOptions.octaveBias);
   setStatus(
-    `Loaded ${source.label}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, rawWindow=${RAW_SAMPLE_WINDOW_SAMPLES_AT_48K} samples @ 48k, topPeaks=${rawOptions.peakCount}, logCutoff=${rawOptions.logCorrelationCutoff.toFixed(2)}, maxPatches=${rawOptions.maxComparisonPatches}, maxWalk=${rawOptions.maxWalkSteps}`,
+    `Loaded ${source.label}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, rawWindow=${RAW_SAMPLE_WINDOW_SAMPLES_AT_48K} samples @ 48k, maxExtremaPerFold=${rawOptions.maxExtremaPerFold}, maxCrossingsPerPeriod=${rawOptions.maxCrossingsPerPeriod}, maxPatches=${rawOptions.maxComparisonPatches}, maxWalk=${rawOptions.maxWalkSteps}, rawCutoff=${rawOptions.rawGlobalLogCorrelationCutoff.toFixed(2)}, octaveBias=${rawOptions.octaveBias.toFixed(2)}`,
   );
   return result;
 }
@@ -241,17 +278,21 @@ async function analyzeSelectedSource(
 async function analyzeFromMicrophone(
   recordButton,
   sourceSelect,
-  topPeakCountInput,
-  logCorrelationCutoffInput,
+  maxExtremaPerFoldInput,
+  maxCrossingsPerPeriodInput,
   maxComparisonPatchesInput,
   maxWalkStepsInput,
+  rawGlobalLogCorrelationCutoffInput,
+  octaveBiasInput,
 ) {
   recordButton.disabled = true;
   sourceSelect.disabled = true;
-  topPeakCountInput.disabled = true;
-  logCorrelationCutoffInput.disabled = true;
+  maxExtremaPerFoldInput.disabled = true;
+  maxCrossingsPerPeriodInput.disabled = true;
   maxComparisonPatchesInput.disabled = true;
   maxWalkStepsInput.disabled = true;
+  rawGlobalLogCorrelationCutoffInput.disabled = true;
+  octaveBiasInput.disabled = true;
   document.body.classList.add("loading");
   try {
     setStatus("Recording from microphone...");
@@ -267,21 +308,25 @@ async function analyzeFromMicrophone(
     }
     setStatus("Analyzing recorded audio...");
     const rawOptions = readRawOptions(
-      topPeakCountInput,
-      logCorrelationCutoffInput,
+      maxExtremaPerFoldInput,
+      maxCrossingsPerPeriodInput,
       maxComparisonPatchesInput,
       maxWalkStepsInput,
+      rawGlobalLogCorrelationCutoffInput,
+      octaveBiasInput,
     );
     const preparedSample = await loadPitchSample(capturedAudio);
     const result = await analyzePreparedPitchSample(preparedSample, rawOptions);
     await renderResult(result, readSelectedWindowIndex());
     updatePerformanceInfo(result);
-    writeTopPeakCount(rawOptions.peakCount);
-    writeLogCorrelationCutoff(rawOptions.logCorrelationCutoff);
+    writeMaxExtremaPerFold(rawOptions.maxExtremaPerFold);
+    writeMaxCrossingsPerPeriod(rawOptions.maxCrossingsPerPeriod);
     writeMaxComparisonPatches(rawOptions.maxComparisonPatches);
     writeMaxWalkSteps(rawOptions.maxWalkSteps);
+    writeRawGlobalLogCorrelationCutoff(rawOptions.rawGlobalLogCorrelationCutoff);
+    writeOctaveBias(rawOptions.octaveBias);
     setStatus(
-      `Done. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, rawWindow=${RAW_SAMPLE_WINDOW_SAMPLES_AT_48K} samples @ 48k, topPeaks=${rawOptions.peakCount}, logCutoff=${rawOptions.logCorrelationCutoff.toFixed(2)}, maxPatches=${rawOptions.maxComparisonPatches}, maxWalk=${rawOptions.maxWalkSteps}`,
+      `Done. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, rawWindow=${RAW_SAMPLE_WINDOW_SAMPLES_AT_48K} samples @ 48k, maxExtremaPerFold=${rawOptions.maxExtremaPerFold}, maxCrossingsPerPeriod=${rawOptions.maxCrossingsPerPeriod}, maxPatches=${rawOptions.maxComparisonPatches}, maxWalk=${rawOptions.maxWalkSteps}, rawCutoff=${rawOptions.rawGlobalLogCorrelationCutoff.toFixed(2)}, octaveBias=${rawOptions.octaveBias.toFixed(2)}`,
     );
     return result;
   } catch (error) {
@@ -293,29 +338,35 @@ async function analyzeFromMicrophone(
     document.body.classList.remove("loading");
     recordButton.disabled = false;
     sourceSelect.disabled = false;
-    topPeakCountInput.disabled = false;
-    logCorrelationCutoffInput.disabled = false;
+    maxExtremaPerFoldInput.disabled = false;
+    maxCrossingsPerPeriodInput.disabled = false;
     maxComparisonPatchesInput.disabled = false;
     maxWalkStepsInput.disabled = false;
+    rawGlobalLogCorrelationCutoffInput.disabled = false;
+    octaveBiasInput.disabled = false;
   }
 }
 
 async function analyzeInitialSelection(
   sourceSelect,
-  topPeakCountInput,
-  logCorrelationCutoffInput,
+  maxExtremaPerFoldInput,
+  maxCrossingsPerPeriodInput,
   maxComparisonPatchesInput,
   maxWalkStepsInput,
+  rawGlobalLogCorrelationCutoffInput,
+  octaveBiasInput,
 ) {
   document.body.classList.add("loading");
   try {
     setStatus("Analyzing selected source...");
     return await analyzeSelectedSource(
       sourceSelect,
-      topPeakCountInput,
-      logCorrelationCutoffInput,
+      maxExtremaPerFoldInput,
+      maxCrossingsPerPeriodInput,
       maxComparisonPatchesInput,
       maxWalkStepsInput,
+      rawGlobalLogCorrelationCutoffInput,
+      octaveBiasInput,
     );
   } catch (error) {
     console.error(error);
@@ -330,14 +381,20 @@ async function analyzeInitialSelection(
 function main() {
   const recordButton = document.getElementById("recordButton");
   const sourceSelect = document.getElementById("sourceSelect");
-  const topPeakCountInput = document.getElementById("topPeakCount");
-  const logCorrelationCutoffInput = document.getElementById("logCorrelationCutoff");
+  const maxExtremaPerFoldInput = document.getElementById("maxExtremaPerFold");
+  const maxCrossingsPerPeriodInput = document.getElementById("maxCrossingsPerPeriod");
   const maxComparisonPatchesInput = document.getElementById("maxComparisonPatches");
   const maxWalkStepsInput = document.getElementById("maxWalkSteps");
-  topPeakCountInput.value = String(readTopPeakCount());
-  logCorrelationCutoffInput.value = readLogCorrelationCutoff().toFixed(2);
+  const rawGlobalLogCorrelationCutoffInput = document.getElementById(
+    "rawGlobalLogCorrelationCutoff",
+  );
+  const octaveBiasInput = document.getElementById("octaveBias");
+  maxExtremaPerFoldInput.value = String(readMaxExtremaPerFold());
+  maxCrossingsPerPeriodInput.value = String(readMaxCrossingsPerPeriod());
   maxComparisonPatchesInput.value = String(readMaxComparisonPatches());
   maxWalkStepsInput.value = String(readMaxWalkSteps());
+  rawGlobalLogCorrelationCutoffInput.value = String(readRawGlobalLogCorrelationCutoff());
+  octaveBiasInput.value = String(readOctaveBias());
   const selectedSource = resolveSelectedSource(
     getAudioSources(),
     readSelectedAudioSourceKey(),
@@ -352,10 +409,12 @@ function main() {
     await analyzeFromMicrophone(
       recordButton,
       sourceSelect,
-      topPeakCountInput,
-      logCorrelationCutoffInput,
+      maxExtremaPerFoldInput,
+      maxCrossingsPerPeriodInput,
       maxComparisonPatchesInput,
       maxWalkStepsInput,
+      rawGlobalLogCorrelationCutoffInput,
+      octaveBiasInput,
     );
   });
 
@@ -363,18 +422,22 @@ function main() {
     document.body.classList.add("loading");
     recordButton.disabled = true;
     sourceSelect.disabled = true;
-    topPeakCountInput.disabled = true;
-    logCorrelationCutoffInput.disabled = true;
+    maxExtremaPerFoldInput.disabled = true;
+    maxCrossingsPerPeriodInput.disabled = true;
     maxComparisonPatchesInput.disabled = true;
     maxWalkStepsInput.disabled = true;
+    rawGlobalLogCorrelationCutoffInput.disabled = true;
+    octaveBiasInput.disabled = true;
     try {
       setStatus("Analyzing selected source...");
       await analyzeSelectedSource(
         sourceSelect,
-        topPeakCountInput,
-        logCorrelationCutoffInput,
+        maxExtremaPerFoldInput,
+        maxCrossingsPerPeriodInput,
         maxComparisonPatchesInput,
         maxWalkStepsInput,
+        rawGlobalLogCorrelationCutoffInput,
+        octaveBiasInput,
       );
     } catch (error) {
       console.error(error);
@@ -383,30 +446,36 @@ function main() {
     } finally {
       recordButton.disabled = false;
       sourceSelect.disabled = false;
-      topPeakCountInput.disabled = false;
-      logCorrelationCutoffInput.disabled = false;
+      maxExtremaPerFoldInput.disabled = false;
+      maxCrossingsPerPeriodInput.disabled = false;
       maxComparisonPatchesInput.disabled = false;
       maxWalkStepsInput.disabled = false;
+      rawGlobalLogCorrelationCutoffInput.disabled = false;
+      octaveBiasInput.disabled = false;
       document.body.classList.remove("loading");
     }
   });
 
-  topPeakCountInput.addEventListener("input", async () => {
+  maxExtremaPerFoldInput.addEventListener("input", async () => {
     document.body.classList.add("loading");
     recordButton.disabled = true;
     sourceSelect.disabled = true;
-    topPeakCountInput.disabled = true;
-    logCorrelationCutoffInput.disabled = true;
+    maxExtremaPerFoldInput.disabled = true;
+    maxCrossingsPerPeriodInput.disabled = true;
     maxComparisonPatchesInput.disabled = true;
     maxWalkStepsInput.disabled = true;
+    rawGlobalLogCorrelationCutoffInput.disabled = true;
+    octaveBiasInput.disabled = true;
     try {
-      setStatus("Applying top peak count...");
+      setStatus("Applying extrema-per-fold...");
       await analyzeSelectedSource(
         sourceSelect,
-        topPeakCountInput,
-        logCorrelationCutoffInput,
+        maxExtremaPerFoldInput,
+        maxCrossingsPerPeriodInput,
         maxComparisonPatchesInput,
         maxWalkStepsInput,
+        rawGlobalLogCorrelationCutoffInput,
+        octaveBiasInput,
       );
     } catch (error) {
       console.error(error);
@@ -415,30 +484,36 @@ function main() {
     } finally {
       recordButton.disabled = false;
       sourceSelect.disabled = false;
-      topPeakCountInput.disabled = false;
-      logCorrelationCutoffInput.disabled = false;
+      maxExtremaPerFoldInput.disabled = false;
+      maxCrossingsPerPeriodInput.disabled = false;
       maxComparisonPatchesInput.disabled = false;
       maxWalkStepsInput.disabled = false;
+      rawGlobalLogCorrelationCutoffInput.disabled = false;
+      octaveBiasInput.disabled = false;
       document.body.classList.remove("loading");
     }
   });
 
-  logCorrelationCutoffInput.addEventListener("input", async () => {
+  maxCrossingsPerPeriodInput.addEventListener("input", async () => {
     document.body.classList.add("loading");
     recordButton.disabled = true;
     sourceSelect.disabled = true;
-    topPeakCountInput.disabled = true;
-    logCorrelationCutoffInput.disabled = true;
+    maxExtremaPerFoldInput.disabled = true;
+    maxCrossingsPerPeriodInput.disabled = true;
     maxComparisonPatchesInput.disabled = true;
     maxWalkStepsInput.disabled = true;
+    rawGlobalLogCorrelationCutoffInput.disabled = true;
+    octaveBiasInput.disabled = true;
     try {
-      setStatus("Applying log cutoff...");
+      setStatus("Applying crossings-per-period...");
       await analyzeSelectedSource(
         sourceSelect,
-        topPeakCountInput,
-        logCorrelationCutoffInput,
+        maxExtremaPerFoldInput,
+        maxCrossingsPerPeriodInput,
         maxComparisonPatchesInput,
         maxWalkStepsInput,
+        rawGlobalLogCorrelationCutoffInput,
+        octaveBiasInput,
       );
     } catch (error) {
       console.error(error);
@@ -447,10 +522,12 @@ function main() {
     } finally {
       recordButton.disabled = false;
       sourceSelect.disabled = false;
-      topPeakCountInput.disabled = false;
-      logCorrelationCutoffInput.disabled = false;
+      maxExtremaPerFoldInput.disabled = false;
+      maxCrossingsPerPeriodInput.disabled = false;
       maxComparisonPatchesInput.disabled = false;
       maxWalkStepsInput.disabled = false;
+      rawGlobalLogCorrelationCutoffInput.disabled = false;
+      octaveBiasInput.disabled = false;
       document.body.classList.remove("loading");
     }
   });
@@ -459,17 +536,21 @@ function main() {
     document.body.classList.add("loading");
     recordButton.disabled = true;
     sourceSelect.disabled = true;
-    topPeakCountInput.disabled = true;
-    logCorrelationCutoffInput.disabled = true;
+    maxExtremaPerFoldInput.disabled = true;
+    maxCrossingsPerPeriodInput.disabled = true;
     maxComparisonPatchesInput.disabled = true;
+    rawGlobalLogCorrelationCutoffInput.disabled = true;
+    octaveBiasInput.disabled = true;
     try {
       setStatus("Applying max comparison patches...");
       await analyzeSelectedSource(
         sourceSelect,
-        topPeakCountInput,
-        logCorrelationCutoffInput,
+        maxExtremaPerFoldInput,
+        maxCrossingsPerPeriodInput,
         maxComparisonPatchesInput,
         maxWalkStepsInput,
+        rawGlobalLogCorrelationCutoffInput,
+        octaveBiasInput,
       );
     } catch (error) {
       console.error(error);
@@ -478,10 +559,12 @@ function main() {
     } finally {
       recordButton.disabled = false;
       sourceSelect.disabled = false;
-      topPeakCountInput.disabled = false;
-      logCorrelationCutoffInput.disabled = false;
+      maxExtremaPerFoldInput.disabled = false;
+      maxCrossingsPerPeriodInput.disabled = false;
       maxComparisonPatchesInput.disabled = false;
       maxWalkStepsInput.disabled = false;
+      rawGlobalLogCorrelationCutoffInput.disabled = false;
+      octaveBiasInput.disabled = false;
       document.body.classList.remove("loading");
     }
   });
@@ -490,18 +573,22 @@ function main() {
     document.body.classList.add("loading");
     recordButton.disabled = true;
     sourceSelect.disabled = true;
-    topPeakCountInput.disabled = true;
-    logCorrelationCutoffInput.disabled = true;
+    maxExtremaPerFoldInput.disabled = true;
+    maxCrossingsPerPeriodInput.disabled = true;
     maxComparisonPatchesInput.disabled = true;
     maxWalkStepsInput.disabled = true;
+    rawGlobalLogCorrelationCutoffInput.disabled = true;
+    octaveBiasInput.disabled = true;
     try {
       setStatus("Applying max walk...");
       await analyzeSelectedSource(
         sourceSelect,
-        topPeakCountInput,
-        logCorrelationCutoffInput,
+        maxExtremaPerFoldInput,
+        maxCrossingsPerPeriodInput,
         maxComparisonPatchesInput,
         maxWalkStepsInput,
+        rawGlobalLogCorrelationCutoffInput,
+        octaveBiasInput,
       );
     } catch (error) {
       console.error(error);
@@ -510,20 +597,100 @@ function main() {
     } finally {
       recordButton.disabled = false;
       sourceSelect.disabled = false;
-      topPeakCountInput.disabled = false;
-      logCorrelationCutoffInput.disabled = false;
+      maxExtremaPerFoldInput.disabled = false;
+      maxCrossingsPerPeriodInput.disabled = false;
       maxComparisonPatchesInput.disabled = false;
       maxWalkStepsInput.disabled = false;
+      rawGlobalLogCorrelationCutoffInput.disabled = false;
+      octaveBiasInput.disabled = false;
+      document.body.classList.remove("loading");
+    }
+  });
+
+  rawGlobalLogCorrelationCutoffInput.addEventListener("input", async () => {
+    document.body.classList.add("loading");
+    recordButton.disabled = true;
+    sourceSelect.disabled = true;
+    maxExtremaPerFoldInput.disabled = true;
+    maxCrossingsPerPeriodInput.disabled = true;
+    maxComparisonPatchesInput.disabled = true;
+    maxWalkStepsInput.disabled = true;
+    rawGlobalLogCorrelationCutoffInput.disabled = true;
+    octaveBiasInput.disabled = true;
+    try {
+      setStatus("Applying raw cutoff...");
+      await analyzeSelectedSource(
+        sourceSelect,
+        maxExtremaPerFoldInput,
+        maxCrossingsPerPeriodInput,
+        maxComparisonPatchesInput,
+        maxWalkStepsInput,
+        rawGlobalLogCorrelationCutoffInput,
+        octaveBiasInput,
+      );
+    } catch (error) {
+      console.error(error);
+      const message = error instanceof Error ? error.message : String(error);
+      setStatus(`Failed: ${message}`, true);
+    } finally {
+      recordButton.disabled = false;
+      sourceSelect.disabled = false;
+      maxExtremaPerFoldInput.disabled = false;
+      maxCrossingsPerPeriodInput.disabled = false;
+      maxComparisonPatchesInput.disabled = false;
+      maxWalkStepsInput.disabled = false;
+      rawGlobalLogCorrelationCutoffInput.disabled = false;
+      octaveBiasInput.disabled = false;
+      document.body.classList.remove("loading");
+    }
+  });
+
+  octaveBiasInput.addEventListener("input", async () => {
+    document.body.classList.add("loading");
+    recordButton.disabled = true;
+    sourceSelect.disabled = true;
+    maxExtremaPerFoldInput.disabled = true;
+    maxCrossingsPerPeriodInput.disabled = true;
+    maxComparisonPatchesInput.disabled = true;
+    maxWalkStepsInput.disabled = true;
+    rawGlobalLogCorrelationCutoffInput.disabled = true;
+    octaveBiasInput.disabled = true;
+    try {
+      setStatus("Applying octave bias...");
+      await analyzeSelectedSource(
+        sourceSelect,
+        maxExtremaPerFoldInput,
+        maxCrossingsPerPeriodInput,
+        maxComparisonPatchesInput,
+        maxWalkStepsInput,
+        rawGlobalLogCorrelationCutoffInput,
+        octaveBiasInput,
+      );
+    } catch (error) {
+      console.error(error);
+      const message = error instanceof Error ? error.message : String(error);
+      setStatus(`Failed: ${message}`, true);
+    } finally {
+      recordButton.disabled = false;
+      sourceSelect.disabled = false;
+      maxExtremaPerFoldInput.disabled = false;
+      maxCrossingsPerPeriodInput.disabled = false;
+      maxComparisonPatchesInput.disabled = false;
+      maxWalkStepsInput.disabled = false;
+      rawGlobalLogCorrelationCutoffInput.disabled = false;
+      octaveBiasInput.disabled = false;
       document.body.classList.remove("loading");
     }
   });
 
   analyzeInitialSelection(
     sourceSelect,
-    topPeakCountInput,
-    logCorrelationCutoffInput,
+    maxExtremaPerFoldInput,
+    maxCrossingsPerPeriodInput,
     maxComparisonPatchesInput,
     maxWalkStepsInput,
+    rawGlobalLogCorrelationCutoffInput,
+    octaveBiasInput,
   );
 }
 
