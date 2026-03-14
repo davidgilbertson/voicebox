@@ -12,6 +12,7 @@ const ASSET_FILES = [
   "david_vocals2.wav",
   "david_vocals_31s.wav",
   "david_vocals_vibrato.wav",
+  "maria_vibrato.wav",
   "opera-female-vocals_140bpm_A_major.wav",
   "opera-vocals_129bpm_F_minor.wav",
   "rozette_vibrato.wav",

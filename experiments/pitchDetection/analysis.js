@@ -135,17 +135,22 @@ async function loadWavSamples(url) {
   }
 }
 
-export async function analyzePitchSample(audioInput = null, tuning = null, options = null) {
+export async function loadAudioSample(audioInput = null) {
+  return typeof audioInput === "string"
+    ? loadWavSamples(audioInput)
+    : (audioInput ?? (await loadWavSamples(AUDIO_PATH)));
+}
+
+export async function analyzeDecodedPitchSample(loaded, tuning = null, options = null) {
   const peakinessCutoff = Number.isFinite(options?.peakinessCutoff)
     ? Math.max(0, Math.min(1, options.peakinessCutoff))
     : DEFAULT_PEAKINESS_CUTOFF;
-  const loaded =
-    typeof audioInput === "string"
-      ? await loadWavSamples(audioInput)
-      : (audioInput ?? (await loadWavSamples(AUDIO_PATH)));
+  const disablePeakinessGate = options?.disablePeakinessGate === true;
+  const disablePeakinessMetrics = options?.disablePeakinessMetrics === true;
   const { sampleRate, samples } = loaded;
   const hopSamples = Math.max(1, Math.round(sampleRate / DISPLAY_SAMPLES_PER_SECOND));
   const windowCount = Math.max(0, Math.floor((samples.length - FFT_SIZE) / hopSamples) + 1);
+  const spectrumStartMs = performance.now();
   const getWindowSpectrum = await createWindowSpectrumComputer({
     samples,
     sampleRate,
@@ -154,6 +159,7 @@ export async function analyzePitchSample(audioInput = null, tuning = null, optio
     hopSamples,
     windowCount,
   });
+  const spectrumElapsedMs = performance.now() - spectrumStartMs;
 
   const timeSec = new Array(windowCount);
   const pitchHz = new Array(windowCount);
@@ -170,10 +176,17 @@ export async function analyzePitchSample(audioInput = null, tuning = null, optio
     const voiceboxStartMs = performance.now();
     const result = fftBinsToPitchDetailedWithDebug(magnitudes, sampleRate, MIN_HZ, MAX_HZ, tuning);
     voiceboxElapsedMs += performance.now() - voiceboxStartMs;
-    const peakinessMetrics = detectPeakiness(magnitudes);
+    const peakinessMetrics = disablePeakinessMetrics
+      ? { flatness: Number.NaN, peakiness: Number.NaN, peakMagnitude: Number.NaN }
+      : detectPeakiness(magnitudes);
     timeSec[i] = i / DISPLAY_SAMPLES_PER_SECOND;
     pitchHz[i] =
-      result.hz > 0 && peakinessMetrics.peakiness >= peakinessCutoff ? result.hz : Number.NaN;
+      result.hz > 0 &&
+      (disablePeakinessGate ||
+        (Number.isFinite(peakinessMetrics.peakiness) &&
+          peakinessMetrics.peakiness >= peakinessCutoff))
+        ? result.hz
+        : Number.NaN;
     spectralFlatness[i] = peakinessMetrics.flatness;
     peakiness[i] = peakinessMetrics.peakiness;
     peakMagnitude[i] = peakinessMetrics.peakMagnitude;
@@ -193,7 +206,10 @@ export async function analyzePitchSample(audioInput = null, tuning = null, optio
   return {
     sourceFile: AUDIO_PATH,
     sampleRate,
+    samples,
     samplesPerSecond: DISPLAY_SAMPLES_PER_SECOND,
+    hopSamples,
+    windowSize: FFT_SIZE,
     binSizeHz: sampleRate / 2 / FFT_BIN_COUNT,
     timeSec,
     pitchHz,
@@ -203,9 +219,15 @@ export async function analyzePitchSample(audioInput = null, tuning = null, optio
     peakMagnitude,
     peakinessCutoff,
     perf: {
+      fftSpectrumMsPerSecondAudio:
+        windowCount > 0 ? spectrumElapsedMs / (windowCount / DISPLAY_SAMPLES_PER_SECOND) : Number.NaN,
       voiceboxMsPerSecondAudio:
         windowCount > 0
           ? voiceboxElapsedMs / (windowCount / DISPLAY_SAMPLES_PER_SECOND)
+          : Number.NaN,
+      voiceboxPipelineMsPerSecondAudio:
+        windowCount > 0
+          ? (spectrumElapsedMs + voiceboxElapsedMs) / (windowCount / DISPLAY_SAMPLES_PER_SECOND)
           : Number.NaN,
       pitchyMsPerSecondAudio:
         windowCount > 0 ? pitchyElapsedMs / (windowCount / DISPLAY_SAMPLES_PER_SECOND) : Number.NaN,
@@ -218,6 +240,11 @@ export async function analyzePitchSample(audioInput = null, tuning = null, optio
     windowSpectra,
     windowDebug,
   };
+}
+
+export async function analyzePitchSample(audioInput = null, tuning = null, options = null) {
+  const loaded = await loadAudioSample(audioInput);
+  return analyzeDecodedPitchSample(loaded, tuning, options);
 }
 
 export function buildWindowDebugObject(result, windowIndex) {

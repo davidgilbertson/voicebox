@@ -3,6 +3,7 @@
 - Platform: Chrome on Android as primary target; PWA/offline supported; portrait only.
 - Performance is a serious concern. More for battery life than FPS. Think carefully about performance implications of any change. If there's a "simple + slow" way and a "complex + fast" way, do the simple one and let the user know it could be made faster and explain how.
 - Assume the dev server is running, no need to run builds steps.
+- For work in `experiments`, no need to run tests unless the user explicitly asks.
 - Bugfix workflow:
   1. If feasible, first write a sensible failing test that reproduces the bug behavior (not a brittle or contrived test).
   2. Then fix the code so the bug no longer occurs and the test passes.
