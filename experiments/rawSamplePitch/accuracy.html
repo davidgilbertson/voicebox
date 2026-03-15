@@ -131,12 +131,11 @@
       function setSettingsInfo() {
         const settings = RAW_SETTINGS_DEFAULTS;
         document.getElementById("settingsInfo").textContent =
-          `Defaults: maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxComparisonPatches=${settings.maxComparisonPatches}, maxWalkSteps=${settings.maxWalkSteps}, minLogCorr=${settings.rawGlobalLogCorrelationCutoff}, octaveBias=${settings.octaveBias}, peakinessBias=${settings.peakinessBias}`;
+          `Defaults: maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxComparisonPatches=${settings.maxComparisonPatches}, maxWalkSteps=${settings.maxWalkSteps}, minLogCorr=${settings.rawGlobalLogCorrelationCutoff}, hzWeight=${settings.hzWeight}, corrWeight=${settings.correlationWeight}, peakinessWeight=${settings.peakinessWeight}`;
       }
 
       function getSelectedSources() {
-        const sources = getAssetSources();
-        return [...sources.slice(0, 3), ...sources.slice(-4)];
+        return getAssetSources().filter((source) => source.label === "vocal_sampler.wav");
       }
 
       function setResults(items) {
@@ -168,6 +167,7 @@
             const startMs = performance.now();
             const result = await analyzePreparedPitchSample(preparedSample, RAW_SETTINGS_DEFAULTS);
             const elapsedMs = performance.now() - startMs;
+            if (!Array.isArray(result.actualPitchHz)) continue;
 
             totalCorrectCount += result.metrics.rawCorrectCount;
             totalComparedCount += result.metrics.rawComparedCount;

@@ -1,5 +1,3 @@
-import { RAW_MIN_HZ } from "./config.js";
-
 const MAX_LOG_CORRELATION = 0.999999;
 
 export function getLogCorrelation(correlation) {
@@ -33,18 +31,4 @@ export function countZeroCrossings(samples) {
     }
   }
   return count;
-}
-
-export function getCandidateWeightedScore(
-  candidateHz,
-  correlation,
-  octaveBias,
-  peakiness = 0,
-  peakinessBias = 0,
-) {
-  return (
-    getLogCorrelation(correlation) +
-    octaveBias * Math.log2(candidateHz / RAW_MIN_HZ) +
-    peakinessBias * peakiness
-  );
 }

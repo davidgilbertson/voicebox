@@ -51,20 +51,9 @@
         gap: 18px;
       }
 
-      #overallChart {
+      .heatmap-chart {
         width: 100%;
-        height: 420px;
-      }
-
-      #perFileCharts {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-        gap: 18px;
-      }
-
-      .file-chart {
-        width: 100%;
-        height: 320px;
+        height: 640px;
         border: 1px solid #1f2937;
         border-radius: 10px;
         overflow: hidden;
@@ -106,14 +95,13 @@
   <body>
     <div id="app">
       <div id="toolbar">
-        <button id="runButton" class="toolbar-btn" type="button">Run 3x3 Sweep</button>
+        <button id="runButton" class="toolbar-btn" type="button">Run 10x10 Sweep</button>
         <div id="sweepInfo">Loading sweep settings...</div>
         <div id="status">Ready.</div>
       </div>
       <div id="summary"></div>
       <div id="content">
-        <div id="overallChart"></div>
-        <div id="perFileCharts"></div>
+        <div id="heatmaps"></div>
       </div>
     </div>
     <script type="module" src="main.js"></script>

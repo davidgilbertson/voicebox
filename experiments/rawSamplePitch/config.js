@@ -11,8 +11,12 @@ export const RAW_SETTINGS_DEFAULTS = {
   maxComparisonPatches: 3,
   maxWalkSteps: 10,
   rawGlobalLogCorrelationCutoff: 0,
-  octaveBias: 0.15,
-  peakinessBias: 0,
+  hzWeight: 0.65,
+  correlationWeight: 1.2,
+  peakinessWeight: 0,
+  normalizeHz: true,
+  normalizeCorrelation: true,
+  normalizePeakiness: true,
 };
 
 export const RAW_SETTING_FIELDS = [
@@ -21,6 +25,13 @@ export const RAW_SETTING_FIELDS = [
   { key: "maxComparisonPatches", label: "max comparison patches" },
   { key: "maxWalkSteps", label: "max walk" },
   { key: "rawGlobalLogCorrelationCutoff", label: "min log corr" },
-  { key: "octaveBias", label: "octave bias" },
-  { key: "peakinessBias", label: "peakiness bias" },
+  { key: "hzWeight", label: "hz weight" },
+  { key: "correlationWeight", label: "corr weight" },
+  { key: "peakinessWeight", label: "peakiness weight" },
+];
+
+export const RAW_TOGGLE_FIELDS = [
+  { key: "normalizeHz", label: "norm hz" },
+  { key: "normalizeCorrelation", label: "norm corr" },
+  { key: "normalizePeakiness", label: "norm peak" },
 ];

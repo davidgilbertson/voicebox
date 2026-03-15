@@ -6,12 +6,7 @@ import {
   RAW_SETTINGS_DEFAULTS,
 } from "./config.js";
 import { getRawSampleWindowSize } from "./windowing.js";
-import {
-  getCandidateWeightedScore,
-  getCentsDifference,
-  getLogCorrelation,
-  hasZeroCrossing,
-} from "./utils.js";
+import { getCentsDifference, getLogCorrelation, hasZeroCrossing } from "./utils.js";
 
 const PEAKINESS_NEIGHBOR_OFFSET = 2;
 const TIMESTEPS_PER_SECOND = 80;
@@ -22,44 +17,17 @@ function getRawSettings(settings = {}) {
   return {
     ...RAW_SETTINGS_DEFAULTS,
     ...settings,
-    maxExtremaPerFold:
-      settings.maxExtremaPerFold ?? settings.peakCount ?? RAW_SETTINGS_DEFAULTS.maxExtremaPerFold,
+    maxExtremaPerFold: settings.maxExtremaPerFold ?? RAW_SETTINGS_DEFAULTS.maxExtremaPerFold,
     rawGlobalLogCorrelationCutoff:
-      settings.rawGlobalLogCorrelationCutoff ??
-      settings.logCorrelationCutoff ??
-      RAW_SETTINGS_DEFAULTS.rawGlobalLogCorrelationCutoff,
+      settings.rawGlobalLogCorrelationCutoff ?? RAW_SETTINGS_DEFAULTS.rawGlobalLogCorrelationCutoff,
+    hzWeight: settings.hzWeight ?? RAW_SETTINGS_DEFAULTS.hzWeight,
+    correlationWeight: settings.correlationWeight ?? RAW_SETTINGS_DEFAULTS.correlationWeight,
+    peakinessWeight: settings.peakinessWeight ?? RAW_SETTINGS_DEFAULTS.peakinessWeight,
+    normalizeHz: settings.normalizeHz ?? RAW_SETTINGS_DEFAULTS.normalizeHz,
+    normalizeCorrelation:
+      settings.normalizeCorrelation ?? RAW_SETTINGS_DEFAULTS.normalizeCorrelation,
+    normalizePeakiness: settings.normalizePeakiness ?? RAW_SETTINGS_DEFAULTS.normalizePeakiness,
   };
-}
-
-function getCorrelationFromPeriodV1(samples, periodSamples, maxComparisonPatches) {
-  if (periodSamples < 1) return -1;
-  const patchCount = Math.min(maxComparisonPatches, Math.floor(samples.length / periodSamples));
-  if (patchCount < 2) return -1;
-
-  let totalCorrelation = 0;
-  let comparisonCount = 0;
-  for (let patchIndex = 0; patchIndex < patchCount - 1; patchIndex += 1) {
-    const rightEnd = samples.length - patchIndex * periodSamples;
-    const rightStart = rightEnd - periodSamples;
-    const leftStart = rightStart - periodSamples;
-    if (leftStart < 0) break;
-
-    let dot = 0;
-    let leftPower = 0;
-    let rightPower = 0;
-    for (let sampleIndex = 0; sampleIndex < periodSamples; sampleIndex += 1) {
-      const left = samples[leftStart + sampleIndex];
-      const right = samples[rightStart + sampleIndex];
-      dot += left * right;
-      leftPower += left * left;
-      rightPower += right * right;
-    }
-    if (leftPower <= 0 || rightPower <= 0) continue;
-    totalCorrelation += dot / Math.sqrt(leftPower * rightPower);
-    comparisonCount += 1;
-  }
-
-  return comparisonCount > 0 ? totalCorrelation / comparisonCount : -1;
 }
 
 function getCorrelationFromPeriod(samples, periodSamples, maxComparisonPatches) {
@@ -89,6 +57,7 @@ function getCorrelationFromPeriod(samples, periodSamples, maxComparisonPatches) 
     }
     if (leftPower <= 0 || rightPower <= 0) continue;
     totalCorrelation += dot / Math.sqrt(leftPower * rightPower);
+    // totalCorrelation += dot;
     comparisonCount += 1;
   }
 
@@ -399,6 +368,13 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
   const candidateFamilies = [];
   const peakExtrema = [];
   const troughExtrema = [];
+  let hzMin = Number.POSITIVE_INFINITY;
+  let hzMax = Number.NEGATIVE_INFINITY;
+  let correlationMin = Number.POSITIVE_INFINITY;
+  let correlationMax = Number.NEGATIVE_INFINITY;
+  let peakinessMin = Number.POSITIVE_INFINITY;
+  let peakinessMax = Number.NEGATIVE_INFINITY;
+
   for (const extremum of foldExtrema) {
     if (extremum.type === "peak") {
       peakExtrema.push(extremum);
@@ -440,6 +416,15 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
         walkedPeriod.logCorrelation,
         cache,
       );
+      const hzFeature = Math.log2(walkedPeriod.hz / RAW_MIN_HZ);
+      const correlationFeature = walkedPeriod.logCorrelation;
+      const peakinessFeature = peakiness;
+      if (hzFeature < hzMin) hzMin = hzFeature;
+      if (hzFeature > hzMax) hzMax = hzFeature;
+      if (correlationFeature < correlationMin) correlationMin = correlationFeature;
+      if (correlationFeature > correlationMax) correlationMax = correlationFeature;
+      if (peakinessFeature < peakinessMin) peakinessMin = peakinessFeature;
+      if (peakinessFeature > peakinessMax) peakinessMax = peakinessFeature;
 
       candidateFamilies.push({
         type,
@@ -450,28 +435,47 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
         correlation: walkedPeriod.correlation,
         logCorrelation: walkedPeriod.logCorrelation,
         peakiness,
-        weightedScore: getCandidateWeightedScore(
-          walkedPeriod.hz,
-          walkedPeriod.correlation,
-          settings.octaveBias,
-          peakiness,
-          settings.peakinessBias,
-        ),
+        hzFeature,
+        correlationFeature,
+        peakinessFeature,
       });
     }
   }
 
-  return candidateFamilies;
-}
+  if (candidateFamilies.length === 0) {
+    return {
+      candidateFamilies,
+      winningCandidate: null,
+    };
+  }
 
-function getWinningCandidate(candidateFamilies) {
-  let bestCandidate = null;
+  const normalize = (value, min, max) => (max > min ? (value - min) / (max - min) : 0);
+  let winningCandidate = null;
   for (const candidate of candidateFamilies) {
-    if (!bestCandidate || candidate.weightedScore > bestCandidate.weightedScore) {
-      bestCandidate = candidate;
+    const normalizedHzFeature = settings.normalizeHz
+      ? normalize(candidate.hzFeature, hzMin, hzMax)
+      : candidate.hzFeature;
+    const normalizedCorrelationFeature = settings.normalizeCorrelation
+      ? normalize(candidate.correlationFeature, correlationMin, correlationMax)
+      : candidate.correlationFeature;
+    const normalizedPeakinessFeature = settings.normalizePeakiness
+      ? normalize(candidate.peakinessFeature, peakinessMin, peakinessMax)
+      : candidate.peakinessFeature;
+    candidate.normalizedHzFeature = normalizedHzFeature;
+    candidate.normalizedCorrelationFeature = normalizedCorrelationFeature;
+    candidate.normalizedPeakinessFeature = normalizedPeakinessFeature;
+    candidate.weightedScore =
+      settings.hzWeight * normalizedHzFeature +
+      settings.correlationWeight * normalizedCorrelationFeature +
+      settings.peakinessWeight * normalizedPeakinessFeature;
+    if (!winningCandidate || candidate.weightedScore > winningCandidate.weightedScore) {
+      winningCandidate = candidate;
     }
   }
-  return bestCandidate;
+  return {
+    candidateFamilies,
+    winningCandidate,
+  };
 }
 
 function getRawPitchResultFromAnalysis(analysis, settings) {
@@ -594,14 +598,13 @@ export function getRawPitchAnalysisFromWaveform(
   }
 
   const foldExtrema = getFoldExtremaFromWaveform(samples, rawSettings);
-  const candidateFamilies = getCandidateFamiliesFromExtrema(
+  const { candidateFamilies, winningCandidate } = getCandidateFamiliesFromExtrema(
     samples,
     sampleRate,
     foldExtrema,
     rawSettings,
     cache,
   );
-  const winningCandidate = getWinningCandidate(candidateFamilies);
   const completedAnalysis = {
     ...analysis,
     foldExtrema,
@@ -707,6 +710,14 @@ function getActualAccuracyMetrics(actualPitchHz, fftPitchHz, rawPitchHz) {
 export async function analyzePreparedPitchSample(preparedSample, settings = RAW_SETTINGS_DEFAULTS) {
   const rawSettings = getRawSettings(settings);
   const { actualPitchHz, fftAnalysis, sampleRate, samples } = preparedSample;
+  console.assert(
+    actualPitchHz === null || actualPitchHz.length === fftAnalysis.timeSec.length,
+    "Expected actualPitchHz JSON length to match fftAnalysis.timeSec length",
+    {
+      actualPitchHzLength: actualPitchHz?.length ?? null,
+      timeSecLength: fftAnalysis.timeSec.length,
+    },
+  );
   const rawPitchHz = new Array(fftAnalysis.timeSec.length);
 
   const rawStartMs = performance.now();

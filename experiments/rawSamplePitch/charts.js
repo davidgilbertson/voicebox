@@ -1,4 +1,6 @@
 import { buildRawCorrelationHistogram, getRawPitchAnalysisFromWaveform } from "./analysis.js";
+import { RAW_ACCURACY_CENTS } from "./config.js";
+import { getCentsDifference } from "./utils.js";
 import {
   RAW_SAMPLE_WINDOW_CYCLES,
   RAW_SAMPLE_WINDOW_DURATION_SEC,
@@ -47,7 +49,7 @@ function getSelectedPitchLabel(hz) {
 function getActualPitchLabel(label) {
   if (label === null) return "null";
   if (Number.isFinite(label)) return `${label.toFixed(2)} Hz`;
-  return "FFT";
+  return "n/a";
 }
 
 function getWaveformTitle(waveformWindow, analysis) {
@@ -157,6 +159,7 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
       .filter((family) => family.type === type)
       .sort((left, right) => left.hz - right.hz);
     if (typedFamilies.length === 0) return "";
+    const closestFamily = closestKey === null ? null : families[closestKey];
 
     const header = typedFamilies.map((_, index) => `<th>${index + 1}</th>`).join("");
     const rows = [
@@ -177,7 +180,19 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
         render: (family) => family.logCorrelation.toFixed(3),
       },
       {
-        label: "weighted",
+        label: "hzN",
+        render: (family) => family.normalizedHzFeature.toFixed(3),
+      },
+      {
+        label: "corrN",
+        render: (family) => family.normalizedCorrelationFeature.toFixed(3),
+      },
+      {
+        label: "peakN",
+        render: (family) => family.normalizedPeakinessFeature.toFixed(3),
+      },
+      {
+        label: "score",
         render: (family) => family.weightedScore.toFixed(3),
       },
       {
@@ -189,15 +204,21 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
         const cells = typedFamilies
           .map((family) => {
             const selected = analysis.winningCandidate === family;
-            const bold = closestKey === families.indexOf(family) ? " font-weight: 700;" : "";
+            const bold = closestFamily === family ? " font-weight: 700;" : "";
             const heatmap =
               row.label === "logCorr"
                 ? getHeatmapStyle(family.logCorrelation)
-                : row.label === "weighted"
-                  ? getHeatmapStyle(family.weightedScore)
-                  : row.label === "peaky"
-                    ? getHeatmapStyle(family.peakiness)
-                    : "";
+                : row.label === "hzN"
+                  ? getHeatmapStyle(family.normalizedHzFeature, 1)
+                  : row.label === "corrN"
+                    ? getHeatmapStyle(family.normalizedCorrelationFeature, 1)
+                    : row.label === "peakN"
+                      ? getHeatmapStyle(family.normalizedPeakinessFeature, 1)
+                      : row.label === "score"
+                        ? getHeatmapStyle(family.weightedScore)
+                        : row.label === "peaky"
+                          ? getHeatmapStyle(family.peakiness)
+                          : "";
             return `<td class="candidate-value${selected ? " candidate-selected" : ""}" style="${heatmap}${bold}">${row.render(
               family,
             )}</td>`;
@@ -221,7 +242,7 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
   };
 
   const winningText = analysis.winningCandidate
-    ? `Winner ${analysis.winningCandidate.hz.toFixed(2)} Hz, logCorr ${analysis.winningCandidate.logCorrelation.toFixed(3)}, peakiness ${analysis.winningCandidate.peakiness.toFixed(3)}, weighted ${analysis.winningCandidate.weightedScore.toFixed(3)}`
+    ? `Winner ${analysis.winningCandidate.hz.toFixed(2)} Hz, logCorr ${analysis.winningCandidate.logCorrelation.toFixed(3)}, peakiness ${analysis.winningCandidate.peakiness.toFixed(3)}, score ${analysis.winningCandidate.weightedScore.toFixed(3)}`
     : `Rejected: ${analysis.rejectionReason}`;
 
   panel.innerHTML = `
@@ -252,6 +273,16 @@ async function renderHistogram(
   await plotly.newPlot(
     "harmonicChart",
     [
+      {
+        x: histogram.hz,
+        y: histogram.correlation,
+        type: "scatter",
+        mode: "lines",
+        line: { color: "rgba(249, 115, 22, 0.5)", width: 1.5 },
+        hovertemplate: "Hz=%{x}<br>corr=%{y:.3f}<extra></extra>",
+        name: "Correlation",
+        yaxis: "y2",
+      },
       {
         x: histogram.hz,
         y: histogram.logCorrelation,
@@ -294,7 +325,7 @@ async function renderHistogram(
       font: { color: "#e2e8f0" },
       showlegend: true,
       legend: getBottomLegend(),
-      margin: { l: 52, r: 24, t: 54, b: 76 },
+      margin: { l: 52, r: 52, t: 54, b: 76 },
       xaxis: {
         title: "Hz",
         gridcolor: "#1f2937",
@@ -303,6 +334,14 @@ async function renderHistogram(
         dtick: 100,
       },
       yaxis: { title: "-log10(1 - corr)", gridcolor: "#1f2937" },
+      yaxis2: {
+        title: "corr",
+        overlaying: "y",
+        side: "right",
+        rangemode: "tozero",
+        gridcolor: "#1f2937",
+        zerolinecolor: "#1f2937",
+      },
       annotations: [],
     },
     { responsive: true },
@@ -327,22 +366,45 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
   const candidatePanel = document.getElementById("candidatePanel");
   const actualPitchHz = [];
   const actualPitchColor = [];
+  const rawWrongX = [];
+  const rawWrongY = [];
+  const hasActuals = Array.isArray(result.actualPitchHz);
+
+  function getResolvedActualPitchHz(windowIndex) {
+    if (!hasActuals) return undefined;
+    const label = actualLabelEditor.getLabel(windowIndex);
+    return label === undefined ? result.actualPitchHz?.[windowIndex] : label;
+  }
 
   function refreshActualSeries() {
     actualPitchHz.splice(0, actualPitchHz.length);
     actualPitchColor.splice(0, actualPitchColor.length);
+    rawWrongX.splice(0, rawWrongX.length);
+    rawWrongY.splice(0, rawWrongY.length);
     for (let index = 0; index < result.timeSec.length; index += 1) {
-      const label = actualLabelEditor.getLabel(index);
-      if (label === null) {
+      const actualHz = getResolvedActualPitchHz(index);
+      if (actualHz === null) {
         actualPitchHz.push(Number.NaN);
         actualPitchColor.push("rgba(74, 222, 128, 0)");
-        continue;
+      } else {
+        actualPitchHz.push(actualHz);
+        actualPitchColor.push(
+          actualLabelEditor?.hasStoredLabel(index)
+            ? "rgba(74, 222, 128, 1)"
+            : "rgba(37, 111, 64, 1)",
+        );
       }
-      actualPitchHz.push(label ?? result.pitchHz[index]);
-      actualPitchColor.push(
-        actualLabelEditor.hasStoredLabel(index) ? "rgba(74, 222, 128, 1)" : "rgba(37, 111, 64, 1)",
-      );
+
+      if (hasActuals) {
+        const rawHz = result.rawPitchHz[index];
+        if (!Number.isFinite(actualHz)) continue;
+        if (!Number.isFinite(rawHz) || getCentsDifference(rawHz, actualHz) > RAW_ACCURACY_CENTS) {
+          rawWrongX.push(result.timeSec[index]);
+          rawWrongY.push(rawHz);
+        }
+      }
     }
+    console.log("[rawSamplePitch] raw wrong markers", rawWrongX.length);
   }
 
   refreshActualSeries();
@@ -378,6 +440,15 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
         marker: { size: 6, color: actualPitchColor },
         hovertemplate: "t=%{x:.3f}s<br>Actual=%{y:.2f} Hz<extra></extra>",
         name: "Actual",
+        visible: hasActuals,
+      },
+      {
+        x: rawWrongX,
+        y: rawWrongY,
+        mode: "markers",
+        marker: { size: 5, color: "#ffffff" },
+        hovertemplate: "t=%{x:.3f}s<br>Raw wrong=%{y:.2f} Hz<extra></extra>",
+        name: "Raw wrong",
       },
     ],
     {
@@ -418,7 +489,7 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
     const extremaMarkers = getExtremaMarkers(waveformWindow, analysis);
 
     await plotly.relayout("pitchChart", {
-      title: `Pitch Timeline (selected raw: ${getSelectedPitchLabel(waveformWindow.rawPitchHz)}, actual: ${getActualPitchLabel(actualLabelEditor.getLabel(activeWindowIndex))})`,
+      title: `Pitch Timeline (selected raw: ${getSelectedPitchLabel(waveformWindow.rawPitchHz)}, actual: ${getActualPitchLabel(getResolvedActualPitchHz(activeWindowIndex))})`,
       shapes: [
         {
           type: "line",
@@ -495,18 +566,24 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
       plotly,
       waveformWindow,
       histogram,
-      actualPitchHz[activeWindowIndex],
-      (pitchHz) => {
-        actualLabelEditor.setLabel(activeWindowIndex, pitchHz);
-        refreshActualSeries();
-        onLabelChange?.();
-        void plotly.restyle(
-          "pitchChart",
-          { y: [actualPitchHz], "marker.color": [actualPitchColor] },
-          [2],
-        );
-        void selectWindow(activeWindowIndex);
-      },
+      getResolvedActualPitchHz(activeWindowIndex),
+      hasActuals
+        ? (pitchHz) => {
+            actualLabelEditor.setLabel(activeWindowIndex, pitchHz);
+            refreshActualSeries();
+            onLabelChange?.();
+            void plotly.restyle(
+              "pitchChart",
+              {
+                y: [actualPitchHz, rawWrongY],
+                "marker.color": [actualPitchColor, "#ffffff"],
+                x: [result.timeSec, rawWrongX],
+              },
+              [2, 3],
+            );
+            void selectWindow(activeWindowIndex);
+          }
+        : undefined,
     );
     if (typeof onWindowSelect === "function") {
       onWindowSelect(activeWindowIndex);
@@ -519,6 +596,14 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
     const point = event.points?.[0];
     const windowIndex = point?.customdata;
     if (!Number.isInteger(windowIndex)) return;
+    if (hasActuals && point.curveNumber === 3) {
+      console.log("[rawSamplePitch] raw wrong clicked", {
+        windowIndex,
+        timeSec: result.timeSec[windowIndex],
+        actualHz: getResolvedActualPitchHz(windowIndex),
+        rawHz: result.rawPitchHz[windowIndex],
+      });
+    }
     await selectWindow(windowIndex);
   });
 
@@ -528,6 +613,7 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
   }
 
   const keydownHandler = (event) => {
+    if (!hasActuals) return;
     if (event.defaultPrevented) return;
     if (!["a", "d", "q", "e", "w", "s"].includes(event.key.toLowerCase())) return;
     const target = event.target;
@@ -548,8 +634,12 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
     onLabelChange?.();
     void plotly.restyle(
       "pitchChart",
-      { y: [actualPitchHz], "marker.color": [actualPitchColor] },
-      [2],
+      {
+        y: [actualPitchHz, rawWrongY],
+        "marker.color": [actualPitchColor, "#ffffff"],
+        x: [result.timeSec, rawWrongX],
+      },
+      [2, 3],
     );
     void selectWindow(nextWindowIndex);
   };

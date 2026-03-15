@@ -5,6 +5,7 @@ import {
   DEFAULT_ASSET_URL,
   RAW_SETTING_FIELDS,
   RAW_SETTINGS_DEFAULTS,
+  RAW_TOGGLE_FIELDS,
   RECORD_DURATION_MS,
 } from "./config.js";
 import { getRawWaveformWindow, RAW_SAMPLE_WINDOW_SAMPLES_AT_48K } from "./windowing.js";
@@ -25,7 +26,7 @@ const CANDIDATE_PANEL_OPEN_STORAGE_KEY = `${STORAGE_PREFIX}candidatePanelOpen`;
 
 let currentPreparedSample = null;
 let currentResult = null;
-// let hasPrintedMaterializedActualPitch = false;
+let hasPrintedMaterializedActualPitch = false;
 
 function getStorageKey(settingKey) {
   return `${STORAGE_PREFIX}${settingKey}`;
@@ -39,6 +40,16 @@ function readStoredNumber(key, fallback) {
 }
 
 function writeStoredNumber(key, value) {
+  localStorage.setItem(getStorageKey(key), String(value));
+}
+
+function readStoredBoolean(key, fallback) {
+  const raw = localStorage.getItem(getStorageKey(key));
+  if (raw === null) return fallback;
+  return raw === "true";
+}
+
+function writeStoredBoolean(key, value) {
   localStorage.setItem(getStorageKey(key), String(value));
 }
 
@@ -61,29 +72,48 @@ function writeStoredCandidatePanelOpen(isOpen) {
 }
 
 function getStoredSettings() {
-  return Object.fromEntries(
-    RAW_SETTING_FIELDS.map((field) => [
-      field.key,
-      readStoredNumber(field.key, RAW_SETTINGS_DEFAULTS[field.key]),
-    ]),
-  );
+  return {
+    ...Object.fromEntries(
+      RAW_SETTING_FIELDS.map((field) => [
+        field.key,
+        readStoredNumber(field.key, RAW_SETTINGS_DEFAULTS[field.key]),
+      ]),
+    ),
+    ...Object.fromEntries(
+      RAW_TOGGLE_FIELDS.map((field) => [
+        field.key,
+        readStoredBoolean(field.key, RAW_SETTINGS_DEFAULTS[field.key]),
+      ]),
+    ),
+  };
 }
 
 function writeStoredSettings(settings) {
   RAW_SETTING_FIELDS.forEach((field) => {
     writeStoredNumber(field.key, settings[field.key]);
   });
+  RAW_TOGGLE_FIELDS.forEach((field) => {
+    writeStoredBoolean(field.key, settings[field.key]);
+  });
 }
 
 function getSettingsFromInputs(settingInputs) {
-  return Object.fromEntries(
-    RAW_SETTING_FIELDS.map((field) => [field.key, Number(settingInputs[field.key].value)]),
-  );
+  return {
+    ...Object.fromEntries(
+      RAW_SETTING_FIELDS.map((field) => [field.key, Number(settingInputs[field.key].value)]),
+    ),
+    ...Object.fromEntries(
+      RAW_TOGGLE_FIELDS.map((field) => [field.key, settingInputs[field.key].checked]),
+    ),
+  };
 }
 
 function writeSettingsToInputs(settingInputs, settings) {
   RAW_SETTING_FIELDS.forEach((field) => {
     settingInputs[field.key].value = String(settings[field.key]);
+  });
+  RAW_TOGGLE_FIELDS.forEach((field) => {
+    settingInputs[field.key].checked = settings[field.key];
   });
 }
 
@@ -91,6 +121,10 @@ function setStatus(text, isError = false) {
   const status = document.getElementById("status");
   status.textContent = text;
   status.style.color = isError ? "#fca5a5" : "#a7f3d0";
+}
+
+function hasActuals(result) {
+  return Array.isArray(result.actualPitchHz);
 }
 
 function updatePerformanceInfo(result) {
@@ -142,17 +176,22 @@ function setControlsDisabled(controls, disabled) {
 }
 
 async function renderResult(result) {
-  const sourceKey = localStorage.getItem(SELECTED_SOURCE_STORAGE_KEY) || "";
-  const actualLabelEditor = createActualLabelEditor(sourceKey, result, (windowIndex) =>
-    getRawWaveformWindow(result, windowIndex),
-  );
+  const autoFixButton = document.getElementById("autoFixButton");
+  const actualLabelEditor = hasActuals(result)
+    ? createActualLabelEditor(
+        localStorage.getItem(SELECTED_SOURCE_STORAGE_KEY) || "",
+        result,
+        (windowIndex) => getRawWaveformWindow(result, windowIndex),
+      )
+    : null;
 
   function updateActualPitchInfo() {
-    const labeledCount = actualLabelEditor.getLabelCount();
-    document.getElementById("actualPitchInfo").textContent =
-      `Actual labels ${labeledCount}. Shortcuts: A/D move, Q/E copy, W null + next, S forget + next.`;
+    document.getElementById("actualPitchInfo").textContent = actualLabelEditor
+      ? `Actual labels ${actualLabelEditor.getLabelCount()}. Shortcuts: A/D move, Q/E copy, W null + next, S forget + next.`
+      : "No actual labels for this source.";
   }
 
+  autoFixButton.disabled = !actualLabelEditor;
   updateActualPitchInfo();
 
   await renderRawSamplePitchCharts(result, {
@@ -165,24 +204,15 @@ async function renderResult(result) {
     onWindowSelect: writeStoredWindowIndex,
   });
 
-  // if (!hasPrintedMaterializedActualPitch) {
-  //   hasPrintedMaterializedActualPitch = true;
-  //   console.log(
-  //     "Materialized actual pitch",
-  //     result.timeSec.map((_, index) =>
-  //       actualLabelEditor.hasStoredLabel(index)
-  //         ? actualLabelEditor.getLabel(index)
-  //         : Number.isFinite(result.pitchHz[index])
-  //           ? result.pitchHz[index]
-  //           : null,
-  //     ),
-  //   );
-  // }
+  if (!hasPrintedMaterializedActualPitch) {
+    hasPrintedMaterializedActualPitch = true;
+    console.log("Materialized actual pitch", actualLabelEditor ? result.actualPitchHz : null);
+  }
 }
 
 function getStatusText(sourceLabel, result) {
   const settings = result.rawSettings;
-  return `Loaded ${sourceLabel}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, rawWindow=${RAW_SAMPLE_WINDOW_SAMPLES_AT_48K} samples @ 48k, maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxPatches=${settings.maxComparisonPatches}, maxWalk=${settings.maxWalkSteps}, minLogCorr=${settings.rawGlobalLogCorrelationCutoff.toFixed(2)}, octaveBias=${settings.octaveBias.toFixed(2)}, peakinessBias=${settings.peakinessBias.toFixed(2)}`;
+  return `Loaded ${sourceLabel}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, rawWindow=${RAW_SAMPLE_WINDOW_SAMPLES_AT_48K} samples @ 48k, maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxPatches=${settings.maxComparisonPatches}, maxWalk=${settings.maxWalkSteps}, minLogCorr=${settings.rawGlobalLogCorrelationCutoff.toFixed(2)}, hzWeight=${settings.hzWeight.toFixed(2)}, corrWeight=${settings.correlationWeight.toFixed(2)}, peakinessWeight=${settings.peakinessWeight.toFixed(2)}, normHz=${settings.normalizeHz}, normCorr=${settings.normalizeCorrelation}, normPeak=${settings.normalizePeakiness}`;
 }
 
 async function analyzePreparedSample(preparedSample, sourceLabel, settingInputs) {
@@ -196,7 +226,7 @@ async function analyzePreparedSample(preparedSample, sourceLabel, settingInputs)
 }
 
 async function autoFixActuals(controls, sourceSelect) {
-  if (!currentResult) return;
+  if (!currentResult || !hasActuals(currentResult)) return;
   setControlsDisabled(controls, true);
   try {
     setStatus("Auto-fixing actuals...");
@@ -243,9 +273,13 @@ function main() {
   const autoFixButton = document.getElementById("autoFixButton");
   const candidatePanelDetails = document.getElementById("candidatePanelDetails");
   const settingInputs = Object.fromEntries(
-    RAW_SETTING_FIELDS.map((field) => [field.key, document.getElementById(field.key)]),
+    [...RAW_SETTING_FIELDS, ...RAW_TOGGLE_FIELDS].map((field) => [
+      field.key,
+      document.getElementById(field.key),
+    ]),
   );
   const controls = [recordButton, autoFixButton, sourceSelect, ...Object.values(settingInputs)];
+  autoFixButton.disabled = true;
 
   writeSettingsToInputs(settingInputs, getStoredSettings());
   const selectedSource = resolveSelectedSource(
@@ -284,6 +318,11 @@ function main() {
 
   RAW_SETTING_FIELDS.forEach((field) => {
     settingInputs[field.key].addEventListener("input", () =>
+      rerun(controls, sourceSelect, settingInputs, `Applying ${field.label}...`),
+    );
+  });
+  RAW_TOGGLE_FIELDS.forEach((field) => {
+    settingInputs[field.key].addEventListener("change", () =>
       rerun(controls, sourceSelect, settingInputs, `Applying ${field.label}...`),
     );
   });

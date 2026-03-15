@@ -258,29 +258,50 @@
             title="Minimum winning log correlation required for the raw detector to emit a pitch."
         /></label>
         <label class="toolbar-field"
-          >octaveBias
+          >hzWeight
           <input
-            id="octaveBias"
+            id="hzWeight"
             class="toolbar-number"
             type="number"
-            min="-10"
-            max="10"
+            min="0"
+            max="5"
             step="0.01"
             value="0.15"
-            title="Bonus added to candidate score per octave above 40 Hz."
+            title="Weight applied to the normalized Hz feature."
         /></label>
         <label class="toolbar-field"
-          >peakinessBias
+          >corrWeight
           <input
-            id="peakinessBias"
+            id="correlationWeight"
             class="toolbar-number"
             type="number"
-            min="-5"
+            min="0"
+            max="5"
+            step="0.01"
+            value="1"
+            title="Weight applied to the normalized log-correlation feature."
+        /></label>
+        <label class="toolbar-field"
+          >peakinessWeight
+          <input
+            id="peakinessWeight"
+            class="toolbar-number"
+            type="number"
+            min="0"
             max="5"
             step="0.01"
             value="0"
-            title="Bonus added to sharper local log-correlation peaks using the walked candidate compared with periods plus and minus 2 samples."
+            title="Weight applied to the normalized peakiness feature."
         /></label>
+        <label class="toolbar-field"
+          ><input id="normalizeHz" type="checkbox" checked /> normHz</label
+        >
+        <label class="toolbar-field"
+          ><input id="normalizeCorrelation" type="checkbox" checked /> normCorr</label
+        >
+        <label class="toolbar-field"
+          ><input id="normalizePeakiness" type="checkbox" checked /> normPeak</label
+        >
         <div id="perfInfo">Speed: n/a</div>
         <div id="status">Ready to record.</div>
       </div>
