@@ -39,7 +39,7 @@
 
       #toolbar,
       #subtoolbar,
-      #candidatePanel {
+      #candidatePanelDetails {
         padding: 10px 14px;
         border-bottom: 1px solid #1f2937;
         background: #0b0b0b;
@@ -65,11 +65,29 @@
         white-space: nowrap;
       }
 
-      #candidatePanel {
+      #candidatePanelDetails {
         display: block;
+        padding-top: 6px;
+        padding-bottom: 6px;
+      }
+
+      #candidatePanelDetails summary {
+        color: #cbd5e1;
+        cursor: pointer;
+        user-select: none;
+        font-size: 12px;
+      }
+
+      #candidatePanel {
         overflow-x: auto;
         padding-top: 8px;
         padding-bottom: 8px;
+      }
+
+      .candidate-summary {
+        color: #cbd5e1;
+        font-size: 12px;
+        margin-bottom: 8px;
       }
 
       .candidate-table {
@@ -77,6 +95,7 @@
         border-collapse: separate;
         border-spacing: 6px;
         font-size: 12px;
+        margin-bottom: 10px;
       }
 
       .candidate-table th {
@@ -98,7 +117,7 @@
         border: 1px solid #334155;
         border-radius: 8px;
         padding: 6px 8px;
-        min-width: 86px;
+        min-width: 75px;
         text-align: right;
         color: #f8fafc;
       }
@@ -176,6 +195,7 @@
     <div id="app">
       <div id="toolbar">
         <button id="recordButton" class="toolbar-btn" type="button">Record 5s</button>
+        <button id="autoFixButton" class="toolbar-btn" type="button">Auto Fix Actuals</button>
         <select id="sourceSelect" class="toolbar-select" aria-label="Audio source"></select>
         <label class="toolbar-field"
           >maxExtremaPerFold
@@ -186,7 +206,7 @@
             min="1"
             max="8"
             step="1"
-            value="2"
+            value="5"
             title="How many same-sign extrema to keep from each fold."
         /></label>
         <label class="toolbar-field"
@@ -226,7 +246,7 @@
             title="Maximum number of one-sample period adjustments to try when hill-climbing a candidate period."
         /></label>
         <label class="toolbar-field"
-          >rawCutoff
+          >minLogCorr
           <input
             id="rawGlobalLogCorrelationCutoff"
             class="toolbar-number"
@@ -246,8 +266,20 @@
             min="-10"
             max="10"
             step="0.01"
-            value="0"
+            value="0.15"
             title="Bonus added to candidate score per octave above 40 Hz."
+        /></label>
+        <label class="toolbar-field"
+          >peakinessBias
+          <input
+            id="peakinessBias"
+            class="toolbar-number"
+            type="number"
+            min="-5"
+            max="5"
+            step="0.01"
+            value="0"
+            title="Bonus added to sharper local log-correlation peaks using the walked candidate compared with periods plus and minus 2 samples."
         /></label>
         <div id="perfInfo">Speed: n/a</div>
         <div id="status">Ready to record.</div>
@@ -256,8 +288,14 @@
         <div id="windowInfo">
           Raw-sample window uses 2 cycles at E1, which is 2330 samples at 48 kHz (~48.5 ms).
         </div>
+        <div id="actualPitchInfo">
+          Actual labels 0. Shortcuts: A/D move, Q/E copy, W null + next, S forget + next.
+        </div>
       </div>
-      <div id="candidatePanel"></div>
+      <details id="candidatePanelDetails" open>
+        <summary>Candidate Table</summary>
+        <div id="candidatePanel"></div>
+      </details>
       <div id="pitchChart"></div>
       <div id="waveformChart"></div>
       <div id="harmonicChart"></div>

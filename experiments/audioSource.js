@@ -3,6 +3,7 @@ const RECORDED_AUDIO_STORAGE_KEY = "voicebox.private.recordedAudio";
 const RECORDED_SOURCE_KEY = "recorded:last";
 
 const ASSET_FILES = [
+  "vocal_sampler.wav",
   "High ah gaps.wav",
   "david_clipping_e4.wav",
   "david_subharmonics.wav",
@@ -12,6 +13,8 @@ const ASSET_FILES = [
   "david_vocals2.wav",
   "david_vocals_31s.wav",
   "david_vocals_vibrato.wav",
+  "female_highish.wav",
+  "into_the_unknoooown.wav",
   "maria_vibrato.wav",
   "opera-female-vocals_140bpm_A_major.wav",
   "opera-vocals_129bpm_F_minor.wav",

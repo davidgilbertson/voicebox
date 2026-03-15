@@ -195,14 +195,6 @@ export async function analyzeDecodedPitchSample(loaded, tuning = null, options =
     windowDebug[i] = result.debug;
   }
 
-  // Comparison-with-pitchy path
-  const { pitchyHz, pitchyElapsedMs } = await analyzePitchyComparison({
-    samples,
-    sampleRate,
-    hopSamples,
-    windowCount,
-  });
-
   return {
     sourceFile: AUDIO_PATH,
     sampleRate,
@@ -213,14 +205,15 @@ export async function analyzeDecodedPitchSample(loaded, tuning = null, options =
     binSizeHz: sampleRate / 2 / FFT_BIN_COUNT,
     timeSec,
     pitchHz,
-    pitchyHz,
     spectralFlatness,
     peakiness,
     peakMagnitude,
     peakinessCutoff,
     perf: {
       fftSpectrumMsPerSecondAudio:
-        windowCount > 0 ? spectrumElapsedMs / (windowCount / DISPLAY_SAMPLES_PER_SECOND) : Number.NaN,
+        windowCount > 0
+          ? spectrumElapsedMs / (windowCount / DISPLAY_SAMPLES_PER_SECOND)
+          : Number.NaN,
       voiceboxMsPerSecondAudio:
         windowCount > 0
           ? voiceboxElapsedMs / (windowCount / DISPLAY_SAMPLES_PER_SECOND)
@@ -229,12 +222,6 @@ export async function analyzeDecodedPitchSample(loaded, tuning = null, options =
         windowCount > 0
           ? (spectrumElapsedMs + voiceboxElapsedMs) / (windowCount / DISPLAY_SAMPLES_PER_SECOND)
           : Number.NaN,
-      pitchyMsPerSecondAudio:
-        windowCount > 0 ? pitchyElapsedMs / (windowCount / DISPLAY_SAMPLES_PER_SECOND) : Number.NaN,
-      timeRatio:
-        pitchyElapsedMs > 0 && voiceboxElapsedMs > 0
-          ? voiceboxElapsedMs / pitchyElapsedMs
-          : Number.NaN,
       windowCount,
     },
     windowSpectra,
@@ -242,9 +229,40 @@ export async function analyzeDecodedPitchSample(loaded, tuning = null, options =
   };
 }
 
+export async function analyzeDecodedPitchSampleWithComparison(
+  loaded,
+  tuning = null,
+  options = null,
+) {
+  const voiceboxResult = await analyzeDecodedPitchSample(loaded, tuning, options);
+  const { samples, sampleRate, hopSamples } = voiceboxResult;
+  const windowCount = voiceboxResult.timeSec.length;
+  const { pitchyHz, pitchyElapsedMs } = await analyzePitchyComparison({
+    samples,
+    sampleRate,
+    hopSamples,
+    windowCount,
+  });
+
+  return {
+    ...voiceboxResult,
+    pitchyHz,
+    perf: {
+      ...voiceboxResult.perf,
+      pitchyMsPerSecondAudio:
+        windowCount > 0 ? pitchyElapsedMs / (windowCount / DISPLAY_SAMPLES_PER_SECOND) : Number.NaN,
+      timeRatio:
+        pitchyElapsedMs > 0 && Number.isFinite(voiceboxResult.perf.voiceboxMsPerSecondAudio)
+          ? voiceboxResult.perf.voiceboxMsPerSecondAudio /
+            (pitchyElapsedMs / (windowCount / DISPLAY_SAMPLES_PER_SECOND))
+          : Number.NaN,
+    },
+  };
+}
+
 export async function analyzePitchSample(audioInput = null, tuning = null, options = null) {
   const loaded = await loadAudioSample(audioInput);
-  return analyzeDecodedPitchSample(loaded, tuning, options);
+  return analyzeDecodedPitchSampleWithComparison(loaded, tuning, options);
 }
 
 export function buildWindowDebugObject(result, windowIndex) {
