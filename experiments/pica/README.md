@@ -12,7 +12,7 @@ This experiment compares the existing FFT-based pitch timeline against a newer p
    2. extracting strong local extrema from those folds,
    3. turning extremum spacing into candidate periods,
    4. walking each candidate period to a nearby local correlation peak,
-   5. scoring candidates using correlation, octave bias, and peakiness,
+   5. scoring candidates using correlation and octave bias,
    6. choosing the best surviving candidate as the pitch.
 5. Show the selected window in detail:
    1. top chart: FFT, pica, and hand-labeled actual pitch over time,

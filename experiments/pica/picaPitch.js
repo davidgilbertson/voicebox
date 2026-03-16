@@ -5,8 +5,6 @@ import {
   PICA_SETTINGS_DEFAULTS,
 } from "./config.js";
 import { getLogCorrelation, hasZeroCrossing } from "./utils.js";
-
-const PEAKINESS_NEIGHBOR_OFFSET = 2;
 export function getPicaSettings(settings = {}) {
   return {
     ...PICA_SETTINGS_DEFAULTS,
@@ -20,11 +18,9 @@ export function getPicaSettings(settings = {}) {
       PICA_SETTINGS_DEFAULTS.picaGlobalLogCorrelationCutoff,
     hzWeight: settings.hzWeight ?? PICA_SETTINGS_DEFAULTS.hzWeight,
     correlationWeight: settings.correlationWeight ?? PICA_SETTINGS_DEFAULTS.correlationWeight,
-    peakinessWeight: settings.peakinessWeight ?? PICA_SETTINGS_DEFAULTS.peakinessWeight,
     normalizeHz: settings.normalizeHz ?? PICA_SETTINGS_DEFAULTS.normalizeHz,
     normalizeCorrelation:
       settings.normalizeCorrelation ?? PICA_SETTINGS_DEFAULTS.normalizeCorrelation,
-    normalizePeakiness: settings.normalizePeakiness ?? PICA_SETTINGS_DEFAULTS.normalizePeakiness,
   };
 }
 
@@ -373,33 +369,6 @@ function getAnchorFromTypedExtrema(typedExtrema, type) {
   return anchor;
 }
 
-function getCandidatePeakiness(
-  samples,
-  periodSamples,
-  sampleRate,
-  settings,
-  centerLogCorrelation,
-  cache = null,
-) {
-  const { minPeriodSamples, maxPeriodSamples } = getPeriodSampleBounds(sampleRate);
-  const lowerPeriodSamples = periodSamples - PEAKINESS_NEIGHBOR_OFFSET;
-  const higherPeriodSamples = periodSamples + PEAKINESS_NEIGHBOR_OFFSET;
-  if (lowerPeriodSamples < minPeriodSamples || higherPeriodSamples > maxPeriodSamples) {
-    return 0;
-  }
-
-  const lowerCorrelation = getCachedCorrelation(samples, lowerPeriodSamples, settings, cache);
-  const higherCorrelation = getCachedCorrelation(samples, higherPeriodSamples, settings, cache);
-  if (lowerCorrelation < 0 || higherCorrelation < 0) {
-    return 0;
-  }
-
-  return (
-    centerLogCorrelation -
-    (getLogCorrelation(lowerCorrelation) + getLogCorrelation(higherCorrelation)) / 2
-  );
-}
-
 function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, settings, cache = null) {
   const candidateFamilies = [];
   const peakExtrema = [];
@@ -408,8 +377,6 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
   let hzMax = Number.NEGATIVE_INFINITY;
   let correlationMin = Number.POSITIVE_INFINITY;
   let correlationMax = Number.NEGATIVE_INFINITY;
-  let peakinessMin = Number.POSITIVE_INFINITY;
-  let peakinessMax = Number.NEGATIVE_INFINITY;
 
   for (const extremum of foldExtrema) {
     if (extremum.type === "peak") {
@@ -444,23 +411,12 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
         cache,
       );
       if (!walkedPeriod) continue;
-      const peakiness = getCandidatePeakiness(
-        samples,
-        walkedPeriod.periodSamples,
-        sampleRate,
-        settings,
-        walkedPeriod.logCorrelation,
-        cache,
-      );
       const hzFeature = Math.log2(walkedPeriod.hz / PICA_MIN_HZ);
       const correlationFeature = walkedPeriod.logCorrelation;
-      const peakinessFeature = peakiness;
       if (hzFeature < hzMin) hzMin = hzFeature;
       if (hzFeature > hzMax) hzMax = hzFeature;
       if (correlationFeature < correlationMin) correlationMin = correlationFeature;
       if (correlationFeature > correlationMax) correlationMax = correlationFeature;
-      if (peakinessFeature < peakinessMin) peakinessMin = peakinessFeature;
-      if (peakinessFeature > peakinessMax) peakinessMax = peakinessFeature;
 
       candidateFamilies.push({
         type,
@@ -471,10 +427,8 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
         correlation: walkedPeriod.correlation,
         logCorrelation: walkedPeriod.logCorrelation,
         comparedRegionMaxAmplitude: walkedPeriod.comparedRegionMaxAmplitude,
-        peakiness,
         hzFeature,
         correlationFeature,
-        peakinessFeature,
       });
     }
   }
@@ -495,16 +449,11 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
     const normalizedCorrelationFeature = settings.normalizeCorrelation
       ? normalize(candidate.correlationFeature, correlationMin, correlationMax)
       : candidate.correlationFeature;
-    const normalizedPeakinessFeature = settings.normalizePeakiness
-      ? normalize(candidate.peakinessFeature, peakinessMin, peakinessMax)
-      : candidate.peakinessFeature;
     candidate.normalizedHzFeature = normalizedHzFeature;
     candidate.normalizedCorrelationFeature = normalizedCorrelationFeature;
-    candidate.normalizedPeakinessFeature = normalizedPeakinessFeature;
     candidate.weightedScore =
       settings.hzWeight * normalizedHzFeature +
-      settings.correlationWeight * normalizedCorrelationFeature +
-      settings.peakinessWeight * normalizedPeakinessFeature;
+      settings.correlationWeight * normalizedCorrelationFeature;
     if (!winningCandidate || candidate.weightedScore > winningCandidate.weightedScore) {
       winningCandidate = candidate;
     }

@@ -14,10 +14,8 @@ export const PICA_SETTINGS_DEFAULTS = {
   picaGlobalLogCorrelationCutoff: 0,
   hzWeight: 0.65,
   correlationWeight: 1.2,
-  peakinessWeight: 0,
   normalizeHz: true,
   normalizeCorrelation: true,
-  normalizePeakiness: true,
 };
 
 export const PICA_SETTING_FIELDS = [
@@ -29,11 +27,9 @@ export const PICA_SETTING_FIELDS = [
   { key: "picaGlobalLogCorrelationCutoff", label: "min log corr" },
   { key: "hzWeight", label: "hz weight" },
   { key: "correlationWeight", label: "corr weight" },
-  { key: "peakinessWeight", label: "peakiness weight" },
 ];
 
 export const PICA_TOGGLE_FIELDS = [
   { key: "normalizeHz", label: "norm hz" },
   { key: "normalizeCorrelation", label: "norm corr" },
-  { key: "normalizePeakiness", label: "norm peak" },
 ];

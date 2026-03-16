@@ -251,7 +251,7 @@ async function renderResult(result) {
 
 function getStatusText(sourceLabel, result) {
   const settings = result.picaSettings;
-  return `Loaded ${sourceLabel}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, picaWindow=${PICA_WINDOW_SAMPLES_AT_48K} samples @ 48k, maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxPatches=${settings.maxComparisonPatches}, maxWalk=${settings.maxWalkSteps}, carryThr=${settings.carryForwardLogCorrelationThreshold.toFixed(2)}, minLogCorr=${settings.picaGlobalLogCorrelationCutoff.toFixed(2)}, hzWeight=${settings.hzWeight.toFixed(2)}, corrWeight=${settings.correlationWeight.toFixed(2)}, peakinessWeight=${settings.peakinessWeight.toFixed(2)}, normHz=${settings.normalizeHz}, normCorr=${settings.normalizeCorrelation}, normPeak=${settings.normalizePeakiness}`;
+  return `Loaded ${sourceLabel}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, picaWindow=${PICA_WINDOW_SAMPLES_AT_48K} samples @ 48k, maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxPatches=${settings.maxComparisonPatches}, maxWalk=${settings.maxWalkSteps}, carryThr=${settings.carryForwardLogCorrelationThreshold.toFixed(2)}, minLogCorr=${settings.picaGlobalLogCorrelationCutoff.toFixed(2)}, hzWeight=${settings.hzWeight.toFixed(2)}, corrWeight=${settings.correlationWeight.toFixed(2)}, normHz=${settings.normalizeHz}, normCorr=${settings.normalizeCorrelation}`;
 }
 
 async function analyzePreparedSample(preparedSample, sourceLabel, settingInputs) {

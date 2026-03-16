@@ -190,16 +190,8 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
         render: (family) => family.normalizedCorrelationFeature.toFixed(3),
       },
       {
-        label: "peakN",
-        render: (family) => family.normalizedPeakinessFeature.toFixed(3),
-      },
-      {
         label: "score",
         render: (family) => family.weightedScore.toFixed(3),
-      },
-      {
-        label: "peaky",
-        render: (family) => family.peakiness.toFixed(3),
       },
     ]
       .map((row) => {
@@ -214,13 +206,9 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
                   ? getHeatmapStyle(family.normalizedHzFeature, 1)
                   : row.label === "corrN"
                     ? getHeatmapStyle(family.normalizedCorrelationFeature, 1)
-                    : row.label === "peakN"
-                      ? getHeatmapStyle(family.normalizedPeakinessFeature, 1)
-                      : row.label === "score"
-                        ? getHeatmapStyle(family.weightedScore)
-                        : row.label === "peaky"
-                          ? getHeatmapStyle(family.peakiness)
-                          : "";
+                    : row.label === "score"
+                      ? getHeatmapStyle(family.weightedScore)
+                      : "";
             return `<td class="candidate-value${selected ? " candidate-selected" : ""}" style="${heatmap}${bold}">${row.render(
               family,
             )}</td>`;
@@ -244,7 +232,7 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
   };
 
   const winningText = analysis.winningCandidate
-    ? `Winner ${analysis.winningCandidate.hz.toFixed(2)} Hz, logCorr ${analysis.winningCandidate.logCorrelation.toFixed(3)}, peakiness ${analysis.winningCandidate.peakiness.toFixed(3)}, score ${analysis.winningCandidate.weightedScore.toFixed(3)}`
+    ? `Winner ${analysis.winningCandidate.hz.toFixed(2)} Hz, logCorr ${analysis.winningCandidate.logCorrelation.toFixed(3)}, score ${analysis.winningCandidate.weightedScore.toFixed(3)}`
     : `Rejected: ${analysis.rejectionReason}`;
 
   panel.innerHTML = `

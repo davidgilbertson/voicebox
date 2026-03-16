@@ -21,7 +21,7 @@ function setSummary(text) {
 
 function setSweepInfo() {
   document.getElementById("sweepInfo").textContent =
-    `Sweep against actuals for ${VOCAL_SAMPLER_LABEL}: maxPatches=${MAX_PATCHES_VALUES.join(", ")} | maxWalk=${MAX_WALK_VALUES.join(", ")} | fixed: maxExtremaPerFold=${FIXED_SETTINGS.maxExtremaPerFold}, maxCrossingsPerPeriod=${FIXED_SETTINGS.maxCrossingsPerPeriod}, minLogCorr=${FIXED_SETTINGS.picaGlobalLogCorrelationCutoff}, hzWeight=${FIXED_SETTINGS.hzWeight}, corrWeight=${FIXED_SETTINGS.correlationWeight}, peakinessWeight=${FIXED_SETTINGS.peakinessWeight}`;
+    `Sweep against actuals for ${VOCAL_SAMPLER_LABEL}: maxPatches=${MAX_PATCHES_VALUES.join(", ")} | maxWalk=${MAX_WALK_VALUES.join(", ")} | fixed: maxExtremaPerFold=${FIXED_SETTINGS.maxExtremaPerFold}, maxCrossingsPerPeriod=${FIXED_SETTINGS.maxCrossingsPerPeriod}, minLogCorr=${FIXED_SETTINGS.picaGlobalLogCorrelationCutoff}, hzWeight=${FIXED_SETTINGS.hzWeight}, corrWeight=${FIXED_SETTINGS.correlationWeight}`;
 }
 
 function createGrid(fill = Number.NaN) {
