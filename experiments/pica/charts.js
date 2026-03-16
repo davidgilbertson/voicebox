@@ -1,10 +1,8 @@
-import { buildRawCorrelationHistogram, getRawPitchAnalysisFromWaveform } from "./analysis.js";
-import { RAW_ACCURACY_CENTS } from "./config.js";
-import { getCentsDifference } from "./utils.js";
+import { buildPicaCorrelationHistogram, getPicaPitchAnalysisFromWaveform } from "./picaPitch.js";
 import {
-  RAW_SAMPLE_WINDOW_CYCLES,
-  RAW_SAMPLE_WINDOW_DURATION_SEC,
-  RAW_SAMPLE_WINDOW_SAMPLES_AT_48K,
+  PICA_WINDOW_CYCLES,
+  PICA_WINDOW_DURATION_SEC,
+  PICA_WINDOW_SAMPLES_AT_48K,
 } from "./windowing.js";
 
 let detachWindowKeyHandler = null;
@@ -54,11 +52,9 @@ function getActualPitchLabel(label) {
 
 function getWaveformTitle(waveformWindow, analysis) {
   const durationMs =
-    waveformWindow.durationMs > 0
-      ? waveformWindow.durationMs
-      : RAW_SAMPLE_WINDOW_DURATION_SEC * 1000;
+    waveformWindow.durationMs > 0 ? waveformWindow.durationMs : PICA_WINDOW_DURATION_SEC * 1000;
   const reason = analysis.rejectionReason ? `, rejected: ${analysis.rejectionReason}` : "";
-  return `Raw waveform ending at t=${waveformWindow.endTimeSec.toFixed(3)}s, I=${waveformWindow.windowIndex} (${durationMs.toFixed(1)} ms window, ${RAW_SAMPLE_WINDOW_SAMPLES_AT_48K} samples @ 48k, ${RAW_SAMPLE_WINDOW_CYCLES} cycles at E1${reason})`;
+  return `Waveform ending at t=${waveformWindow.endTimeSec.toFixed(3)}s, I=${waveformWindow.windowIndex} (${durationMs.toFixed(1)} ms window, ${PICA_WINDOW_SAMPLES_AT_48K} samples @ 48k, ${PICA_WINDOW_CYCLES} cycles at E1${reason})`;
 }
 
 function getAmplitudeRange(samples) {
@@ -79,8 +75,12 @@ function getAmplitudeRange(samples) {
 }
 
 function getPeriodMarkers(waveformWindow) {
-  if (!(waveformWindow.rawPitchHz > 0)) return [];
-  const periodSec = 1 / waveformWindow.rawPitchHz;
+  const selectedPitchHz =
+    waveformWindow.carryForwardPitchHz > 0
+      ? waveformWindow.carryForwardPitchHz
+      : waveformWindow.picaPitchHz;
+  if (!(selectedPitchHz > 0)) return [];
+  const periodSec = 1 / selectedPitchHz;
   const markers = [];
   for (
     let timeSec = waveformWindow.endTimeSec;
@@ -138,9 +138,11 @@ function getExtremaMarkers(waveformWindow, analysis) {
 function renderCandidateTable(panel, analysis, fftPitchHz) {
   const families = analysis.candidateFamilies;
   if (families.length === 0) {
-    panel.innerHTML = `<div class="candidate-summary">No candidates. ${
-      analysis.rejectionReason ?? ""
-    }</div>`;
+    if (analysis.winningCandidate?.type === "carryForward") {
+      panel.innerHTML = `<div class="candidate-summary">Carry-forward path won at ${analysis.winningCandidate.hz.toFixed(2)} Hz with logCorr ${analysis.winningCandidate.logCorrelation.toFixed(3)}.</div>`;
+      return;
+    }
+    panel.innerHTML = `<div class="candidate-summary">No candidates. ${analysis.rejectionReason ?? ""}</div>`;
     return;
   }
 
@@ -262,11 +264,14 @@ async function renderHistogram(
   onActualPitchSelect,
 ) {
   const fftPitchHz = waveformWindow.fftPitchHz;
-  const rawPitchHz = waveformWindow.rawPitchHz;
+  const picaPitchHz = waveformWindow.picaPitchHz;
+  const carryForwardPitchHz = waveformWindow.carryForwardPitchHz;
   const fftMarkerX = Number.isFinite(fftPitchHz) ? [fftPitchHz] : [];
   const fftMarkerY = getNearestHistogramY(histogram, fftPitchHz);
-  const rawMarkerX = Number.isFinite(rawPitchHz) ? [rawPitchHz] : [];
-  const rawMarkerY = getNearestHistogramY(histogram, rawPitchHz);
+  const picaMarkerX = Number.isFinite(picaPitchHz) ? [picaPitchHz] : [];
+  const picaMarkerY = getNearestHistogramY(histogram, picaPitchHz);
+  const carryForwardMarkerX = Number.isFinite(carryForwardPitchHz) ? [carryForwardPitchHz] : [];
+  const carryForwardMarkerY = getNearestHistogramY(histogram, carryForwardPitchHz);
   const actualMarkerX = Number.isFinite(actualPitchHz) ? [actualPitchHz] : [];
   const actualMarkerY = getNearestHistogramY(histogram, actualPitchHz);
 
@@ -302,11 +307,19 @@ async function renderHistogram(
         showlegend: false,
       },
       {
-        x: rawMarkerX,
-        y: rawMarkerY,
+        x: picaMarkerX,
+        y: picaMarkerY,
         mode: "markers",
         marker: { color: "#ff0066", size: 12, symbol: "cross" },
-        hovertemplate: "Raw=%{x:.2f} Hz<br>logCorr=%{y:.3f}<extra></extra>",
+        hovertemplate: "Pica=%{x:.2f} Hz<br>logCorr=%{y:.3f}<extra></extra>",
+        showlegend: false,
+      },
+      {
+        x: carryForwardMarkerX,
+        y: carryForwardMarkerY,
+        mode: "markers",
+        marker: { color: "#facc15", size: 12, symbol: "diamond" },
+        hovertemplate: "Carry=%{x:.2f} Hz<br>logCorr=%{y:.3f}<extra></extra>",
         showlegend: false,
       },
       {
@@ -354,7 +367,7 @@ async function renderHistogram(
   });
 }
 
-export async function renderRawSamplePitchCharts(result, options = {}) {
+export async function renderPicaPitchCharts(result, options = {}) {
   const plotly = globalThis.Plotly;
   const {
     selectedWindowIndex = 0,
@@ -366,8 +379,6 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
   const candidatePanel = document.getElementById("candidatePanel");
   const actualPitchHz = [];
   const actualPitchColor = [];
-  const rawWrongX = [];
-  const rawWrongY = [];
   const hasActuals = Array.isArray(result.actualPitchHz);
 
   function getResolvedActualPitchHz(windowIndex) {
@@ -379,8 +390,6 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
   function refreshActualSeries() {
     actualPitchHz.splice(0, actualPitchHz.length);
     actualPitchColor.splice(0, actualPitchColor.length);
-    rawWrongX.splice(0, rawWrongX.length);
-    rawWrongY.splice(0, rawWrongY.length);
     for (let index = 0; index < result.timeSec.length; index += 1) {
       const actualHz = getResolvedActualPitchHz(index);
       if (actualHz === null) {
@@ -394,17 +403,7 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
             : "rgba(37, 111, 64, 1)",
         );
       }
-
-      if (hasActuals) {
-        const rawHz = result.rawPitchHz[index];
-        if (!Number.isFinite(actualHz)) continue;
-        if (!Number.isFinite(rawHz) || getCentsDifference(rawHz, actualHz) > RAW_ACCURACY_CENTS) {
-          rawWrongX.push(result.timeSec[index]);
-          rawWrongY.push(rawHz);
-        }
-      }
     }
-    console.log("[rawSamplePitch] raw wrong markers", rawWrongX.length);
   }
 
   refreshActualSeries();
@@ -424,13 +423,23 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
       },
       {
         x: result.timeSec,
-        y: result.rawPitchHz,
+        y: result.picaPitchHz,
         mode: "lines",
         customdata: result.timeSec.map((_, index) => index),
         line: { width: 1, color: "rgba(248, 113, 113, 0.95)" },
         connectgaps: false,
-        hovertemplate: "t=%{x:.3f}s<br>Raw=%{y:.2f} Hz<extra></extra>",
-        name: "Voicebox Raw",
+        hovertemplate: "t=%{x:.3f}s<br>Pica=%{y:.2f} Hz<extra></extra>",
+        name: "PICA",
+      },
+      {
+        x: result.timeSec,
+        y: result.carryForwardPitchHz,
+        mode: "lines",
+        customdata: result.timeSec.map((_, index) => index),
+        line: { width: 1.25, color: "rgba(250, 204, 21, 0.95)" },
+        connectgaps: false,
+        hovertemplate: "t=%{x:.3f}s<br>Carry=%{y:.2f} Hz<extra></extra>",
+        name: "Carry",
       },
       {
         x: result.timeSec,
@@ -441,14 +450,6 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
         hovertemplate: "t=%{x:.3f}s<br>Actual=%{y:.2f} Hz<extra></extra>",
         name: "Actual",
         visible: hasActuals,
-      },
-      {
-        x: rawWrongX,
-        y: rawWrongY,
-        mode: "markers",
-        marker: { size: 5, color: "#ffffff" },
-        hovertemplate: "t=%{x:.3f}s<br>Raw wrong=%{y:.2f} Hz<extra></extra>",
-        name: "Raw wrong",
       },
     ],
     {
@@ -476,20 +477,20 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
   async function selectWindow(windowIndex) {
     activeWindowIndex = Math.max(0, Math.min(maxWindowIndex, windowIndex));
     const waveformWindow = getWaveformWindow(activeWindowIndex);
-    const analysis = getRawPitchAnalysisFromWaveform(
+    const analysis = getPicaPitchAnalysisFromWaveform(
       waveformWindow.samples,
       waveformWindow.sampleRate,
-      result.rawSettings,
+      result.picaSettings,
     );
-    const histogram = buildRawCorrelationHistogram(
+    const histogram = buildPicaCorrelationHistogram(
       waveformWindow.samples,
       waveformWindow.sampleRate,
-      result.rawSettings,
+      result.picaSettings,
     );
     const extremaMarkers = getExtremaMarkers(waveformWindow, analysis);
 
     await plotly.relayout("pitchChart", {
-      title: `Pitch Timeline (selected raw: ${getSelectedPitchLabel(waveformWindow.rawPitchHz)}, actual: ${getActualPitchLabel(getResolvedActualPitchHz(activeWindowIndex))})`,
+      title: `Pitch Timeline (pica: ${getSelectedPitchLabel(waveformWindow.picaPitchHz)}, carry: ${getSelectedPitchLabel(waveformWindow.carryForwardPitchHz)}, actual: ${getActualPitchLabel(getResolvedActualPitchHz(activeWindowIndex))})`,
       shapes: [
         {
           type: "line",
@@ -514,7 +515,7 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
           mode: "lines",
           line: { width: 1.75, color: "rgba(74, 222, 128, 0.95)" },
           hovertemplate: "t=%{x:.5f}s<br>Amp=%{y:.4f}<extra></extra>",
-          name: "Raw samples",
+          name: "Samples",
         },
         {
           x: extremaMarkers.x,
@@ -575,11 +576,11 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
             void plotly.restyle(
               "pitchChart",
               {
-                y: [actualPitchHz, rawWrongY],
-                "marker.color": [actualPitchColor, "#ffffff"],
-                x: [result.timeSec, rawWrongX],
+                y: [actualPitchHz],
+                "marker.color": [actualPitchColor],
+                x: [result.timeSec],
               },
-              [2, 3],
+              [3],
             );
             void selectWindow(activeWindowIndex);
           }
@@ -596,14 +597,6 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
     const point = event.points?.[0];
     const windowIndex = point?.customdata;
     if (!Number.isInteger(windowIndex)) return;
-    if (hasActuals && point.curveNumber === 3) {
-      console.log("[rawSamplePitch] raw wrong clicked", {
-        windowIndex,
-        timeSec: result.timeSec[windowIndex],
-        actualHz: getResolvedActualPitchHz(windowIndex),
-        rawHz: result.rawPitchHz[windowIndex],
-      });
-    }
     await selectWindow(windowIndex);
   });
 
@@ -613,9 +606,11 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
   }
 
   const keydownHandler = (event) => {
-    if (!hasActuals) return;
     if (event.defaultPrevented) return;
-    if (!["a", "d", "q", "e", "w", "s"].includes(event.key.toLowerCase())) return;
+    const key = event.key.toLowerCase();
+    const isMoveKey = key === "a" || key === "d";
+    const isLabelKey = key === "q" || key === "w" || key === "e" || key === "s";
+    if (!isMoveKey && !(hasActuals && isLabelKey)) return;
     const target = event.target;
     if (
       target instanceof HTMLInputElement ||
@@ -625,22 +620,24 @@ export async function renderRawSamplePitchCharts(result, options = {}) {
       return;
     }
     event.preventDefault();
-    const nextWindowIndex = actualLabelEditor.handleKey(
-      event.key,
-      activeWindowIndex,
-      maxWindowIndex,
-    );
-    refreshActualSeries();
-    onLabelChange?.();
-    void plotly.restyle(
-      "pitchChart",
-      {
-        y: [actualPitchHz, rawWrongY],
-        "marker.color": [actualPitchColor, "#ffffff"],
-        x: [result.timeSec, rawWrongX],
-      },
-      [2, 3],
-    );
+    const nextWindowIndex = isMoveKey
+      ? key === "a"
+        ? Math.max(0, activeWindowIndex - 1)
+        : Math.min(maxWindowIndex, activeWindowIndex + 1)
+      : actualLabelEditor.handleKey(event.key, activeWindowIndex, maxWindowIndex);
+    if (hasActuals && isLabelKey) {
+      refreshActualSeries();
+      onLabelChange?.();
+      void plotly.restyle(
+        "pitchChart",
+        {
+          y: [actualPitchHz],
+          "marker.color": [actualPitchColor],
+          x: [result.timeSec],
+        },
+        [3],
+      );
+    }
     void selectWindow(nextWindowIndex);
   };
 

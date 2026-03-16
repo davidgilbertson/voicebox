@@ -1,15 +1,12 @@
-import {
-  analyzePreparedActualPitchSample,
-  loadActualPitchSample,
-} from "../rawSamplePitch/analysis.js";
-import { RAW_SETTINGS_DEFAULTS } from "../rawSamplePitch/config.js";
+import { analyzePreparedActualPitchSample, loadActualPitchSample } from "./picaExperiment.js";
+import { PICA_SETTINGS_DEFAULTS } from "./config.js";
 
 const MAX_PATCHES_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 11];
 const MAX_WALK_VALUES = [5, 10, 15, 20, 30, 40, 50, 65, 80, 100];
 const VOCAL_SAMPLER_URL = "../../.private/assets/vocal_sampler.wav";
 const VOCAL_SAMPLER_LABEL = "vocal_sampler.wav";
 const FIXED_SETTINGS = {
-  ...RAW_SETTINGS_DEFAULTS,
+  ...PICA_SETTINGS_DEFAULTS,
 };
 
 function setStatus(text, isError = false) {
@@ -24,7 +21,7 @@ function setSummary(text) {
 
 function setSweepInfo() {
   document.getElementById("sweepInfo").textContent =
-    `Sweep against actuals for ${VOCAL_SAMPLER_LABEL}: maxPatches=${MAX_PATCHES_VALUES.join(", ")} | maxWalk=${MAX_WALK_VALUES.join(", ")} | fixed: maxExtremaPerFold=${FIXED_SETTINGS.maxExtremaPerFold}, maxCrossingsPerPeriod=${FIXED_SETTINGS.maxCrossingsPerPeriod}, minLogCorr=${FIXED_SETTINGS.rawGlobalLogCorrelationCutoff}, hzWeight=${FIXED_SETTINGS.hzWeight}, corrWeight=${FIXED_SETTINGS.correlationWeight}, peakinessWeight=${FIXED_SETTINGS.peakinessWeight}`;
+    `Sweep against actuals for ${VOCAL_SAMPLER_LABEL}: maxPatches=${MAX_PATCHES_VALUES.join(", ")} | maxWalk=${MAX_WALK_VALUES.join(", ")} | fixed: maxExtremaPerFold=${FIXED_SETTINGS.maxExtremaPerFold}, maxCrossingsPerPeriod=${FIXED_SETTINGS.maxCrossingsPerPeriod}, minLogCorr=${FIXED_SETTINGS.picaGlobalLogCorrelationCutoff}, hzWeight=${FIXED_SETTINGS.hzWeight}, corrWeight=${FIXED_SETTINGS.correlationWeight}, peakinessWeight=${FIXED_SETTINGS.peakinessWeight}`;
 }
 
 function createGrid(fill = Number.NaN) {
@@ -56,11 +53,11 @@ async function runSweepForSample(preparedSample) {
       const elapsedMs = performance.now() - startMs;
 
       console.log(
-        `${message} -> raw accuracy ${(result.metrics.rawAccuracy * 100).toFixed(1)}% (${result.metrics.rawCorrectCount}/${result.metrics.actualComparedCount}), ${elapsedMs.toFixed(1)}ms`,
+        `${message} -> pica accuracy ${(result.metrics.picaAccuracy * 100).toFixed(1)}% (${result.metrics.picaCorrectCount}/${result.metrics.actualComparedCount}), ${elapsedMs.toFixed(1)}ms`,
       );
 
-      accuracy[walkIndex][patchIndex] = result.metrics.rawAccuracy;
-      correctCounts[walkIndex][patchIndex] = result.metrics.rawCorrectCount;
+      accuracy[walkIndex][patchIndex] = result.metrics.picaAccuracy;
+      correctCounts[walkIndex][patchIndex] = result.metrics.picaCorrectCount;
       comparedCounts[walkIndex][patchIndex] = result.metrics.actualComparedCount;
     }
   }
@@ -168,7 +165,7 @@ async function renderResults(sweepResult) {
   const bounds = getHeatmapBounds(sweepResult);
   await renderHeatmap(
     "heatmap0",
-    "Raw accuracy",
+    "Pica accuracy",
     sweepResult.accuracy,
     sweepResult.correctCounts,
     sweepResult.comparedCounts,

@@ -1,22 +1,22 @@
-# Raw Sample Pitch Experiment
+# PICA - Pitch Inference from Candidate Analysis
 
-This experiment compares the existing FFT-based pitch timeline against a newer raw-sample detector and gives you a quick way to build hand-labeled ground truth.
+This experiment compares the existing FFT-based pitch timeline against a newer pica-sample detector and gives you a quick way to build hand-labeled ground truth.
 
 ## High-level flow
 
 1. Load an audio sample from the asset list, or record a short sample from the microphone.
 2. Run the existing FFT detector across the whole file. That provides the blue dashed pitch timeline at the top and acts as the initial rough baseline.
-3. For each selected timestep, take a short raw waveform window ending at that FFT frame time.
-4. Run the raw-sample detector on that window by:
+3. For each selected timestep, take a short waveform window ending at that FFT frame time.
+4. Run the pica-sample detector on that window by:
    1. collecting recent folds between zero crossings,
    2. extracting strong local extrema from those folds,
    3. turning extremum spacing into candidate periods,
    4. walking each candidate period to a nearby local correlation peak,
    5. scoring candidates using correlation, octave bias, and peakiness,
-   6. choosing the best surviving candidate as the raw pitch.
+   6. choosing the best surviving candidate as the pitch.
 5. Show the selected window in detail:
-   1. top chart: FFT, raw, and hand-labeled actual pitch over time,
-   2. middle chart: raw waveform window and selected extrema,
+   1. top chart: FFT, pica, and hand-labeled actual pitch over time,
+   2. middle chart: waveform window and selected extrema,
    3. bottom chart: correlation histogram for the selected window.
 
 This stays intentionally lightweight. It is a playground for detector behavior and labeling, not a polished production tool.
@@ -42,12 +42,12 @@ The `Auto Fix Actuals` button seeds the local labels by taking each FFT pitch an
 
 ## Keyboard shortcuts
 
-- `A`: move one timestep left
-- `D`: move one timestep right
-- `Q`: move left and copy the current pitch estimate into the new timestep, then walk it to the nearest local correlation peak
-- `E`: move right and copy the current pitch estimate into the new timestep, then walk it to the nearest local correlation peak
-- `W`: mark the current timestep as `null` and move to the next timestep
-- `S`: forget the current label and move to the next timestep
+- `A`: move one timestep left, always
+- `D`: move one timestep right, always
+- `Q`: in labeling mode, move left and copy the current pitch estimate into the new timestep, then walk it to the nearest local correlation peak
+- `E`: in labeling mode, move right and copy the current pitch estimate into the new timestep, then walk it to the nearest local correlation peak
+- `W`: in labeling mode, mark the current timestep as `null` and move to the next timestep
+- `S`: in labeling mode, forget the current label and move to the next timestep
 
 You can also click a marker in the bottom correlation chart to set the current timestep's actual pitch directly to that clicked candidate.
 

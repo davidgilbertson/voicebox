@@ -98,8 +98,12 @@ async function analyzePitchyComparison({ samples, sampleRate, hopSamples, window
 
   let pitchyElapsedMs = 0;
   for (let i = 0; i < windowCount; i += 1) {
-    const startSample = i * hopSamples;
-    const frameSamples = samples.subarray(startSample, startSample + FFT_SIZE);
+    const endSample = i * hopSamples;
+    if (endSample < FFT_SIZE) {
+      pitchyHz[i] = Number.NaN;
+      continue;
+    }
+    const frameSamples = samples.subarray(endSample - FFT_SIZE, endSample);
     const pitchyStartMs = performance.now();
     const [pitchyPitch, pitchyClarity] = pitchyDetector.findPitch(frameSamples, sampleRate);
     pitchyElapsedMs += performance.now() - pitchyStartMs;
@@ -180,7 +184,9 @@ export async function analyzeDecodedPitchSample(loaded, tuning = null, options =
       ? { flatness: Number.NaN, peakiness: Number.NaN, peakMagnitude: Number.NaN }
       : detectPeakiness(magnitudes);
     timeSec[i] = i / DISPLAY_SAMPLES_PER_SECOND;
+    const hasEnoughHistory = i * hopSamples >= FFT_SIZE;
     pitchHz[i] =
+      hasEnoughHistory &&
       result.hz > 0 &&
       (disablePeakinessGate ||
         (Number.isFinite(peakinessMetrics.peakiness) &&

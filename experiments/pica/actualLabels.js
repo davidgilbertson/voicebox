@@ -1,6 +1,6 @@
-import { getWalkedPitchHz } from "./analysis.js";
+import { getWalkedPitchHz } from "./picaPitch.js";
 
-const STORAGE_KEY = "voicebox.rawSamplePitch.actualPitchVocalSampler";
+const STORAGE_KEY = "voicebox.picaPitch.actualPitchVocalSampler";
 
 function readLabels() {
   return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
@@ -61,7 +61,7 @@ export function createActualLabelEditor(sourceKey, result, getWaveformWindow) {
         waveformWindow.sampleRate,
         fftPitchHz,
         {
-          ...result.rawSettings,
+          ...result.picaSettings,
           maxWalkSteps: Number.POSITIVE_INFINITY,
         },
       );
@@ -77,7 +77,7 @@ export function createActualLabelEditor(sourceKey, result, getWaveformWindow) {
       ? getLabel(activeWindowIndex)
       : result.pitchHz[activeWindowIndex] === result.pitchHz[activeWindowIndex]
         ? result.pitchHz[activeWindowIndex]
-        : result.rawPitchHz[activeWindowIndex];
+        : result.picaPitchHz[activeWindowIndex];
 
     if (seedPitchHz === null || seedPitchHz !== seedPitchHz) {
       setLabel(nextWindowIndex, null);
@@ -90,7 +90,7 @@ export function createActualLabelEditor(sourceKey, result, getWaveformWindow) {
       waveformWindow.sampleRate,
       seedPitchHz,
       {
-        ...result.rawSettings,
+        ...result.picaSettings,
         maxWalkSteps: Number.POSITIVE_INFINITY,
       },
     );

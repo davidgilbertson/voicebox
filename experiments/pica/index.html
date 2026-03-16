@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Raw Sample Pitch Experiment</title>
+    <title>Pica Sample Pitch Experiment</title>
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <style>
       :root {
@@ -62,7 +62,41 @@
       #perfInfo,
       #windowInfo {
         color: #93c5fd;
+      }
+
+      #perfInfo {
+        min-width: 0;
+      }
+
+      .perf-table {
+        border-collapse: collapse;
+        font-size: 11px;
+      }
+
+      .perf-table th,
+      .perf-table td {
+        border: 1px solid #1e293b;
+        padding: 3px 6px;
+        text-align: right;
         white-space: nowrap;
+      }
+
+      .perf-table th:first-child {
+        text-align: left;
+        color: #cbd5e1;
+      }
+
+      .perf-table thead th {
+        color: #93c5fd;
+        font-weight: 600;
+      }
+
+      .perf-table td {
+        color: #e2e8f0;
+      }
+
+      .perf-table .perf-accuracy {
+        font-weight: 700;
       }
 
       #candidatePanelDetails {
@@ -246,16 +280,28 @@
             title="Maximum number of one-sample period adjustments to try when hill-climbing a candidate period."
         /></label>
         <label class="toolbar-field"
+          >carryThr
+          <input
+            id="carryForwardLogCorrelationThreshold"
+            class="toolbar-number"
+            type="number"
+            min="0"
+            max="4"
+            step="0.01"
+            value="1.2"
+            title="Minimum prior and walked log correlation required before the carry-forward path can win."
+        /></label>
+        <label class="toolbar-field"
           >minLogCorr
           <input
-            id="rawGlobalLogCorrelationCutoff"
+            id="picaGlobalLogCorrelationCutoff"
             class="toolbar-number"
             type="number"
             min="0"
             max="4"
             step="0.01"
             value="0"
-            title="Minimum winning log correlation required for the raw detector to emit a pitch."
+            title="Minimum winning log correlation required for the pica detector to emit a pitch."
         /></label>
         <label class="toolbar-field"
           >hzWeight
@@ -302,15 +348,16 @@
         <label class="toolbar-field"
           ><input id="normalizePeakiness" type="checkbox" checked /> normPeak</label
         >
-        <div id="perfInfo">Speed: n/a</div>
+        <div id="perfInfo"></div>
         <div id="status">Ready to record.</div>
       </div>
       <div id="subtoolbar">
         <div id="windowInfo">
-          Raw-sample window uses 2 cycles at E1, which is 2330 samples at 48 kHz (~48.5 ms).
+          Sample window uses 2 cycles at E1, which is 2330 samples at 48 kHz (~48.5 ms).
         </div>
         <div id="actualPitchInfo">
-          Actual labels 0. Shortcuts: A/D move, Q/E copy, W null + next, S forget + next.
+          Actual labels 0. Shortcuts: A/D move always. Q/E copy, W null + next, S forget + next in
+          labeling mode.
         </div>
       </div>
       <details id="candidatePanelDetails" open>

@@ -10,25 +10,6 @@ export function getCentsDifference(aHz, bHz) {
   return Math.abs(1200 * Math.log2(aHz / bHz));
 }
 
-export function getMaxAbsoluteAmplitude(samples) {
-  let max = 0;
-  for (const sample of samples) {
-    const absolute = Math.abs(sample);
-    if (absolute > max) max = absolute;
-  }
-  return max;
-}
-
 export function hasZeroCrossing(a, b) {
   return a === 0 || b === 0 || (a < 0 && b > 0) || (a > 0 && b < 0);
-}
-
-export function countZeroCrossings(samples) {
-  let count = 0;
-  for (let index = 1; index < samples.length; index += 1) {
-    if (hasZeroCrossing(samples[index - 1], samples[index])) {
-      count += 1;
-    }
-  }
-  return count;
 }

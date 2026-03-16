@@ -1,14 +1,14 @@
-import { analyzePreparedPitchSample, loadPitchSample } from "./analysis.js";
+import { analyzePreparedPitchSample, loadPitchSample } from "./picaExperiment.js";
 import { createActualLabelEditor } from "./actualLabels.js";
-import { renderRawSamplePitchCharts } from "./charts.js";
+import { renderPicaPitchCharts } from "./charts.js";
 import {
   DEFAULT_ASSET_URL,
-  RAW_SETTING_FIELDS,
-  RAW_SETTINGS_DEFAULTS,
-  RAW_TOGGLE_FIELDS,
+  PICA_SETTING_FIELDS,
+  PICA_SETTINGS_DEFAULTS,
+  PICA_TOGGLE_FIELDS,
   RECORD_DURATION_MS,
 } from "./config.js";
-import { getRawWaveformWindow, RAW_SAMPLE_WINDOW_SAMPLES_AT_48K } from "./windowing.js";
+import { getPicaWaveformWindow, PICA_WINDOW_SAMPLES_AT_48K } from "./windowing.js";
 import { recordMicrophoneAudio } from "../micCapture.js";
 import {
   getAudioSources,
@@ -19,7 +19,7 @@ import {
   writeSelectedAudioSourceKey,
 } from "../audioSource.js";
 
-const STORAGE_PREFIX = "voicebox.rawSamplePitch.";
+const STORAGE_PREFIX = "voicebox.picaPitch.";
 const SELECTED_SOURCE_STORAGE_KEY = `${STORAGE_PREFIX}selectedSourceKey`;
 const SELECTED_WINDOW_STORAGE_KEY = `${STORAGE_PREFIX}selectedWindowIndex`;
 const CANDIDATE_PANEL_OPEN_STORAGE_KEY = `${STORAGE_PREFIX}candidatePanelOpen`;
@@ -33,9 +33,9 @@ function getStorageKey(settingKey) {
 }
 
 function readStoredNumber(key, fallback) {
-  const raw = localStorage.getItem(getStorageKey(key));
-  if (raw === null) return fallback;
-  const value = Number(raw);
+  const val = localStorage.getItem(getStorageKey(key));
+  if (val === null) return fallback;
+  const value = Number(val);
   return Number.isNaN(value) ? fallback : value;
 }
 
@@ -44,9 +44,9 @@ function writeStoredNumber(key, value) {
 }
 
 function readStoredBoolean(key, fallback) {
-  const raw = localStorage.getItem(getStorageKey(key));
-  if (raw === null) return fallback;
-  return raw === "true";
+  const val = localStorage.getItem(getStorageKey(key));
+  if (val === null) return fallback;
+  return val === "true";
 }
 
 function writeStoredBoolean(key, value) {
@@ -74,25 +74,25 @@ function writeStoredCandidatePanelOpen(isOpen) {
 function getStoredSettings() {
   return {
     ...Object.fromEntries(
-      RAW_SETTING_FIELDS.map((field) => [
+      PICA_SETTING_FIELDS.map((field) => [
         field.key,
-        readStoredNumber(field.key, RAW_SETTINGS_DEFAULTS[field.key]),
+        readStoredNumber(field.key, PICA_SETTINGS_DEFAULTS[field.key]),
       ]),
     ),
     ...Object.fromEntries(
-      RAW_TOGGLE_FIELDS.map((field) => [
+      PICA_TOGGLE_FIELDS.map((field) => [
         field.key,
-        readStoredBoolean(field.key, RAW_SETTINGS_DEFAULTS[field.key]),
+        readStoredBoolean(field.key, PICA_SETTINGS_DEFAULTS[field.key]),
       ]),
     ),
   };
 }
 
 function writeStoredSettings(settings) {
-  RAW_SETTING_FIELDS.forEach((field) => {
+  PICA_SETTING_FIELDS.forEach((field) => {
     writeStoredNumber(field.key, settings[field.key]);
   });
-  RAW_TOGGLE_FIELDS.forEach((field) => {
+  PICA_TOGGLE_FIELDS.forEach((field) => {
     writeStoredBoolean(field.key, settings[field.key]);
   });
 }
@@ -100,19 +100,19 @@ function writeStoredSettings(settings) {
 function getSettingsFromInputs(settingInputs) {
   return {
     ...Object.fromEntries(
-      RAW_SETTING_FIELDS.map((field) => [field.key, Number(settingInputs[field.key].value)]),
+      PICA_SETTING_FIELDS.map((field) => [field.key, Number(settingInputs[field.key].value)]),
     ),
     ...Object.fromEntries(
-      RAW_TOGGLE_FIELDS.map((field) => [field.key, settingInputs[field.key].checked]),
+      PICA_TOGGLE_FIELDS.map((field) => [field.key, settingInputs[field.key].checked]),
     ),
   };
 }
 
 function writeSettingsToInputs(settingInputs, settings) {
-  RAW_SETTING_FIELDS.forEach((field) => {
+  PICA_SETTING_FIELDS.forEach((field) => {
     settingInputs[field.key].value = String(settings[field.key]);
   });
-  RAW_TOGGLE_FIELDS.forEach((field) => {
+  PICA_TOGGLE_FIELDS.forEach((field) => {
     settingInputs[field.key].checked = settings[field.key];
   });
 }
@@ -127,18 +127,57 @@ function hasActuals(result) {
   return Array.isArray(result.actualPitchHz);
 }
 
+function getRealtimeLabel(msPerSecondAudio) {
+  return Number.isFinite(msPerSecondAudio) && msPerSecondAudio > 0
+    ? `${(1000 / msPerSecondAudio).toFixed(1)}x`
+    : "n/a";
+}
+
+function getAccuracyLabel(accuracy, correctCount, comparedCount) {
+  if (!(comparedCount > 0) || !Number.isFinite(accuracy)) {
+    return "n/a";
+  }
+  return `<span class="perf-accuracy">${(accuracy * 100).toFixed(1)}%</span> (${correctCount}/${comparedCount})`;
+}
+
 function updatePerformanceInfo(result) {
   const infoElement = document.getElementById("perfInfo");
-  const fftRealtime = 1000 / result.perf.voiceboxPipelineMsPerSecondAudio;
-  const rawRealtime = 1000 / result.perf.rawPipelineMsPerSecondAudio;
-  if (result.metrics.actualComparedCount > 0) {
-    infoElement.textContent =
-      `Realtime - Voicebox FFT ${fftRealtime.toFixed(1)}x, Voicebox Raw ${rawRealtime.toFixed(1)}x, ` +
-      `FFT accuracy ${(result.metrics.fftAccuracy * 100).toFixed(1)}% (${result.metrics.fftCorrectCount}/${result.metrics.actualComparedCount}), ` +
-      `Raw accuracy ${(result.metrics.rawAccuracy * 100).toFixed(1)}% (${result.metrics.rawCorrectCount}/${result.metrics.actualComparedCount})`;
-    return;
-  }
-  infoElement.textContent = `Realtime - Voicebox FFT ${fftRealtime.toFixed(1)}x, Voicebox Raw ${rawRealtime.toFixed(1)}x`;
+  infoElement.innerHTML = `
+    <table class="perf-table">
+      <thead>
+        <tr>
+          <th></th>
+          ${result.methods.map((method) => `<th>${method.label}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>Realtime</th>
+          ${result.methods
+            .map((method) => `<td>${getRealtimeLabel(method.msPerSecondAudio)}</td>`)
+            .join("")}
+        </tr>
+        <tr>
+          <th>Accuracy</th>
+          <td>${getAccuracyLabel(
+            result.metrics.fftAccuracy,
+            result.metrics.fftCorrectCount,
+            result.metrics.actualComparedCount,
+          )}</td>
+          <td>${getAccuracyLabel(
+            result.metrics.picaAccuracy,
+            result.metrics.picaCorrectCount,
+            result.metrics.actualComparedCount,
+          )}</td>
+          <td>${getAccuracyLabel(
+            result.metrics.carryForwardAccuracy,
+            result.metrics.carryForwardCorrectCount,
+            result.metrics.carryForwardComparedCount,
+          )}</td>
+        </tr>
+      </tbody>
+    </table>
+  `;
 }
 
 function renderSourceOptions(sourceSelect, selectedKey) {
@@ -181,22 +220,22 @@ async function renderResult(result) {
     ? createActualLabelEditor(
         localStorage.getItem(SELECTED_SOURCE_STORAGE_KEY) || "",
         result,
-        (windowIndex) => getRawWaveformWindow(result, windowIndex),
+        (windowIndex) => getPicaWaveformWindow(result, windowIndex),
       )
     : null;
 
   function updateActualPitchInfo() {
     document.getElementById("actualPitchInfo").textContent = actualLabelEditor
-      ? `Actual labels ${actualLabelEditor.getLabelCount()}. Shortcuts: A/D move, Q/E copy, W null + next, S forget + next.`
-      : "No actual labels for this source.";
+      ? `Actual labels ${actualLabelEditor.getLabelCount()}. Shortcuts: A/D move always. Q/E copy, W null + next, S forget + next in labeling mode.`
+      : "No actual labels for this source. Shortcuts: A/D move.";
   }
 
   autoFixButton.disabled = !actualLabelEditor;
   updateActualPitchInfo();
 
-  await renderRawSamplePitchCharts(result, {
+  await renderPicaPitchCharts(result, {
     selectedWindowIndex: readStoredWindowIndex(),
-    getWaveformWindow: (windowIndex) => getRawWaveformWindow(result, windowIndex),
+    getWaveformWindow: (windowIndex) => getPicaWaveformWindow(result, windowIndex),
     actualLabelEditor,
     onLabelChange: () => {
       updateActualPitchInfo();
@@ -204,15 +243,15 @@ async function renderResult(result) {
     onWindowSelect: writeStoredWindowIndex,
   });
 
-  if (!hasPrintedMaterializedActualPitch) {
-    hasPrintedMaterializedActualPitch = true;
-    console.log("Materialized actual pitch", actualLabelEditor ? result.actualPitchHz : null);
-  }
+  // if (!hasPrintedMaterializedActualPitch) {
+  //   hasPrintedMaterializedActualPitch = true;
+  //   console.log("Materialized actual pitch", actualLabelEditor ? result.actualPitchHz : null);
+  // }
 }
 
 function getStatusText(sourceLabel, result) {
-  const settings = result.rawSettings;
-  return `Loaded ${sourceLabel}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, rawWindow=${RAW_SAMPLE_WINDOW_SAMPLES_AT_48K} samples @ 48k, maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxPatches=${settings.maxComparisonPatches}, maxWalk=${settings.maxWalkSteps}, minLogCorr=${settings.rawGlobalLogCorrelationCutoff.toFixed(2)}, hzWeight=${settings.hzWeight.toFixed(2)}, corrWeight=${settings.correlationWeight.toFixed(2)}, peakinessWeight=${settings.peakinessWeight.toFixed(2)}, normHz=${settings.normalizeHz}, normCorr=${settings.normalizeCorrelation}, normPeak=${settings.normalizePeakiness}`;
+  const settings = result.picaSettings;
+  return `Loaded ${sourceLabel}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, picaWindow=${PICA_WINDOW_SAMPLES_AT_48K} samples @ 48k, maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxPatches=${settings.maxComparisonPatches}, maxWalk=${settings.maxWalkSteps}, carryThr=${settings.carryForwardLogCorrelationThreshold.toFixed(2)}, minLogCorr=${settings.picaGlobalLogCorrelationCutoff.toFixed(2)}, hzWeight=${settings.hzWeight.toFixed(2)}, corrWeight=${settings.correlationWeight.toFixed(2)}, peakinessWeight=${settings.peakinessWeight.toFixed(2)}, normHz=${settings.normalizeHz}, normCorr=${settings.normalizeCorrelation}, normPeak=${settings.normalizePeakiness}`;
 }
 
 async function analyzePreparedSample(preparedSample, sourceLabel, settingInputs) {
@@ -233,7 +272,7 @@ async function autoFixActuals(controls, sourceSelect) {
     const actualLabelEditor = createActualLabelEditor(
       getSelectedSource(sourceSelect).key,
       currentResult,
-      (windowIndex) => getRawWaveformWindow(currentResult, windowIndex),
+      (windowIndex) => getPicaWaveformWindow(currentResult, windowIndex),
     );
     actualLabelEditor.autoFixFromFft();
     await renderResult(currentResult);
@@ -273,7 +312,7 @@ function main() {
   const autoFixButton = document.getElementById("autoFixButton");
   const candidatePanelDetails = document.getElementById("candidatePanelDetails");
   const settingInputs = Object.fromEntries(
-    [...RAW_SETTING_FIELDS, ...RAW_TOGGLE_FIELDS].map((field) => [
+    [...PICA_SETTING_FIELDS, ...PICA_TOGGLE_FIELDS].map((field) => [
       field.key,
       document.getElementById(field.key),
     ]),
@@ -316,12 +355,12 @@ function main() {
     ),
   );
 
-  RAW_SETTING_FIELDS.forEach((field) => {
+  PICA_SETTING_FIELDS.forEach((field) => {
     settingInputs[field.key].addEventListener("input", () =>
       rerun(controls, sourceSelect, settingInputs, `Applying ${field.label}...`),
     );
   });
-  RAW_TOGGLE_FIELDS.forEach((field) => {
+  PICA_TOGGLE_FIELDS.forEach((field) => {
     settingInputs[field.key].addEventListener("change", () =>
       rerun(controls, sourceSelect, settingInputs, `Applying ${field.label}...`),
     );

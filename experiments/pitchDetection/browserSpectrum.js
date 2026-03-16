@@ -33,12 +33,12 @@ export async function createWindowSpectrumComputer({
   const dbBins = new Float32Array(analyser.frequencyBinCount);
   const magnitudesByWindow = new Array(windowCount);
 
-  let previousTime = 0;
+  let previousTime = -1;
   const epsilon = 1 / sampleRate;
   const durationSeconds = samples.length / sampleRate;
   for (let index = 0; index < windowCount; index += 1) {
     const startSample = index * hopSamples;
-    let snapshotTime = (startSample + windowSize / 2) / sampleRate;
+    let snapshotTime = startSample / sampleRate;
     snapshotTime = clamp(snapshotTime, 0, Math.max(0, durationSeconds - epsilon));
     if (snapshotTime <= previousTime) {
       snapshotTime = Math.min(durationSeconds - epsilon, previousTime + epsilon);

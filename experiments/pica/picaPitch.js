@@ -1,32 +1,30 @@
 import {
-  RAW_ACCURACY_CENTS,
-  RAW_MAX_HZ,
-  RAW_MIN_HZ,
-  RAW_MIN_WINDOW_MAX_AMPLITUDE,
-  RAW_SETTINGS_DEFAULTS,
+  PICA_MAX_HZ,
+  PICA_MIN_HZ,
+  PICA_MIN_WINDOW_MAX_AMPLITUDE,
+  PICA_SETTINGS_DEFAULTS,
 } from "./config.js";
-import { getRawSampleWindowSize } from "./windowing.js";
-import { getCentsDifference, getLogCorrelation, hasZeroCrossing } from "./utils.js";
+import { getLogCorrelation, hasZeroCrossing } from "./utils.js";
 
 const PEAKINESS_NEIGHBOR_OFFSET = 2;
-const TIMESTEPS_PER_SECOND = 80;
-const VOCAL_SAMPLER_FILE_NAME = "vocal_sampler.wav";
-const VOCAL_SAMPLER_ACTUAL_FILE_NAME = "vocal_sampler_actual.json";
-
-function getRawSettings(settings = {}) {
+export function getPicaSettings(settings = {}) {
   return {
-    ...RAW_SETTINGS_DEFAULTS,
+    ...PICA_SETTINGS_DEFAULTS,
     ...settings,
-    maxExtremaPerFold: settings.maxExtremaPerFold ?? RAW_SETTINGS_DEFAULTS.maxExtremaPerFold,
-    rawGlobalLogCorrelationCutoff:
-      settings.rawGlobalLogCorrelationCutoff ?? RAW_SETTINGS_DEFAULTS.rawGlobalLogCorrelationCutoff,
-    hzWeight: settings.hzWeight ?? RAW_SETTINGS_DEFAULTS.hzWeight,
-    correlationWeight: settings.correlationWeight ?? RAW_SETTINGS_DEFAULTS.correlationWeight,
-    peakinessWeight: settings.peakinessWeight ?? RAW_SETTINGS_DEFAULTS.peakinessWeight,
-    normalizeHz: settings.normalizeHz ?? RAW_SETTINGS_DEFAULTS.normalizeHz,
+    maxExtremaPerFold: settings.maxExtremaPerFold ?? PICA_SETTINGS_DEFAULTS.maxExtremaPerFold,
+    carryForwardLogCorrelationThreshold:
+      settings.carryForwardLogCorrelationThreshold ??
+      PICA_SETTINGS_DEFAULTS.carryForwardLogCorrelationThreshold,
+    picaGlobalLogCorrelationCutoff:
+      settings.picaGlobalLogCorrelationCutoff ??
+      PICA_SETTINGS_DEFAULTS.picaGlobalLogCorrelationCutoff,
+    hzWeight: settings.hzWeight ?? PICA_SETTINGS_DEFAULTS.hzWeight,
+    correlationWeight: settings.correlationWeight ?? PICA_SETTINGS_DEFAULTS.correlationWeight,
+    peakinessWeight: settings.peakinessWeight ?? PICA_SETTINGS_DEFAULTS.peakinessWeight,
+    normalizeHz: settings.normalizeHz ?? PICA_SETTINGS_DEFAULTS.normalizeHz,
     normalizeCorrelation:
-      settings.normalizeCorrelation ?? RAW_SETTINGS_DEFAULTS.normalizeCorrelation,
-    normalizePeakiness: settings.normalizePeakiness ?? RAW_SETTINGS_DEFAULTS.normalizePeakiness,
+      settings.normalizeCorrelation ?? PICA_SETTINGS_DEFAULTS.normalizeCorrelation,
+    normalizePeakiness: settings.normalizePeakiness ?? PICA_SETTINGS_DEFAULTS.normalizePeakiness,
   };
 }
 
@@ -67,6 +65,7 @@ function getCorrelationFromPeriod(samples, periodSamples, maxComparisonPatches) 
 function createWindowAnalysisCache() {
   return {
     correlationByPeriodSamples: new Map(),
+    comparedRegionMaxAmplitudeByPeriodSamples: new Map(),
     walkedPeriodByPeriodSamples: new Map(),
   };
 }
@@ -107,6 +106,37 @@ function getCachedCorrelation(samples, periodSamples, settings, cache) {
   return correlation;
 }
 
+function getComparedRegionMaxAmplitude(samples, periodSamples, maxComparisonPatches) {
+  if (periodSamples < 1) return 0;
+  const patchCount = Math.min(maxComparisonPatches, Math.floor(samples.length / periodSamples));
+  if (patchCount < 2) return 0;
+
+  const startSample = Math.max(0, samples.length - patchCount * periodSamples);
+  let maxAmplitude = 0;
+  for (let sampleIndex = startSample; sampleIndex < samples.length; sampleIndex += 1) {
+    const amplitude = Math.abs(samples[sampleIndex]);
+    if (amplitude > maxAmplitude) {
+      maxAmplitude = amplitude;
+    }
+  }
+  return maxAmplitude;
+}
+
+function getCachedComparedRegionMaxAmplitude(samples, periodSamples, settings, cache) {
+  const cachedMaxAmplitude = cache?.comparedRegionMaxAmplitudeByPeriodSamples.get(periodSamples);
+  if (cachedMaxAmplitude !== undefined) {
+    return cachedMaxAmplitude;
+  }
+
+  const maxAmplitude = getComparedRegionMaxAmplitude(
+    samples,
+    periodSamples,
+    settings.maxComparisonPatches,
+  );
+  cache?.comparedRegionMaxAmplitudeByPeriodSamples.set(periodSamples, maxAmplitude);
+  return maxAmplitude;
+}
+
 function getRefinedPitchHz(samples, periodSamples, sampleRate, settings, cache = null) {
   const centerCorrelation = getCachedCorrelation(samples, periodSamples, settings, cache);
   const lowerCorrelation = getCachedCorrelation(samples, periodSamples - 1, settings, cache);
@@ -125,8 +155,8 @@ function getRefinedPitchHz(samples, periodSamples, sampleRate, settings, cache =
 }
 
 function getPeriodSampleBounds(sampleRate) {
-  const minPeriodSamples = Math.max(1, Math.ceil(sampleRate / RAW_MAX_HZ));
-  const maxPeriodSamples = Math.max(minPeriodSamples, Math.floor(sampleRate / RAW_MIN_HZ));
+  const minPeriodSamples = Math.max(1, Math.ceil(sampleRate / PICA_MAX_HZ));
+  const maxPeriodSamples = Math.max(minPeriodSamples, Math.floor(sampleRate / PICA_MIN_HZ));
   return {
     minPeriodSamples,
     maxPeriodSamples,
@@ -183,12 +213,18 @@ function getWalkedPeriod(samples, seedPeriodSamples, settings, sampleRate, cache
 
   const refinedHz = getRefinedPitchHz(samples, bestPeriodSamples, sampleRate, settings, cache);
   const walkedPeriod =
-    refinedHz < RAW_MIN_HZ || refinedHz > RAW_MAX_HZ
+    refinedHz < PICA_MIN_HZ || refinedHz > PICA_MAX_HZ
       ? null
       : {
           periodSamples: bestPeriodSamples,
           correlation: bestCorrelation,
           logCorrelation: getLogCorrelation(bestCorrelation),
+          comparedRegionMaxAmplitude: getCachedComparedRegionMaxAmplitude(
+            samples,
+            bestPeriodSamples,
+            settings,
+            cache,
+          ),
           hz: refinedHz,
         };
 
@@ -199,10 +235,10 @@ function getWalkedPeriod(samples, seedPeriodSamples, settings, sampleRate, cache
   return walkedPeriod;
 }
 
-export function getWalkedPitchHz(samples, sampleRate, seedHz, settings = RAW_SETTINGS_DEFAULTS) {
-  const rawSettings = getRawSettings(settings);
+export function getWalkedPitchHz(samples, sampleRate, seedHz, settings = PICA_SETTINGS_DEFAULTS) {
+  const picaSettings = getPicaSettings(settings);
   const seedPeriodSamples = Math.round(sampleRate / seedHz);
-  const walkedPeriod = getWalkedPeriod(samples, seedPeriodSamples, rawSettings, sampleRate);
+  const walkedPeriod = getWalkedPeriod(samples, seedPeriodSamples, picaSettings, sampleRate);
   return walkedPeriod ? walkedPeriod.hz : Number.NaN;
 }
 
@@ -398,7 +434,7 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
       const sourcePeriodSamples = anchor.index - earlierExtremum.index;
       if (sourcePeriodSamples < 1) continue;
       const sourceHz = sampleRate / sourcePeriodSamples;
-      if (sourceHz < RAW_MIN_HZ || sourceHz > RAW_MAX_HZ) continue;
+      if (sourceHz < PICA_MIN_HZ || sourceHz > PICA_MAX_HZ) continue;
 
       const walkedPeriod = getWalkedPeriod(
         samples,
@@ -416,7 +452,7 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
         walkedPeriod.logCorrelation,
         cache,
       );
-      const hzFeature = Math.log2(walkedPeriod.hz / RAW_MIN_HZ);
+      const hzFeature = Math.log2(walkedPeriod.hz / PICA_MIN_HZ);
       const correlationFeature = walkedPeriod.logCorrelation;
       const peakinessFeature = peakiness;
       if (hzFeature < hzMin) hzMin = hzFeature;
@@ -434,6 +470,7 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
         hz: walkedPeriod.hz,
         correlation: walkedPeriod.correlation,
         logCorrelation: walkedPeriod.logCorrelation,
+        comparedRegionMaxAmplitude: walkedPeriod.comparedRegionMaxAmplitude,
         peakiness,
         hzFeature,
         correlationFeature,
@@ -478,8 +515,8 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
   };
 }
 
-function getRawPitchResultFromAnalysis(analysis, settings) {
-  if (analysis.maxAmplitude < RAW_MIN_WINDOW_MAX_AMPLITUDE) {
+function getPicaPitchResultFromAnalysis(analysis, settings) {
+  if (analysis.maxAmplitude < PICA_MIN_WINDOW_MAX_AMPLITUDE) {
     return {
       hz: Number.NaN,
       rejectionReason: "low_amplitude",
@@ -500,10 +537,20 @@ function getRawPitchResultFromAnalysis(analysis, settings) {
     };
   }
 
-  if (analysis.winningCandidate.logCorrelation < settings.rawGlobalLogCorrelationCutoff) {
+  if (analysis.winningCandidate.logCorrelation < settings.picaGlobalLogCorrelationCutoff) {
     return {
       hz: Number.NaN,
       rejectionReason: "low_log_correlation",
+    };
+  }
+
+  if (
+    analysis.winningCandidate.comparedRegionMaxAmplitude !== undefined &&
+    analysis.winningCandidate.comparedRegionMaxAmplitude < PICA_MIN_WINDOW_MAX_AMPLITUDE
+  ) {
+    return {
+      hz: Number.NaN,
+      rejectionReason: "low_candidate_amplitude",
     };
   }
 
@@ -513,73 +560,39 @@ function getRawPitchResultFromAnalysis(analysis, settings) {
   };
 }
 
-function getRawWindowSamples(samples, sampleRate, endTimeSec) {
-  const rawWindowSamples = getRawSampleWindowSize(sampleRate);
-  const endSample = Math.min(samples.length, Math.max(0, Math.round(endTimeSec * sampleRate)));
-  const startSample = Math.max(0, endSample - rawWindowSamples);
-  return samples.subarray(startSample, endSample);
-}
-
-async function loadWavSamples(url) {
-  const response = await fetch(url);
-  const bytes = await response.arrayBuffer();
-  const audioContext = new AudioContext();
-  try {
-    const audioBuffer = await audioContext.decodeAudioData(bytes.slice(0));
-    return {
-      sampleRate: audioBuffer.sampleRate,
-      samples: new Float32Array(audioBuffer.getChannelData(0)),
-    };
-  } finally {
-    await audioContext.close();
-  }
-}
-
-function getActualPitchUrl(audioInput) {
-  if (typeof audioInput !== "string" || !audioInput.endsWith(VOCAL_SAMPLER_FILE_NAME)) {
+function getCarryForwardCandidate(samples, sampleRate, settings, priorStep, cache = null) {
+  const threshold = settings.carryForwardLogCorrelationThreshold;
+  if (
+    !Number.isFinite(priorStep?.hz) ||
+    !Number.isFinite(priorStep?.logCorrelation) ||
+    priorStep.logCorrelation <= threshold
+  ) {
     return null;
   }
-  return audioInput.slice(0, -VOCAL_SAMPLER_FILE_NAME.length) + VOCAL_SAMPLER_ACTUAL_FILE_NAME;
-}
 
-async function loadActualPitchHz(audioInput) {
-  const actualPitchUrl = getActualPitchUrl(audioInput);
-  if (!actualPitchUrl) return null;
-
-  const response = await fetch(actualPitchUrl);
-  return await response.json();
-}
-
-export async function loadPitchSample(audioInput) {
-  const { analyzeDecodedPitchSample, loadAudioSample } =
-    await import("../pitchDetection/analysis.js");
-  const loaded = await loadAudioSample(audioInput);
-  const actualPitchHz = await loadActualPitchHz(audioInput);
-  const fftAnalysis = await analyzeDecodedPitchSample(loaded);
+  const sourcePeriodSamples = Math.round(sampleRate / priorStep.hz);
+  const walkedPeriod = getWalkedPeriod(samples, sourcePeriodSamples, settings, sampleRate, cache);
+  if (!walkedPeriod || walkedPeriod.logCorrelation <= threshold) {
+    return null;
+  }
   return {
-    sampleRate: loaded.sampleRate,
-    samples: loaded.samples,
-    actualPitchHz,
-    fftAnalysis,
+    type: "carryForward",
+    sourcePeriodSamples,
+    periodSamples: walkedPeriod.periodSamples,
+    hz: walkedPeriod.hz,
+    correlation: walkedPeriod.correlation,
+    logCorrelation: walkedPeriod.logCorrelation,
+    comparedRegionMaxAmplitude: walkedPeriod.comparedRegionMaxAmplitude,
   };
 }
 
-export async function loadActualPitchSample(audioInput) {
-  const loaded = await loadWavSamples(audioInput);
-  const actualPitchHz = await loadActualPitchHz(audioInput);
-  return {
-    sampleRate: loaded.sampleRate,
-    samples: loaded.samples,
-    actualPitchHz,
-  };
-}
-
-export function getRawPitchAnalysisFromWaveform(
+export function getPicaPitchAnalysisFromWaveform(
   samples,
   sampleRate,
-  settings = RAW_SETTINGS_DEFAULTS,
+  settings = PICA_SETTINGS_DEFAULTS,
+  priorStep = null,
 ) {
-  const rawSettings = getRawSettings(settings);
+  const picaSettings = getPicaSettings(settings);
   const cache = createWindowAnalysisCache();
   const { zeroCrossingCount, maxAmplitude } = getWindowStats(samples);
   const analysis = {
@@ -590,41 +603,47 @@ export function getRawPitchAnalysisFromWaveform(
     winningCandidate: null,
   };
 
-  if (maxAmplitude < RAW_MIN_WINDOW_MAX_AMPLITUDE || zeroCrossingCount === 0) {
+  if (maxAmplitude < PICA_MIN_WINDOW_MAX_AMPLITUDE || zeroCrossingCount === 0) {
     return {
       ...analysis,
-      ...getRawPitchResultFromAnalysis(analysis, rawSettings),
+      ...getPicaPitchResultFromAnalysis(analysis, picaSettings),
     };
   }
 
-  const foldExtrema = getFoldExtremaFromWaveform(samples, rawSettings);
-  const { candidateFamilies, winningCandidate } = getCandidateFamiliesFromExtrema(
+  const carryForwardCandidate = getCarryForwardCandidate(
     samples,
     sampleRate,
-    foldExtrema,
-    rawSettings,
+    picaSettings,
+    priorStep,
     cache,
   );
+  const foldExtrema = getFoldExtremaFromWaveform(samples, picaSettings);
+  const { candidateFamilies, winningCandidate } = carryForwardCandidate
+    ? {
+        candidateFamilies: [],
+        winningCandidate: carryForwardCandidate,
+      }
+    : getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, picaSettings, cache);
   const completedAnalysis = {
     ...analysis,
     foldExtrema,
     candidateFamilies,
     winningCandidate,
   };
-  const rawPitchResult = getRawPitchResultFromAnalysis(completedAnalysis, rawSettings);
+  const picaPitchResult = getPicaPitchResultFromAnalysis(completedAnalysis, picaSettings);
 
   return {
     ...completedAnalysis,
-    ...rawPitchResult,
+    ...picaPitchResult,
   };
 }
 
-export function buildRawCorrelationHistogram(
+export function buildPicaCorrelationHistogram(
   samples,
   sampleRate,
-  settings = RAW_SETTINGS_DEFAULTS,
+  settings = PICA_SETTINGS_DEFAULTS,
 ) {
-  const rawSettings = getRawSettings(settings);
+  const picaSettings = getPicaSettings(settings);
   const cache = createWindowAnalysisCache();
   const hz = [];
   const correlation = [];
@@ -636,23 +655,23 @@ export function buildRawCorrelationHistogram(
     periodSamples -= 1
   ) {
     const candidateHz = sampleRate / periodSamples;
-    const candidateCorrelation = getCachedCorrelation(samples, periodSamples, rawSettings, cache);
+    const candidateCorrelation = getCachedCorrelation(samples, periodSamples, picaSettings, cache);
     hz.push(candidateHz);
     correlation.push(candidateCorrelation);
     logCorrelation.push(getLogCorrelation(candidateCorrelation));
   }
   return {
-    minHz: RAW_MIN_HZ,
-    maxHz: RAW_MAX_HZ,
+    minHz: PICA_MIN_HZ,
+    maxHz: PICA_MAX_HZ,
     hz,
     correlation,
     logCorrelation,
   };
 }
 
-export function evaluateRawWindow(samples, sampleRate, settings = RAW_SETTINGS_DEFAULTS) {
-  const analysis = getRawPitchAnalysisFromWaveform(samples, sampleRate, settings);
-  const histogram = buildRawCorrelationHistogram(samples, sampleRate, settings);
+export function evaluatePicaWindow(samples, sampleRate, settings = PICA_SETTINGS_DEFAULTS) {
+  const analysis = getPicaPitchAnalysisFromWaveform(samples, sampleRate, settings);
+  const histogram = buildPicaCorrelationHistogram(samples, sampleRate, settings);
   let bestHistogramIndex = 0;
   for (let index = 1; index < histogram.logCorrelation.length; index += 1) {
     if (histogram.logCorrelation[index] > histogram.logCorrelation[bestHistogramIndex]) {
@@ -664,132 +683,5 @@ export function evaluateRawWindow(samples, sampleRate, settings = RAW_SETTINGS_D
     histogram,
     histogramPeakHz: histogram.hz[bestHistogramIndex],
     histogramPeakLogCorrelation: histogram.logCorrelation[bestHistogramIndex],
-  };
-}
-
-function getActualAccuracyMetrics(actualPitchHz, fftPitchHz, rawPitchHz) {
-  let fftCorrectCount = 0;
-  let rawCorrectCount = 0;
-  let actualComparedCount = 0;
-  if (!actualPitchHz) {
-    return {
-      fftAccuracy: Number.NaN,
-      fftCorrectCount: 0,
-      rawAccuracy: Number.NaN,
-      rawCorrectCount: 0,
-      actualComparedCount: 0,
-      rawComparedCount: 0,
-    };
-  }
-
-  for (let windowIndex = 0; windowIndex < actualPitchHz.length; windowIndex += 1) {
-    const actualHz = actualPitchHz[windowIndex];
-    if (!Number.isFinite(actualHz)) continue;
-
-    actualComparedCount += 1;
-    const fftHz = fftPitchHz?.[windowIndex];
-    const rawHz = rawPitchHz[windowIndex];
-    if (Number.isFinite(fftHz) && getCentsDifference(fftHz, actualHz) <= RAW_ACCURACY_CENTS) {
-      fftCorrectCount += 1;
-    }
-    if (Number.isFinite(rawHz) && getCentsDifference(rawHz, actualHz) <= RAW_ACCURACY_CENTS) {
-      rawCorrectCount += 1;
-    }
-  }
-
-  return {
-    fftAccuracy: actualComparedCount > 0 ? fftCorrectCount / actualComparedCount : Number.NaN,
-    fftCorrectCount,
-    rawAccuracy: actualComparedCount > 0 ? rawCorrectCount / actualComparedCount : Number.NaN,
-    rawCorrectCount,
-    actualComparedCount,
-    rawComparedCount: actualComparedCount,
-  };
-}
-
-export async function analyzePreparedPitchSample(preparedSample, settings = RAW_SETTINGS_DEFAULTS) {
-  const rawSettings = getRawSettings(settings);
-  const { actualPitchHz, fftAnalysis, sampleRate, samples } = preparedSample;
-  console.assert(
-    actualPitchHz === null || actualPitchHz.length === fftAnalysis.timeSec.length,
-    "Expected actualPitchHz JSON length to match fftAnalysis.timeSec length",
-    {
-      actualPitchHzLength: actualPitchHz?.length ?? null,
-      timeSecLength: fftAnalysis.timeSec.length,
-    },
-  );
-  const rawPitchHz = new Array(fftAnalysis.timeSec.length);
-
-  const rawStartMs = performance.now();
-  for (let windowIndex = 0; windowIndex < fftAnalysis.timeSec.length; windowIndex += 1) {
-    if (!Number.isFinite(fftAnalysis.pitchHz[windowIndex])) {
-      rawPitchHz[windowIndex] = Number.NaN;
-      continue;
-    }
-
-    const rawWindow = getRawWindowSamples(samples, sampleRate, fftAnalysis.timeSec[windowIndex]);
-    rawPitchHz[windowIndex] = getRawPitchAnalysisFromWaveform(
-      rawWindow,
-      sampleRate,
-      rawSettings,
-    ).hz;
-  }
-  const rawElapsedMs = performance.now() - rawStartMs;
-
-  const metrics = getActualAccuracyMetrics(actualPitchHz, fftAnalysis.pitchHz, rawPitchHz);
-
-  return {
-    sampleRate,
-    samples,
-    timeSec: fftAnalysis.timeSec,
-    actualPitchHz,
-    pitchHz: fftAnalysis.pitchHz,
-    rawPitchHz,
-    rawSettings,
-    metrics,
-    perf: {
-      voiceboxPipelineMsPerSecondAudio: fftAnalysis.perf.voiceboxPipelineMsPerSecondAudio,
-      rawPipelineMsPerSecondAudio:
-        fftAnalysis.timeSec.length > 0
-          ? rawElapsedMs / (fftAnalysis.timeSec.length / fftAnalysis.samplesPerSecond)
-          : Number.NaN,
-    },
-  };
-}
-
-export async function analyzePreparedActualPitchSample(
-  preparedSample,
-  settings = RAW_SETTINGS_DEFAULTS,
-) {
-  const rawSettings = getRawSettings(settings);
-  const { actualPitchHz, sampleRate, samples } = preparedSample;
-  const timeSec = actualPitchHz.map((_, index) => index / TIMESTEPS_PER_SECOND);
-  const rawPitchHz = new Array(timeSec.length);
-
-  const rawStartMs = performance.now();
-  for (let windowIndex = 0; windowIndex < timeSec.length; windowIndex += 1) {
-    const rawWindow = getRawWindowSamples(samples, sampleRate, timeSec[windowIndex]);
-    rawPitchHz[windowIndex] = getRawPitchAnalysisFromWaveform(
-      rawWindow,
-      sampleRate,
-      rawSettings,
-    ).hz;
-  }
-  const rawElapsedMs = performance.now() - rawStartMs;
-
-  return {
-    sampleRate,
-    samples,
-    timeSec,
-    actualPitchHz,
-    pitchHz: new Array(timeSec.length).fill(Number.NaN),
-    rawPitchHz,
-    rawSettings,
-    metrics: getActualAccuracyMetrics(actualPitchHz, null, rawPitchHz),
-    perf: {
-      voiceboxPipelineMsPerSecondAudio: Number.NaN,
-      rawPipelineMsPerSecondAudio:
-        timeSec.length > 0 ? rawElapsedMs / (timeSec.length / TIMESTEPS_PER_SECOND) : Number.NaN,
-    },
   };
 }
