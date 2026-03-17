@@ -147,15 +147,12 @@ function getPitchAccuracy(actualPitchHz, predictedPitchHz) {
 }
 
 function getPriorStep(analysis) {
-  if (
-    !Number.isFinite(analysis?.hz) ||
-    !Number.isFinite(analysis?.winningCandidate?.logCorrelation)
-  ) {
+  if (!Number.isFinite(analysis?.hz) || !Number.isFinite(analysis?.winningCandidate?.correlation)) {
     return null;
   }
   return {
     hz: analysis.hz,
-    logCorrelation: analysis.winningCandidate.logCorrelation,
+    correlation: analysis.winningCandidate.correlation,
   };
 }
 

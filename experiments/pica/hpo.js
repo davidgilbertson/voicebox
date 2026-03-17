@@ -1,12 +1,14 @@
 import { analyzePreparedActualPitchSample, loadActualPitchSample } from "./picaExperiment.js";
 import { PICA_SETTINGS_DEFAULTS } from "./config.js";
 
-const MAX_PATCHES_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 11];
-const MAX_WALK_VALUES = [5, 10, 15, 20, 30, 40, 50, 65, 80, 100];
+const CARRY_THRESHOLD_VALUES = [
+  4, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 6,
+];
 const VOCAL_SAMPLER_URL = "../../.private/assets/vocal_sampler.wav";
 const VOCAL_SAMPLER_LABEL = "vocal_sampler.wav";
 const FIXED_SETTINGS = {
   ...PICA_SETTINGS_DEFAULTS,
+  correlationToHzWeightRatio: 0.5,
 };
 
 function setStatus(text, isError = false) {
@@ -21,59 +23,69 @@ function setSummary(text) {
 
 function setSweepInfo() {
   document.getElementById("sweepInfo").textContent =
-    `Sweep against actuals for ${VOCAL_SAMPLER_LABEL}: maxPatches=${MAX_PATCHES_VALUES.join(", ")} | maxWalk=${MAX_WALK_VALUES.join(", ")} | fixed: maxExtremaPerFold=${FIXED_SETTINGS.maxExtremaPerFold}, maxCrossingsPerPeriod=${FIXED_SETTINGS.maxCrossingsPerPeriod}, minLogCorr=${FIXED_SETTINGS.picaGlobalLogCorrelationCutoff}, hzWeight=${FIXED_SETTINGS.hzWeight}, corrWeight=${FIXED_SETTINGS.correlationWeight}`;
+    `Sweep against actuals for ${VOCAL_SAMPLER_LABEL}: carryThr=${CARRY_THRESHOLD_VALUES.join(", ")} | fixed: corrHzRatio=${FIXED_SETTINGS.correlationToHzWeightRatio}, maxExtremaPerFold=${FIXED_SETTINGS.maxExtremaPerFold}, maxCrossingsPerPeriod=${FIXED_SETTINGS.maxCrossingsPerPeriod}, maxPatches=${FIXED_SETTINGS.maxComparisonPatches}, maxWalk=${FIXED_SETTINGS.maxWalkSteps}`;
 }
 
 function createGrid(fill = Number.NaN) {
-  return MAX_WALK_VALUES.map(() => MAX_PATCHES_VALUES.map(() => fill));
+  return [CARRY_THRESHOLD_VALUES.map(() => fill)];
 }
 
 async function runSweepForSample(preparedSample) {
-  const accuracy = createGrid();
-  const correctCounts = createGrid(0);
-  const comparedCounts = createGrid(0);
-  const totalRuns = MAX_PATCHES_VALUES.length * MAX_WALK_VALUES.length;
+  const picaAccuracy = createGrid();
+  const picaCorrectCounts = createGrid(0);
+  const picaComparedCounts = createGrid(0);
+  const carryForwardAccuracy = createGrid();
+  const carryForwardCorrectCounts = createGrid(0);
+  const carryForwardComparedCounts = createGrid(0);
+  const totalRuns = CARRY_THRESHOLD_VALUES.length;
+  let runNumber = 0;
 
-  for (let walkIndex = 0; walkIndex < MAX_WALK_VALUES.length; walkIndex += 1) {
-    for (let patchIndex = 0; patchIndex < MAX_PATCHES_VALUES.length; patchIndex += 1) {
-      const maxWalkSteps = MAX_WALK_VALUES[walkIndex];
-      const maxComparisonPatches = MAX_PATCHES_VALUES[patchIndex];
-      const runNumber = walkIndex * MAX_PATCHES_VALUES.length + patchIndex + 1;
-      const message =
-        `Run ${runNumber}/${totalRuns}: ${VOCAL_SAMPLER_LABEL} | ` +
-        `maxPatches=${maxComparisonPatches} | maxWalk=${maxWalkSteps}`;
-      setStatus(message);
+  for (
+    let thresholdIndex = 0;
+    thresholdIndex < CARRY_THRESHOLD_VALUES.length;
+    thresholdIndex += 1
+  ) {
+    const carryForwardCorrelationThreshold = CARRY_THRESHOLD_VALUES[thresholdIndex];
+    runNumber += 1;
+    const message =
+      `Run ${runNumber}/${totalRuns}: ${VOCAL_SAMPLER_LABEL} | ` +
+      `carryThr=${carryForwardCorrelationThreshold}`;
+    setStatus(message);
 
-      const startMs = performance.now();
-      const result = await analyzePreparedActualPitchSample(preparedSample, {
-        ...FIXED_SETTINGS,
-        maxComparisonPatches,
-        maxWalkSteps,
-      });
-      const elapsedMs = performance.now() - startMs;
+    const startMs = performance.now();
+    const result = await analyzePreparedActualPitchSample(preparedSample, {
+      ...FIXED_SETTINGS,
+      carryForwardCorrelationThreshold,
+    });
+    const elapsedMs = performance.now() - startMs;
 
-      console.log(
-        `${message} -> pica accuracy ${(result.metrics.picaAccuracy * 100).toFixed(1)}% (${result.metrics.picaCorrectCount}/${result.metrics.actualComparedCount}), ${elapsedMs.toFixed(1)}ms`,
-      );
+    console.log(
+      `${message} -> pica ${(result.metrics.picaAccuracy * 100).toFixed(1)}% (${result.metrics.picaCorrectCount}/${result.metrics.actualComparedCount}), carry ${(result.metrics.carryForwardAccuracy * 100).toFixed(1)}% (${result.metrics.carryForwardCorrectCount}/${result.metrics.carryForwardComparedCount}), ${elapsedMs.toFixed(1)}ms`,
+    );
 
-      accuracy[walkIndex][patchIndex] = result.metrics.picaAccuracy;
-      correctCounts[walkIndex][patchIndex] = result.metrics.picaCorrectCount;
-      comparedCounts[walkIndex][patchIndex] = result.metrics.actualComparedCount;
-    }
+    picaAccuracy[0][thresholdIndex] = result.metrics.picaAccuracy;
+    picaCorrectCounts[0][thresholdIndex] = result.metrics.picaCorrectCount;
+    picaComparedCounts[0][thresholdIndex] = result.metrics.actualComparedCount;
+    carryForwardAccuracy[0][thresholdIndex] = result.metrics.carryForwardAccuracy;
+    carryForwardCorrectCounts[0][thresholdIndex] = result.metrics.carryForwardCorrectCount;
+    carryForwardComparedCounts[0][thresholdIndex] = result.metrics.carryForwardComparedCount;
   }
 
   return {
-    accuracy,
-    correctCounts,
-    comparedCounts,
+    picaAccuracy,
+    picaCorrectCounts,
+    picaComparedCounts,
+    carryForwardAccuracy,
+    carryForwardCorrectCounts,
+    carryForwardComparedCounts,
   };
 }
 
 function getHeatmapAnnotations(accuracy, correctCounts, comparedCounts) {
   return accuracy.flatMap((row, rowIndex) =>
     row.map((value, columnIndex) => ({
-      x: MAX_PATCHES_VALUES[columnIndex],
-      y: MAX_WALK_VALUES[rowIndex],
+      x: CARRY_THRESHOLD_VALUES[columnIndex],
+      y: rowIndex,
       text: Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : "n/a",
       showarrow: false,
       font: { color: "#ffffff", size: 12 },
@@ -85,7 +97,8 @@ function getHeatmapAnnotations(accuracy, correctCounts, comparedCounts) {
 }
 
 function getHeatmapBounds(sweepResult) {
-  const values = sweepResult.accuracy
+  const values = [sweepResult.picaAccuracy, sweepResult.carryForwardAccuracy]
+    .flat()
     .flat()
     .filter(Number.isFinite)
     .map((value) => value * 100);
@@ -103,12 +116,12 @@ async function renderHeatmap(elementId, title, accuracy, correctCounts, compared
     [
       {
         type: "heatmap",
-        x: MAX_PATCHES_VALUES,
-        y: MAX_WALK_VALUES,
+        x: CARRY_THRESHOLD_VALUES,
+        y: [0],
         z: accuracy.map((row) =>
           row.map((value) => (Number.isFinite(value) ? value * 100 : Number.NaN)),
         ),
-        hovertemplate: "maxWalk=%{y}<br>maxPatches=%{x}<br>accuracy=%{z:.1f}%<extra></extra>",
+        hovertemplate: "carryThr=%{x}<br>accuracy=%{z:.1f}%<extra></extra>",
         colorscale: "Viridis",
         zmin: bounds.zmin,
         zmax: bounds.zmax,
@@ -122,14 +135,15 @@ async function renderHeatmap(elementId, title, accuracy, correctCounts, compared
       margin: { l: 56, r: 24, t: 52, b: 44 },
       annotations: getHeatmapAnnotations(accuracy, correctCounts, comparedCounts),
       xaxis: {
-        title: "maxPatches",
+        title: "carryThr",
         tickmode: "array",
-        tickvals: MAX_PATCHES_VALUES,
+        tickvals: CARRY_THRESHOLD_VALUES,
       },
       yaxis: {
-        title: "maxWalk",
+        title: "",
         tickmode: "array",
-        tickvals: MAX_WALK_VALUES,
+        tickvals: [0],
+        ticktext: [""],
       },
     },
     { responsive: true },
@@ -137,46 +151,71 @@ async function renderHeatmap(elementId, title, accuracy, correctCounts, compared
 }
 
 function getBestCell(sweepResult) {
-  let bestAccuracy = Number.NEGATIVE_INFINITY;
-  let bestMaxPatches = MAX_PATCHES_VALUES[0];
-  let bestMaxWalk = MAX_WALK_VALUES[0];
+  let bestPicaAccuracy = Number.NEGATIVE_INFINITY;
+  let bestPicaCarryThreshold = CARRY_THRESHOLD_VALUES[0];
+  let bestCarryForwardAccuracy = Number.NEGATIVE_INFINITY;
+  let bestCarryForwardThreshold = CARRY_THRESHOLD_VALUES[0];
 
-  for (let walkIndex = 0; walkIndex < MAX_WALK_VALUES.length; walkIndex += 1) {
-    for (let patchIndex = 0; patchIndex < MAX_PATCHES_VALUES.length; patchIndex += 1) {
-      const accuracy = sweepResult.accuracy[walkIndex][patchIndex];
-      if (!Number.isFinite(accuracy) || accuracy <= bestAccuracy) continue;
-      bestAccuracy = accuracy;
-      bestMaxPatches = MAX_PATCHES_VALUES[patchIndex];
-      bestMaxWalk = MAX_WALK_VALUES[walkIndex];
+  for (
+    let thresholdIndex = 0;
+    thresholdIndex < CARRY_THRESHOLD_VALUES.length;
+    thresholdIndex += 1
+  ) {
+    const picaAccuracy = sweepResult.picaAccuracy[0][thresholdIndex];
+    if (Number.isFinite(picaAccuracy) && picaAccuracy > bestPicaAccuracy) {
+      bestPicaAccuracy = picaAccuracy;
+      bestPicaCarryThreshold = CARRY_THRESHOLD_VALUES[thresholdIndex];
+    }
+    const carryForwardAccuracy = sweepResult.carryForwardAccuracy[0][thresholdIndex];
+    if (Number.isFinite(carryForwardAccuracy) && carryForwardAccuracy > bestCarryForwardAccuracy) {
+      bestCarryForwardAccuracy = carryForwardAccuracy;
+      bestCarryForwardThreshold = CARRY_THRESHOLD_VALUES[thresholdIndex];
     }
   }
 
   return {
-    bestAccuracy,
-    bestMaxPatches,
-    bestMaxWalk,
+    bestPicaAccuracy,
+    bestPicaCarryThreshold,
+    bestCarryForwardAccuracy,
+    bestCarryForwardThreshold,
   };
 }
 
 async function renderResults(sweepResult) {
   const heatmaps = document.getElementById("heatmaps");
-  heatmaps.innerHTML = `<div id="heatmap0" class="heatmap-chart"></div>`;
+  heatmaps.innerHTML = `
+    <div id="heatmap0" class="heatmap-chart"></div>
+    <div id="heatmap1" class="heatmap-chart"></div>
+  `;
 
   const bounds = getHeatmapBounds(sweepResult);
   await renderHeatmap(
     "heatmap0",
-    "Pica accuracy",
-    sweepResult.accuracy,
-    sweepResult.correctCounts,
-    sweepResult.comparedCounts,
+    "PICA accuracy vs carry threshold",
+    sweepResult.picaAccuracy,
+    sweepResult.picaCorrectCounts,
+    sweepResult.picaComparedCounts,
+    bounds,
+  );
+  await renderHeatmap(
+    "heatmap1",
+    "Carry-forward accuracy vs carry threshold",
+    sweepResult.carryForwardAccuracy,
+    sweepResult.carryForwardCorrectCounts,
+    sweepResult.carryForwardComparedCounts,
     bounds,
   );
 
-  const { bestAccuracy, bestMaxPatches, bestMaxWalk } = getBestCell(sweepResult);
+  const {
+    bestPicaAccuracy,
+    bestPicaCarryThreshold,
+    bestCarryForwardAccuracy,
+    bestCarryForwardThreshold,
+  } = getBestCell(sweepResult);
 
   setSummary(
-    Number.isFinite(bestAccuracy)
-      ? `Best cell: maxPatches=${bestMaxPatches}, maxWalk=${bestMaxWalk}, accuracy=${(bestAccuracy * 100).toFixed(1)}%`
+    Number.isFinite(bestPicaAccuracy) || Number.isFinite(bestCarryForwardAccuracy)
+      ? `Best PICA carryThr: ${bestPicaCarryThreshold}, accuracy=${(bestPicaAccuracy * 100).toFixed(1)}% | Best carry-forward carryThr: ${bestCarryForwardThreshold}, accuracy=${(bestCarryForwardAccuracy * 100).toFixed(1)}%`
       : "No valid results.",
   );
 }
@@ -192,7 +231,7 @@ async function runSweep() {
     const sweepResult = await runSweepForSample(preparedSample);
 
     await renderResults(sweepResult);
-    setStatus(`Done. ${MAX_PATCHES_VALUES.length * MAX_WALK_VALUES.length} runs.`);
+    setStatus(`Done. ${CARRY_THRESHOLD_VALUES.length} runs.`);
   } catch (error) {
     console.error(error);
     setSummary("");

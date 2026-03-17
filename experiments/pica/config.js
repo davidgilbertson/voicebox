@@ -6,16 +6,12 @@ export const PICA_MIN_WINDOW_MAX_AMPLITUDE = 0.01; // TODO (@davidgilbertson): d
 export const PICA_ACCURACY_CENTS = 50;
 
 export const PICA_SETTINGS_DEFAULTS = {
-  maxExtremaPerFold: 5,
+  maxExtremaPerFold: 2,
   maxCrossingsPerPeriod: 18, // Bigger is better, but slower
-  maxComparisonPatches: 3,
+  maxComparisonPatches: 7,
   maxWalkSteps: 10,
-  carryForwardLogCorrelationThreshold: 1.2,
-  picaGlobalLogCorrelationCutoff: 0,
-  hzWeight: 0.65,
-  correlationWeight: 1.2,
-  normalizeHz: true,
-  normalizeCorrelation: true,
+  carryForwardCorrelationThreshold: 3,
+  correlationToHzWeightRatio: 0.5,
 };
 
 export const PICA_SETTING_FIELDS = [
@@ -23,13 +19,6 @@ export const PICA_SETTING_FIELDS = [
   { key: "maxCrossingsPerPeriod", label: "crossings-per-period" },
   { key: "maxComparisonPatches", label: "max comparison patches" },
   { key: "maxWalkSteps", label: "max walk" },
-  { key: "carryForwardLogCorrelationThreshold", label: "carry threshold" },
-  { key: "picaGlobalLogCorrelationCutoff", label: "min log corr" },
-  { key: "hzWeight", label: "hz weight" },
-  { key: "correlationWeight", label: "corr weight" },
-];
-
-export const PICA_TOGGLE_FIELDS = [
-  { key: "normalizeHz", label: "norm hz" },
-  { key: "normalizeCorrelation", label: "norm corr" },
+  { key: "carryForwardCorrelationThreshold", label: "carry threshold" },
+  { key: "correlationToHzWeightRatio", label: "corr/hz ratio" },
 ];

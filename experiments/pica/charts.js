@@ -37,7 +37,7 @@ function getNearestHistogramY(histogram, hz) {
       bestIndex = index;
     }
   }
-  return [histogram.logCorrelation[bestIndex]];
+  return [histogram.correlation[bestIndex]];
 }
 
 function getSelectedPitchLabel(hz) {
@@ -139,7 +139,7 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
   const families = analysis.candidateFamilies;
   if (families.length === 0) {
     if (analysis.winningCandidate?.type === "carryForward") {
-      panel.innerHTML = `<div class="candidate-summary">Carry-forward path won at ${analysis.winningCandidate.hz.toFixed(2)} Hz with logCorr ${analysis.winningCandidate.logCorrelation.toFixed(3)}.</div>`;
+      panel.innerHTML = `<div class="candidate-summary">Carry-forward path won at ${analysis.winningCandidate.hz.toFixed(2)} Hz.</div>`;
       return;
     }
     panel.innerHTML = `<div class="candidate-summary">No candidates. ${analysis.rejectionReason ?? ""}</div>`;
@@ -178,16 +178,8 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
         render: (family) => `${family.sourcePeriodSamples} smp`,
       },
       {
-        label: "logCorr",
-        render: (family) => family.logCorrelation.toFixed(3),
-      },
-      {
-        label: "hzN",
-        render: (family) => family.normalizedHzFeature.toFixed(3),
-      },
-      {
-        label: "corrN",
-        render: (family) => family.normalizedCorrelationFeature.toFixed(3),
+        label: "corr",
+        render: (family) => family.correlation.toFixed(3),
       },
       {
         label: "score",
@@ -200,15 +192,11 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
             const selected = analysis.winningCandidate === family;
             const bold = closestFamily === family ? " font-weight: 700;" : "";
             const heatmap =
-              row.label === "logCorr"
-                ? getHeatmapStyle(family.logCorrelation)
-                : row.label === "hzN"
-                  ? getHeatmapStyle(family.normalizedHzFeature, 1)
-                  : row.label === "corrN"
-                    ? getHeatmapStyle(family.normalizedCorrelationFeature, 1)
-                    : row.label === "score"
-                      ? getHeatmapStyle(family.weightedScore)
-                      : "";
+              row.label === "corr"
+                ? getHeatmapStyle(family.correlation)
+                : row.label === "score"
+                  ? getHeatmapStyle(family.weightedScore)
+                  : "";
             return `<td class="candidate-value${selected ? " candidate-selected" : ""}" style="${heatmap}${bold}">${row.render(
               family,
             )}</td>`;
@@ -232,7 +220,7 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
   };
 
   const winningText = analysis.winningCandidate
-    ? `Winner ${analysis.winningCandidate.hz.toFixed(2)} Hz, logCorr ${analysis.winningCandidate.logCorrelation.toFixed(3)}, score ${analysis.winningCandidate.weightedScore.toFixed(3)}`
+    ? `Winner ${analysis.winningCandidate.hz.toFixed(2)} Hz, corr ${analysis.winningCandidate.correlation.toFixed(3)}, score ${analysis.winningCandidate.weightedScore.toFixed(3)}`
     : `Rejected: ${analysis.rejectionReason}`;
 
   panel.innerHTML = `
@@ -270,28 +258,18 @@ async function renderHistogram(
         x: histogram.hz,
         y: histogram.correlation,
         type: "scatter",
-        mode: "lines",
-        line: { color: "rgba(249, 115, 22, 0.5)", width: 1.5 },
-        hovertemplate: "Hz=%{x}<br>corr=%{y:.3f}<extra></extra>",
-        name: "Correlation",
-        yaxis: "y2",
-      },
-      {
-        x: histogram.hz,
-        y: histogram.logCorrelation,
-        type: "scatter",
         mode: "lines+markers",
         line: { color: "rgba(255, 255, 255, 0.95)", width: 1.5 },
         marker: { color: "rgba(255, 255, 255, 0.95)", size: 4 },
-        hovertemplate: "Hz=%{x}<br>logCorr=%{y:.3f}<extra></extra>",
-        name: "Log correlation",
+        hovertemplate: "Hz=%{x}<br>corr=%{y:.3f}<extra></extra>",
+        name: "Correlation",
       },
       {
         x: fftMarkerX,
         y: fftMarkerY,
         mode: "markers",
         marker: { color: "#00b7ff", size: 12, symbol: "x" },
-        hovertemplate: "FFT=%{x:.2f} Hz<br>logCorr=%{y:.3f}<extra></extra>",
+        hovertemplate: "FFT=%{x:.2f} Hz<br>corr=%{y:.3f}<extra></extra>",
         showlegend: false,
       },
       {
@@ -299,7 +277,7 @@ async function renderHistogram(
         y: picaMarkerY,
         mode: "markers",
         marker: { color: "#ff0066", size: 12, symbol: "cross" },
-        hovertemplate: "Pica=%{x:.2f} Hz<br>logCorr=%{y:.3f}<extra></extra>",
+        hovertemplate: "Pica=%{x:.2f} Hz<br>corr=%{y:.3f}<extra></extra>",
         showlegend: false,
       },
       {
@@ -307,7 +285,7 @@ async function renderHistogram(
         y: carryForwardMarkerY,
         mode: "markers",
         marker: { color: "#facc15", size: 12, symbol: "diamond" },
-        hovertemplate: "Carry=%{x:.2f} Hz<br>logCorr=%{y:.3f}<extra></extra>",
+        hovertemplate: "Carry=%{x:.2f} Hz<br>corr=%{y:.3f}<extra></extra>",
         showlegend: false,
       },
       {
@@ -315,7 +293,7 @@ async function renderHistogram(
         y: actualMarkerY,
         mode: "markers",
         marker: { color: "#39ff14", size: 9, line: { color: "#000000", width: 1.5 } },
-        hovertemplate: "Actual=%{x:.2f} Hz<br>logCorr=%{y:.3f}<extra></extra>",
+        hovertemplate: "Actual=%{x:.2f} Hz<br>corr=%{y:.3f}<extra></extra>",
         showlegend: false,
       },
     ],
@@ -330,19 +308,13 @@ async function renderHistogram(
       xaxis: {
         title: "Hz",
         gridcolor: "#1f2937",
-        range: [histogram.minHz, 1300],
+        // range: [histogram.minHz, 1300],
+        type: "log",
+        range: [Math.log10(histogram.minHz), Math.log10(1300)],
         tick0: 0,
         dtick: 100,
       },
-      yaxis: { title: "-log10(1 - corr)", gridcolor: "#1f2937" },
-      yaxis2: {
-        title: "corr",
-        overlaying: "y",
-        side: "right",
-        rangemode: "tozero",
-        gridcolor: "#1f2937",
-        zerolinecolor: "#1f2937",
-      },
+      yaxis: { title: "corr", gridcolor: "#1f2937", rangemode: "tozero" },
       annotations: [],
     },
     { responsive: true },

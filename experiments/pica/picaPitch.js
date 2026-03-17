@@ -4,23 +4,17 @@ import {
   PICA_MIN_WINDOW_MAX_AMPLITUDE,
   PICA_SETTINGS_DEFAULTS,
 } from "./config.js";
-import { getLogCorrelation, hasZeroCrossing } from "./utils.js";
+import { hasZeroCrossing } from "./utils.js";
 export function getPicaSettings(settings = {}) {
   return {
     ...PICA_SETTINGS_DEFAULTS,
     ...settings,
     maxExtremaPerFold: settings.maxExtremaPerFold ?? PICA_SETTINGS_DEFAULTS.maxExtremaPerFold,
-    carryForwardLogCorrelationThreshold:
-      settings.carryForwardLogCorrelationThreshold ??
-      PICA_SETTINGS_DEFAULTS.carryForwardLogCorrelationThreshold,
-    picaGlobalLogCorrelationCutoff:
-      settings.picaGlobalLogCorrelationCutoff ??
-      PICA_SETTINGS_DEFAULTS.picaGlobalLogCorrelationCutoff,
-    hzWeight: settings.hzWeight ?? PICA_SETTINGS_DEFAULTS.hzWeight,
-    correlationWeight: settings.correlationWeight ?? PICA_SETTINGS_DEFAULTS.correlationWeight,
-    normalizeHz: settings.normalizeHz ?? PICA_SETTINGS_DEFAULTS.normalizeHz,
-    normalizeCorrelation:
-      settings.normalizeCorrelation ?? PICA_SETTINGS_DEFAULTS.normalizeCorrelation,
+    carryForwardCorrelationThreshold:
+      settings.carryForwardCorrelationThreshold ??
+      PICA_SETTINGS_DEFAULTS.carryForwardCorrelationThreshold,
+    correlationToHzWeightRatio:
+      settings.correlationToHzWeightRatio ?? PICA_SETTINGS_DEFAULTS.correlationToHzWeightRatio,
   };
 }
 
@@ -30,6 +24,16 @@ function getCorrelationFromPeriod(samples, periodSamples, maxComparisonPatches) 
   if (patchCount < 2) return -1;
   const corrSamplePoints = 30;
   const stride = Math.max(1, Math.floor(periodSamples / corrSamplePoints));
+  const startSample = samples.length - patchCount * periodSamples;
+
+  let maxAbs = 0;
+  for (let sampleIndex = startSample; sampleIndex < samples.length; sampleIndex += 1) {
+    const absolute = Math.abs(samples[sampleIndex]);
+    if (absolute > maxAbs) {
+      maxAbs = absolute;
+    }
+  }
+  if (maxAbs <= 0) return -1;
 
   let totalCorrelation = 0;
   let comparisonCount = 0;
@@ -40,21 +44,15 @@ function getCorrelationFromPeriod(samples, periodSamples, maxComparisonPatches) 
     if (leftStart < 0) break;
 
     let dot = 0;
-    let leftPower = 0;
-    let rightPower = 0;
     for (let sampleIndex = 0; sampleIndex < periodSamples; sampleIndex += stride) {
-      const left = samples[leftStart + sampleIndex];
-      const right = samples[rightStart + sampleIndex];
+      const left = samples[leftStart + sampleIndex] / maxAbs;
+      const right = samples[rightStart + sampleIndex] / maxAbs;
       dot += left * right;
-      leftPower += left * left;
-      rightPower += right * right;
+      comparisonCount += 1;
     }
-    if (leftPower <= 0 || rightPower <= 0) continue;
-    totalCorrelation += dot / Math.sqrt(leftPower * rightPower);
-    // totalCorrelation += dot;
-    comparisonCount += 1;
+    totalCorrelation += dot;
   }
-
+  totalCorrelation *= 100;
   return comparisonCount > 0 ? totalCorrelation / comparisonCount : -1;
 }
 
@@ -214,7 +212,6 @@ function getWalkedPeriod(samples, seedPeriodSamples, settings, sampleRate, cache
       : {
           periodSamples: bestPeriodSamples,
           correlation: bestCorrelation,
-          logCorrelation: getLogCorrelation(bestCorrelation),
           comparedRegionMaxAmplitude: getCachedComparedRegionMaxAmplitude(
             samples,
             bestPeriodSamples,
@@ -412,7 +409,7 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
       );
       if (!walkedPeriod) continue;
       const hzFeature = Math.log2(walkedPeriod.hz / PICA_MIN_HZ);
-      const correlationFeature = walkedPeriod.logCorrelation;
+      const correlationFeature = walkedPeriod.correlation;
       if (hzFeature < hzMin) hzMin = hzFeature;
       if (hzFeature > hzMax) hzMax = hzFeature;
       if (correlationFeature < correlationMin) correlationMin = correlationFeature;
@@ -425,7 +422,6 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
         periodSamples: walkedPeriod.periodSamples,
         hz: walkedPeriod.hz,
         correlation: walkedPeriod.correlation,
-        logCorrelation: walkedPeriod.logCorrelation,
         comparedRegionMaxAmplitude: walkedPeriod.comparedRegionMaxAmplitude,
         hzFeature,
         correlationFeature,
@@ -440,20 +436,10 @@ function getCandidateFamiliesFromExtrema(samples, sampleRate, foldExtrema, setti
     };
   }
 
-  const normalize = (value, min, max) => (max > min ? (value - min) / (max - min) : 0);
   let winningCandidate = null;
   for (const candidate of candidateFamilies) {
-    const normalizedHzFeature = settings.normalizeHz
-      ? normalize(candidate.hzFeature, hzMin, hzMax)
-      : candidate.hzFeature;
-    const normalizedCorrelationFeature = settings.normalizeCorrelation
-      ? normalize(candidate.correlationFeature, correlationMin, correlationMax)
-      : candidate.correlationFeature;
-    candidate.normalizedHzFeature = normalizedHzFeature;
-    candidate.normalizedCorrelationFeature = normalizedCorrelationFeature;
     candidate.weightedScore =
-      settings.hzWeight * normalizedHzFeature +
-      settings.correlationWeight * normalizedCorrelationFeature;
+      candidate.hzFeature + settings.correlationToHzWeightRatio * candidate.correlationFeature;
     if (!winningCandidate || candidate.weightedScore > winningCandidate.weightedScore) {
       winningCandidate = candidate;
     }
@@ -486,13 +472,6 @@ function getPicaPitchResultFromAnalysis(analysis, settings) {
     };
   }
 
-  if (analysis.winningCandidate.logCorrelation < settings.picaGlobalLogCorrelationCutoff) {
-    return {
-      hz: Number.NaN,
-      rejectionReason: "low_log_correlation",
-    };
-  }
-
   if (
     analysis.winningCandidate.comparedRegionMaxAmplitude !== undefined &&
     analysis.winningCandidate.comparedRegionMaxAmplitude < PICA_MIN_WINDOW_MAX_AMPLITUDE
@@ -510,18 +489,18 @@ function getPicaPitchResultFromAnalysis(analysis, settings) {
 }
 
 function getCarryForwardCandidate(samples, sampleRate, settings, priorStep, cache = null) {
-  const threshold = settings.carryForwardLogCorrelationThreshold;
+  const threshold = settings.carryForwardCorrelationThreshold;
   if (
     !Number.isFinite(priorStep?.hz) ||
-    !Number.isFinite(priorStep?.logCorrelation) ||
-    priorStep.logCorrelation <= threshold
+    !Number.isFinite(priorStep?.correlation) ||
+    priorStep.correlation <= threshold
   ) {
     return null;
   }
 
   const sourcePeriodSamples = Math.round(sampleRate / priorStep.hz);
   const walkedPeriod = getWalkedPeriod(samples, sourcePeriodSamples, settings, sampleRate, cache);
-  if (!walkedPeriod || walkedPeriod.logCorrelation <= threshold) {
+  if (!walkedPeriod || walkedPeriod.correlation <= threshold) {
     return null;
   }
   return {
@@ -530,7 +509,6 @@ function getCarryForwardCandidate(samples, sampleRate, settings, priorStep, cach
     periodSamples: walkedPeriod.periodSamples,
     hz: walkedPeriod.hz,
     correlation: walkedPeriod.correlation,
-    logCorrelation: walkedPeriod.logCorrelation,
     comparedRegionMaxAmplitude: walkedPeriod.comparedRegionMaxAmplitude,
   };
 }
@@ -596,7 +574,6 @@ export function buildPicaCorrelationHistogram(
   const cache = createWindowAnalysisCache();
   const hz = [];
   const correlation = [];
-  const logCorrelation = [];
   const { minPeriodSamples, maxPeriodSamples } = getPeriodSampleBounds(sampleRate);
   for (
     let periodSamples = maxPeriodSamples;
@@ -607,30 +584,11 @@ export function buildPicaCorrelationHistogram(
     const candidateCorrelation = getCachedCorrelation(samples, periodSamples, picaSettings, cache);
     hz.push(candidateHz);
     correlation.push(candidateCorrelation);
-    logCorrelation.push(getLogCorrelation(candidateCorrelation));
   }
   return {
     minHz: PICA_MIN_HZ,
     maxHz: PICA_MAX_HZ,
     hz,
     correlation,
-    logCorrelation,
-  };
-}
-
-export function evaluatePicaWindow(samples, sampleRate, settings = PICA_SETTINGS_DEFAULTS) {
-  const analysis = getPicaPitchAnalysisFromWaveform(samples, sampleRate, settings);
-  const histogram = buildPicaCorrelationHistogram(samples, sampleRate, settings);
-  let bestHistogramIndex = 0;
-  for (let index = 1; index < histogram.logCorrelation.length; index += 1) {
-    if (histogram.logCorrelation[index] > histogram.logCorrelation[bestHistogramIndex]) {
-      bestHistogramIndex = index;
-    }
-  }
-  return {
-    analysis,
-    histogram,
-    histogramPeakHz: histogram.hz[bestHistogramIndex],
-    histogramPeakLogCorrelation: histogram.logCorrelation[bestHistogramIndex],
   };
 }

@@ -240,7 +240,7 @@
             min="1"
             max="8"
             step="1"
-            value="5"
+            value="2"
             title="How many same-sign extrema to keep from each fold."
         /></label>
         <label class="toolbar-field"
@@ -264,7 +264,7 @@
             min="2"
             max="16"
             step="1"
-            value="3"
+            value="7"
             title="Maximum number of trailing period-sized patches to compare when scoring a candidate period."
         /></label>
         <label class="toolbar-field"
@@ -282,57 +282,27 @@
         <label class="toolbar-field"
           >carryThr
           <input
-            id="carryForwardLogCorrelationThreshold"
+            id="carryForwardCorrelationThreshold"
             class="toolbar-number"
             type="number"
             min="0"
-            max="4"
+            max="20"
             step="0.01"
-            value="1.2"
-            title="Minimum prior and walked log correlation required before the carry-forward path can win."
+            value="3"
+            title="Minimum prior and walked correlation required before the carry-forward path can win."
         /></label>
         <label class="toolbar-field"
-          >minLogCorr
+          >corrHzRatio
           <input
-            id="picaGlobalLogCorrelationCutoff"
-            class="toolbar-number"
-            type="number"
-            min="0"
-            max="4"
-            step="0.01"
-            value="0"
-            title="Minimum winning log correlation required for the pica detector to emit a pitch."
-        /></label>
-        <label class="toolbar-field"
-          >hzWeight
-          <input
-            id="hzWeight"
+            id="correlationToHzWeightRatio"
             class="toolbar-number"
             type="number"
             min="0"
             max="5"
             step="0.01"
-            value="0.15"
-            title="Weight applied to the normalized Hz feature."
+            value="0.5"
+            title="Correlation feature weight relative to the Hz feature weight of 1."
         /></label>
-        <label class="toolbar-field"
-          >corrWeight
-          <input
-            id="correlationWeight"
-            class="toolbar-number"
-            type="number"
-            min="0"
-            max="5"
-            step="0.01"
-            value="1"
-            title="Weight applied to the normalized log-correlation feature."
-        /></label>
-        <label class="toolbar-field"
-          ><input id="normalizeHz" type="checkbox" checked /> normHz</label
-        >
-        <label class="toolbar-field"
-          ><input id="normalizeCorrelation" type="checkbox" checked /> normCorr</label
-        >
         <div id="perfInfo"></div>
         <div id="status">Ready to record.</div>
       </div>

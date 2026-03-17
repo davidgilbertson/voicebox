@@ -5,7 +5,6 @@ import {
   DEFAULT_ASSET_URL,
   PICA_SETTING_FIELDS,
   PICA_SETTINGS_DEFAULTS,
-  PICA_TOGGLE_FIELDS,
   RECORD_DURATION_MS,
 } from "./config.js";
 import { getPicaWaveformWindow, PICA_WINDOW_SAMPLES_AT_48K } from "./windowing.js";
@@ -43,16 +42,6 @@ function writeStoredNumber(key, value) {
   localStorage.setItem(getStorageKey(key), String(value));
 }
 
-function readStoredBoolean(key, fallback) {
-  const val = localStorage.getItem(getStorageKey(key));
-  if (val === null) return fallback;
-  return val === "true";
-}
-
-function writeStoredBoolean(key, value) {
-  localStorage.setItem(getStorageKey(key), String(value));
-}
-
 function readStoredWindowIndex() {
   const value = Number.parseInt(localStorage.getItem(SELECTED_WINDOW_STORAGE_KEY) ?? "", 10);
   return Number.isNaN(value) ? 0 : value;
@@ -72,48 +61,29 @@ function writeStoredCandidatePanelOpen(isOpen) {
 }
 
 function getStoredSettings() {
-  return {
-    ...Object.fromEntries(
-      PICA_SETTING_FIELDS.map((field) => [
-        field.key,
-        readStoredNumber(field.key, PICA_SETTINGS_DEFAULTS[field.key]),
-      ]),
-    ),
-    ...Object.fromEntries(
-      PICA_TOGGLE_FIELDS.map((field) => [
-        field.key,
-        readStoredBoolean(field.key, PICA_SETTINGS_DEFAULTS[field.key]),
-      ]),
-    ),
-  };
+  return Object.fromEntries(
+    PICA_SETTING_FIELDS.map((field) => [
+      field.key,
+      readStoredNumber(field.key, PICA_SETTINGS_DEFAULTS[field.key]),
+    ]),
+  );
 }
 
 function writeStoredSettings(settings) {
   PICA_SETTING_FIELDS.forEach((field) => {
     writeStoredNumber(field.key, settings[field.key]);
   });
-  PICA_TOGGLE_FIELDS.forEach((field) => {
-    writeStoredBoolean(field.key, settings[field.key]);
-  });
 }
 
 function getSettingsFromInputs(settingInputs) {
-  return {
-    ...Object.fromEntries(
-      PICA_SETTING_FIELDS.map((field) => [field.key, Number(settingInputs[field.key].value)]),
-    ),
-    ...Object.fromEntries(
-      PICA_TOGGLE_FIELDS.map((field) => [field.key, settingInputs[field.key].checked]),
-    ),
-  };
+  return Object.fromEntries(
+    PICA_SETTING_FIELDS.map((field) => [field.key, Number(settingInputs[field.key].value)]),
+  );
 }
 
 function writeSettingsToInputs(settingInputs, settings) {
   PICA_SETTING_FIELDS.forEach((field) => {
     settingInputs[field.key].value = String(settings[field.key]);
-  });
-  PICA_TOGGLE_FIELDS.forEach((field) => {
-    settingInputs[field.key].checked = settings[field.key];
   });
 }
 
@@ -251,7 +221,7 @@ async function renderResult(result) {
 
 function getStatusText(sourceLabel, result) {
   const settings = result.picaSettings;
-  return `Loaded ${sourceLabel}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, picaWindow=${PICA_WINDOW_SAMPLES_AT_48K} samples @ 48k, maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxPatches=${settings.maxComparisonPatches}, maxWalk=${settings.maxWalkSteps}, carryThr=${settings.carryForwardLogCorrelationThreshold.toFixed(2)}, minLogCorr=${settings.picaGlobalLogCorrelationCutoff.toFixed(2)}, hzWeight=${settings.hzWeight.toFixed(2)}, corrWeight=${settings.correlationWeight.toFixed(2)}, normHz=${settings.normalizeHz}, normCorr=${settings.normalizeCorrelation}`;
+  return `Loaded ${sourceLabel}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, picaWindow=${PICA_WINDOW_SAMPLES_AT_48K} samples @ 48k, maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxPatches=${settings.maxComparisonPatches}, maxWalk=${settings.maxWalkSteps}, carryThr=${settings.carryForwardCorrelationThreshold.toFixed(3)}, corrHzRatio=${settings.correlationToHzWeightRatio.toFixed(3)}`;
 }
 
 async function analyzePreparedSample(preparedSample, sourceLabel, settingInputs) {
@@ -312,10 +282,7 @@ function main() {
   const autoFixButton = document.getElementById("autoFixButton");
   const candidatePanelDetails = document.getElementById("candidatePanelDetails");
   const settingInputs = Object.fromEntries(
-    [...PICA_SETTING_FIELDS, ...PICA_TOGGLE_FIELDS].map((field) => [
-      field.key,
-      document.getElementById(field.key),
-    ]),
+    PICA_SETTING_FIELDS.map((field) => [field.key, document.getElementById(field.key)]),
   );
   const controls = [recordButton, autoFixButton, sourceSelect, ...Object.values(settingInputs)];
   autoFixButton.disabled = true;
@@ -357,11 +324,6 @@ function main() {
 
   PICA_SETTING_FIELDS.forEach((field) => {
     settingInputs[field.key].addEventListener("input", () =>
-      rerun(controls, sourceSelect, settingInputs, `Applying ${field.label}...`),
-    );
-  });
-  PICA_TOGGLE_FIELDS.forEach((field) => {
-    settingInputs[field.key].addEventListener("change", () =>
       rerun(controls, sourceSelect, settingInputs, `Applying ${field.label}...`),
     );
   });
