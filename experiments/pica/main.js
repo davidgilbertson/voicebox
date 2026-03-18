@@ -110,6 +110,11 @@ function getAccuracyLabel(accuracy, correctCount, comparedCount) {
   return `<span class="perf-accuracy">${(accuracy * 100).toFixed(1)}%</span> (${correctCount}/${comparedCount})`;
 }
 
+function getMethodAccuracyLabel(result, methodKey) {
+  const summary = result.metrics.accuracyByMethodKey?.[methodKey];
+  return getAccuracyLabel(summary?.accuracy, summary?.correctCount, summary?.comparedCount);
+}
+
 function updatePerformanceInfo(result) {
   const infoElement = document.getElementById("perfInfo");
   infoElement.innerHTML = `
@@ -129,21 +134,7 @@ function updatePerformanceInfo(result) {
         </tr>
         <tr>
           <th>Accuracy</th>
-          <td>${getAccuracyLabel(
-            result.metrics.fftAccuracy,
-            result.metrics.fftCorrectCount,
-            result.metrics.actualComparedCount,
-          )}</td>
-          <td>${getAccuracyLabel(
-            result.metrics.picaAccuracy,
-            result.metrics.picaCorrectCount,
-            result.metrics.actualComparedCount,
-          )}</td>
-          <td>${getAccuracyLabel(
-            result.metrics.carryForwardAccuracy,
-            result.metrics.carryForwardCorrectCount,
-            result.metrics.carryForwardComparedCount,
-          )}</td>
+          ${result.methods.map((method) => `<td>${getMethodAccuracyLabel(result, method.key)}</td>`).join("")}
         </tr>
       </tbody>
     </table>

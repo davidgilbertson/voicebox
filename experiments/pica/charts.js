@@ -455,6 +455,16 @@ export async function renderPicaPitchCharts(result, options = {}) {
     [
       {
         x: result.timeSec,
+        y: result.pitchyPitchHz,
+        mode: "lines",
+        customdata: result.timeSec.map((_, index) => index),
+        line: { width: 1.5, color: "rgba(196, 181, 253, 0.95)" },
+        connectgaps: false,
+        hovertemplate: "t=%{x:.3f}s<br>Pitchy=%{y:.2f} Hz<extra></extra>",
+        name: "Pitchy",
+      },
+      {
+        x: result.timeSec,
         y: result.pitchHz,
         mode: "lines",
         customdata: result.timeSec.map((_, index) => index),
@@ -490,6 +500,16 @@ export async function renderPicaPitchCharts(result, options = {}) {
         customdata: result.timeSec.map((_, index) => index),
         marker: { size: 6, color: actualPitchColor },
         hovertemplate: "t=%{x:.3f}s<br>Actual=%{y:.2f} Hz<extra></extra>",
+        name: "Actual",
+        showlegend: false,
+        visible: hasActuals,
+      },
+      {
+        x: [result.timeSec[0] ?? 0],
+        y: [result.actualPitchHz?.find((hz) => Number.isFinite(hz)) ?? MIN_PITCH_CHART_HZ],
+        mode: "markers",
+        marker: { size: 8, color: "rgba(74, 222, 128, 1)" },
+        hoverinfo: "skip",
         name: "Actual",
         visible: hasActuals,
       },
@@ -532,7 +552,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
     const extremaMarkers = getExtremaMarkers(waveformWindow, analysis);
 
     await plotly.relayout("pitchChart", {
-      title: `Pitch Timeline (pica: ${getSelectedPitchLabel(waveformWindow.picaPitchHz)}, carry: ${getSelectedPitchLabel(waveformWindow.carryForwardPitchHz)}, actual: ${getActualPitchLabel(getResolvedActualPitchHz(activeWindowIndex))})`,
+      title: `Pitch Timeline (pica: ${getSelectedPitchLabel(waveformWindow.picaPitchHz)}, pitchy: ${getSelectedPitchLabel(result.pitchyPitchHz?.[activeWindowIndex])}, carry: ${getSelectedPitchLabel(waveformWindow.carryForwardPitchHz)}, actual: ${getActualPitchLabel(getResolvedActualPitchHz(activeWindowIndex))})`,
       shapes: [
         {
           type: "line",
@@ -622,7 +642,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
                 "marker.color": [actualPitchColor],
                 x: [result.timeSec],
               },
-              [3],
+              [4],
             );
             void selectWindow(activeWindowIndex);
           }
@@ -677,7 +697,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
           "marker.color": [actualPitchColor],
           x: [result.timeSec],
         },
-        [3],
+        [4],
       );
     }
     void selectWindow(nextWindowIndex);

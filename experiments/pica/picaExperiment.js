@@ -2,6 +2,7 @@ import { PICA_ACCURACY_CENTS, PICA_SETTINGS_DEFAULTS } from "./config.js";
 import { getCentsDifference } from "./utils.js";
 import { getPicaWindowSamples } from "./windowing.js";
 import { getPicaPitchAnalysisFromWaveform, getPicaSettings } from "./picaPitch.js";
+import { analyzePitchyTrack } from "./pitchyPitch.js";
 
 const TIMESTEPS_PER_SECOND = 80;
 const VOCAL_SAMPLER_FILE_NAME = "vocal_sampler.wav";
@@ -22,6 +23,15 @@ function createAccuracySummary(accuracy, correctCount, comparedCount) {
     correctCount,
     comparedCount,
   };
+}
+
+function createAccuracySummaryByMethod(actualPitchHz, tracksByMethodKey) {
+  return Object.fromEntries(
+    Object.entries(tracksByMethodKey).map(([methodKey, predictedPitchHz]) => [
+      methodKey,
+      getPitchAccuracy(actualPitchHz, predictedPitchHz),
+    ]),
+  );
 }
 
 async function loadWavSamples(url) {
@@ -75,46 +85,6 @@ export async function loadActualPitchSample(audioInput) {
     sampleRate: loaded.sampleRate,
     samples: loaded.samples,
     actualPitchHz,
-  };
-}
-
-function getActualAccuracyMetrics(actualPitchHz, fftPitchHz, picaPitchHz) {
-  let fftCorrectCount = 0;
-  let picaCorrectCount = 0;
-  let actualComparedCount = 0;
-  if (!actualPitchHz) {
-    return {
-      fftAccuracy: Number.NaN,
-      fftCorrectCount: 0,
-      picaAccuracy: Number.NaN,
-      picaCorrectCount: 0,
-      actualComparedCount: 0,
-      picaComparedCount: 0,
-    };
-  }
-
-  for (let windowIndex = 0; windowIndex < actualPitchHz.length; windowIndex += 1) {
-    const actualHz = actualPitchHz[windowIndex];
-    if (!Number.isFinite(actualHz)) continue;
-
-    actualComparedCount += 1;
-    const fftHz = fftPitchHz?.[windowIndex];
-    const picaHz = picaPitchHz[windowIndex];
-    if (Number.isFinite(fftHz) && getCentsDifference(fftHz, actualHz) <= PICA_ACCURACY_CENTS) {
-      fftCorrectCount += 1;
-    }
-    if (Number.isFinite(picaHz) && getCentsDifference(picaHz, actualHz) <= PICA_ACCURACY_CENTS) {
-      picaCorrectCount += 1;
-    }
-  }
-
-  return {
-    fftAccuracy: actualComparedCount > 0 ? fftCorrectCount / actualComparedCount : Number.NaN,
-    fftCorrectCount,
-    picaAccuracy: actualComparedCount > 0 ? picaCorrectCount / actualComparedCount : Number.NaN,
-    picaCorrectCount,
-    actualComparedCount,
-    picaComparedCount: actualComparedCount,
   };
 }
 
@@ -211,13 +181,19 @@ export async function analyzePreparedPitchSample(
     "carryForward",
     fftAnalysis.samplesPerSecond,
   );
-
-  const picaMetrics = getActualAccuracyMetrics(
-    actualPitchHz,
-    fftAnalysis.pitchHz,
-    picaTrack.pitchHz,
+  const pitchyTrack = await analyzePitchyTrack(
+    fftAnalysis.timeSec,
+    samples,
+    sampleRate,
+    fftAnalysis.samplesPerSecond,
   );
-  const carryForwardMetrics = getPitchAccuracy(actualPitchHz, carryForwardTrack.pitchHz);
+
+  const accuracyByMethodKey = createAccuracySummaryByMethod(actualPitchHz, {
+    fft: fftAnalysis.pitchHz,
+    pica: picaTrack.pitchHz,
+    pitchy: pitchyTrack.pitchHz,
+    carryForward: carryForwardTrack.pitchHz,
+  });
 
   return {
     sampleRate,
@@ -226,15 +202,19 @@ export async function analyzePreparedPitchSample(
     actualPitchHz,
     pitchHz: fftAnalysis.pitchHz,
     picaPitchHz: picaTrack.pitchHz,
+    pitchyPitchHz: pitchyTrack.pitchHz,
     carryForwardPitchHz: carryForwardTrack.pitchHz,
     picaSettings,
     metrics: {
-      ...picaMetrics,
-      carryForwardAccuracy: carryForwardMetrics.accuracy,
-      carryForwardCorrectCount: carryForwardMetrics.correctCount,
-      carryForwardComparedCount: carryForwardMetrics.comparedCount,
+      accuracyByMethodKey,
     },
     methods: [
+      createResolvedPitchMethod(
+        "Pitchy",
+        "pitchy",
+        pitchyTrack.pitchHz,
+        pitchyTrack.msPerSecondAudio,
+      ),
       createResolvedPitchMethod(
         "Voicebox FFT",
         "fft",
@@ -257,6 +237,7 @@ export async function analyzePreparedPitchSample(
     perf: {
       voiceboxPipelineMsPerSecondAudio: fftAnalysis.perf.voiceboxPipelineMsPerSecondAudio,
       picaPipelineMsPerSecondAudio: picaTrack.msPerSecondAudio,
+      pitchyPipelineMsPerSecondAudio: pitchyTrack.msPerSecondAudio,
       carryForwardPipelineMsPerSecondAudio: carryForwardTrack.msPerSecondAudio,
     },
   };
@@ -285,7 +266,13 @@ export async function analyzePreparedActualPitchSample(
     "carryForward",
     TIMESTEPS_PER_SECOND,
   );
-  const carryForwardMetrics = getPitchAccuracy(actualPitchHz, carryForwardTrack.pitchHz);
+  const pitchyTrack = await analyzePitchyTrack(timeSec, samples, sampleRate, TIMESTEPS_PER_SECOND);
+  const accuracyByMethodKey = createAccuracySummaryByMethod(actualPitchHz, {
+    fft: new Array(timeSec.length).fill(Number.NaN),
+    pica: picaTrack.pitchHz,
+    pitchy: pitchyTrack.pitchHz,
+    carryForward: carryForwardTrack.pitchHz,
+  });
 
   return {
     sampleRate,
@@ -294,13 +281,11 @@ export async function analyzePreparedActualPitchSample(
     actualPitchHz,
     pitchHz: new Array(timeSec.length).fill(Number.NaN),
     picaPitchHz: picaTrack.pitchHz,
+    pitchyPitchHz: pitchyTrack.pitchHz,
     carryForwardPitchHz: carryForwardTrack.pitchHz,
     picaSettings,
     metrics: {
-      ...getActualAccuracyMetrics(actualPitchHz, null, picaTrack.pitchHz),
-      carryForwardAccuracy: carryForwardMetrics.accuracy,
-      carryForwardCorrectCount: carryForwardMetrics.correctCount,
-      carryForwardComparedCount: carryForwardMetrics.comparedCount,
+      accuracyByMethodKey,
     },
     methods: [
       createResolvedPitchMethod(
@@ -316,6 +301,12 @@ export async function analyzePreparedActualPitchSample(
         picaTrack.msPerSecondAudio,
       ),
       createResolvedPitchMethod(
+        "Pitchy",
+        "pitchy",
+        pitchyTrack.pitchHz,
+        pitchyTrack.msPerSecondAudio,
+      ),
+      createResolvedPitchMethod(
         "Carry Forward",
         "carryForward",
         carryForwardTrack.pitchHz,
@@ -325,6 +316,7 @@ export async function analyzePreparedActualPitchSample(
     perf: {
       voiceboxPipelineMsPerSecondAudio: Number.NaN,
       picaPipelineMsPerSecondAudio: picaTrack.msPerSecondAudio,
+      pitchyPipelineMsPerSecondAudio: pitchyTrack.msPerSecondAudio,
       carryForwardPipelineMsPerSecondAudio: carryForwardTrack.msPerSecondAudio,
     },
   };

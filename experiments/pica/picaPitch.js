@@ -411,7 +411,7 @@ function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, ca
   };
 }
 
-function getPicaPitchResultFromAnalysis(analysis, settings) {
+function getPicaPitchResultFromAnalysis(analysis) {
   if (analysis.maxAmplitude < PICA_MIN_WINDOW_MAX_AMPLITUDE) {
     return {
       hz: Number.NaN,
