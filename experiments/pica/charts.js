@@ -1,4 +1,5 @@
-import { buildPicaCorrelationHistogram, getPicaPitchAnalysisFromWaveform } from "./picaPitch.js";
+import { PICA_MAX_HZ, PICA_MIN_HZ, PICA_SETTINGS_DEFAULTS } from "./config.js";
+import { getPicaPitchAnalysisFromWaveform, getPicaSettings } from "./picaPitch.js";
 import {
   PICA_WINDOW_CYCLES,
   PICA_WINDOW_DURATION_SEC,
@@ -8,6 +9,87 @@ import {
 let detachWindowKeyHandler = null;
 const MIN_PITCH_CHART_HZ = 40;
 const MAX_PITCH_CHART_HZ = 1300;
+
+function buildPicaCorrelationHistogram(samples, sampleRate, settings = PICA_SETTINGS_DEFAULTS) {
+  const picaSettings = getPicaSettings(settings);
+  const correlationByPeriodSize = new Map();
+  let maxAmplitudeFromRight = null;
+  const hz = [];
+  const correlation = [];
+  const minPeriodSize = Math.max(1, Math.ceil(sampleRate / PICA_MAX_HZ));
+  const maxPeriodSize = Math.max(minPeriodSize, Math.floor(sampleRate / PICA_MIN_HZ));
+
+  function getMaxAmplitudeFromRight() {
+    if (maxAmplitudeFromRight) {
+      return maxAmplitudeFromRight;
+    }
+
+    maxAmplitudeFromRight = new Float32Array(samples.length);
+    let maxAmplitude = 0;
+    for (let sampleIndex = samples.length - 1; sampleIndex >= 0; sampleIndex -= 1) {
+      const amplitude = Math.abs(samples[sampleIndex]);
+      if (amplitude > maxAmplitude) {
+        maxAmplitude = amplitude;
+      }
+      maxAmplitudeFromRight[sampleIndex] = maxAmplitude;
+    }
+    return maxAmplitudeFromRight;
+  }
+
+  function getCorrelation(periodSize) {
+    const cachedCorrelation = correlationByPeriodSize.get(periodSize);
+    if (cachedCorrelation !== undefined) {
+      return cachedCorrelation;
+    }
+
+    if (periodSize < 1) return -1;
+    const patchCount = Math.min(
+      picaSettings.maxComparisonPatches,
+      Math.floor(samples.length / periodSize),
+    );
+    if (patchCount < 2) return -1;
+    const corrSamplePoints = 30;
+    const stride = Math.max(1, Math.floor(periodSize / corrSamplePoints));
+    const startSample = samples.length - patchCount * periodSize;
+    const maxAbs = getMaxAmplitudeFromRight()[startSample];
+    if (maxAbs <= 0) return -1;
+
+    let totalCorrelation = 0;
+    let comparisonCount = 0;
+    for (let patchIndex = 0; patchIndex < patchCount - 1; patchIndex += 1) {
+      const rightEnd = samples.length - patchIndex * periodSize;
+      const rightStart = rightEnd - periodSize;
+      const leftStart = rightStart - periodSize;
+      if (leftStart < 0) break;
+
+      let dot = 0;
+      for (let sampleIndex = 0; sampleIndex < periodSize; sampleIndex += stride) {
+        const left = samples[leftStart + sampleIndex] / maxAbs;
+        const right = samples[rightStart + sampleIndex] / maxAbs;
+        dot += left * right;
+        comparisonCount += 1;
+      }
+      totalCorrelation += dot;
+    }
+
+    totalCorrelation *= 100;
+    const value = comparisonCount > 0 ? totalCorrelation / comparisonCount : -1;
+    correlationByPeriodSize.set(periodSize, value);
+    return value;
+  }
+
+  for (let periodSize = maxPeriodSize; periodSize >= minPeriodSize; periodSize -= 1) {
+    hz.push(sampleRate / periodSize);
+    correlation.push(getCorrelation(periodSize));
+  }
+
+  return {
+    minHz: PICA_MIN_HZ,
+    maxHz: PICA_MAX_HZ,
+    hz,
+    correlation,
+  };
+}
 
 function getBottomLegend() {
   return {
@@ -102,8 +184,8 @@ function getPeriodMarkers(waveformWindow) {
 }
 
 function getWinningPeriodBox(waveformWindow, analysis) {
-  if (!(analysis.winningCandidate?.periodSamples > 0)) return [];
-  const widthSec = analysis.winningCandidate.periodSamples / waveformWindow.sampleRate;
+  if (!(analysis.winningCandidate?.periodSize > 0)) return [];
+  const widthSec = analysis.winningCandidate.periodSize / waveformWindow.sampleRate;
   return [
     {
       type: "rect",
@@ -136,8 +218,8 @@ function getExtremaMarkers(waveformWindow, analysis) {
 }
 
 function renderCandidateTable(panel, analysis, fftPitchHz) {
-  const families = analysis.candidateFamilies;
-  if (families.length === 0) {
+  const candidates = analysis.candidates;
+  if (candidates.length === 0) {
     if (analysis.winningCandidate?.type === "carryForward") {
       panel.innerHTML = `<div class="candidate-summary">Carry-forward path won at ${analysis.winningCandidate.hz.toFixed(2)} Hz.</div>`;
       return;
@@ -148,57 +230,57 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
 
   let closestKey = null;
   let closestDistance = Number.POSITIVE_INFINITY;
-  families.forEach((family, familyIndex) => {
-    const distance = Math.abs(1200 * Math.log2(family.hz / fftPitchHz));
+  candidates.forEach((candidate, candidateIndex) => {
+    const distance = Math.abs(1200 * Math.log2(candidate.hz / fftPitchHz));
     if (distance < closestDistance) {
       closestDistance = distance;
-      closestKey = familyIndex;
+      closestKey = candidateIndex;
     }
   });
 
   const renderTypeTable = (type) => {
-    const typedFamilies = families
-      .filter((family) => family.type === type)
+    const typedCandidates = candidates
+      .filter((candidate) => candidate.type === type)
       .sort((left, right) => left.hz - right.hz);
-    if (typedFamilies.length === 0) return "";
-    const closestFamily = closestKey === null ? null : families[closestKey];
+    if (typedCandidates.length === 0) return "";
+    const closestCandidate = closestKey === null ? null : candidates[closestKey];
 
-    const header = typedFamilies.map((_, index) => `<th>${index + 1}</th>`).join("");
+    const header = typedCandidates.map((_, index) => `<th>${index + 1}</th>`).join("");
     const rows = [
       {
         label: "Pre-walk",
-        render: (family) => `${(48000 / family.sourcePeriodSamples).toFixed(1)} Hz`,
+        render: (candidate) => `${(48000 / candidate.sourcePeriodSize).toFixed(1)} Hz`,
       },
       {
         label: "Candidate",
-        render: (family) => `${family.hz.toFixed(1)} Hz`,
+        render: (candidate) => `${candidate.hz.toFixed(1)} Hz`,
       },
       {
         label: "Source gap",
-        render: (family) => `${family.sourcePeriodSamples} smp`,
+        render: (candidate) => `${candidate.sourcePeriodSize} smp`,
       },
       {
         label: "corr",
-        render: (family) => family.correlation.toFixed(3),
+        render: (candidate) => candidate.correlation.toFixed(3),
       },
       {
         label: "score",
-        render: (family) => family.weightedScore.toFixed(3),
+        render: (candidate) => candidate.weightedScore.toFixed(3),
       },
     ]
       .map((row) => {
-        const cells = typedFamilies
-          .map((family) => {
-            const selected = analysis.winningCandidate === family;
-            const bold = closestFamily === family ? " font-weight: 700;" : "";
+        const cells = typedCandidates
+          .map((candidate) => {
+            const selected = analysis.winningCandidate === candidate;
+            const bold = closestCandidate === candidate ? " font-weight: 700;" : "";
             const heatmap =
               row.label === "corr"
-                ? getHeatmapStyle(family.correlation)
+                ? getHeatmapStyle(candidate.correlation)
                 : row.label === "score"
-                  ? getHeatmapStyle(family.weightedScore)
+                  ? getHeatmapStyle(candidate.weightedScore)
                   : "";
             return `<td class="candidate-value${selected ? " candidate-selected" : ""}" style="${heatmap}${bold}">${row.render(
-              family,
+              candidate,
             )}</td>`;
           })
           .join("");
