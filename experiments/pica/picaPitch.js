@@ -1,8 +1,8 @@
 import {
   PICA_MAX_HZ,
   PICA_MIN_HZ,
-  PICA_MIN_WINDOW_MAX_AMPLITUDE,
   PICA_SETTINGS_DEFAULTS,
+  USE_COSINE,
 } from "./config.js";
 import { hasZeroCrossing } from "./utils.js";
 
@@ -20,11 +20,6 @@ export function getPicaSettings(settings = {}) {
     ...PICA_SETTINGS_DEFAULTS,
     ...settings,
     maxExtremaPerFold: settings.maxExtremaPerFold ?? PICA_SETTINGS_DEFAULTS.maxExtremaPerFold,
-    carryForwardCorrelationThreshold:
-      settings.carryForwardCorrelationThreshold ??
-      PICA_SETTINGS_DEFAULTS.carryForwardCorrelationThreshold,
-    correlationToHzWeightRatio:
-      settings.correlationToHzWeightRatio ?? PICA_SETTINGS_DEFAULTS.correlationToHzWeightRatio,
   };
 }
 
@@ -34,21 +29,19 @@ function getCorrelation(samples, periodSize, settings, cache = null) {
     return cachedCorrelation;
   }
 
-  const comparedRegionMaxAmplitude = getComparedRegionMaxAmplitude(
-    samples,
-    periodSize,
-    settings,
-    cache,
-  );
-  if (comparedRegionMaxAmplitude <= 0) return -1;
-
   if (periodSize < 1) return -1;
   const patchCount = Math.min(
     settings.maxComparisonPatches,
     Math.floor(samples.length / periodSize),
   );
   if (patchCount < 2) return -1;
-  const corrSamplePoints = 30;
+
+  const comparedRegionMaxAmplitude = USE_COSINE
+    ? 0
+    : getComparedRegionMaxAmplitude(samples, periodSize, settings, cache);
+  if (!USE_COSINE && comparedRegionMaxAmplitude <= 0) return -1;
+
+  const corrSamplePoints = Math.max(1, Math.round(settings.corrSamplePoints));
   const stride = Math.max(1, Math.floor(periodSize / corrSamplePoints));
 
   let totalCorrelation = 0;
@@ -60,15 +53,39 @@ function getCorrelation(samples, periodSize, settings, cache = null) {
     if (leftStart < 0) break;
 
     let dot = 0;
+    let leftPower = 0;
+    let rightPower = 0;
     for (let sampleIndex = 0; sampleIndex < periodSize; sampleIndex += stride) {
-      const left = samples[leftStart + sampleIndex] / comparedRegionMaxAmplitude;
-      const right = samples[rightStart + sampleIndex] / comparedRegionMaxAmplitude;
+      const left = USE_COSINE
+        ? samples[leftStart + sampleIndex]
+        : samples[leftStart + sampleIndex] / comparedRegionMaxAmplitude;
+      const right = USE_COSINE
+        ? samples[rightStart + sampleIndex]
+        : samples[rightStart + sampleIndex] / comparedRegionMaxAmplitude;
       dot += left * right;
-      comparisonCount += 1;
+      if (USE_COSINE) {
+        leftPower += left * left;
+        rightPower += right * right;
+      } else {
+        comparisonCount += 1;
+      }
     }
+
+    if (USE_COSINE) {
+      if (leftPower <= 0 || rightPower <= 0) {
+        continue;
+      }
+      totalCorrelation += dot / Math.sqrt(leftPower * rightPower);
+      comparisonCount += 1;
+      continue;
+    }
+
     totalCorrelation += dot;
   }
-  totalCorrelation *= 100;
+
+  if (!USE_COSINE) {
+    totalCorrelation *= 100;
+  }
   const correlation = comparisonCount > 0 ? totalCorrelation / comparisonCount : -1;
   cache?.correlationByPeriodSize.set(periodSize, correlation);
   return correlation;
@@ -412,7 +429,7 @@ function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, ca
 }
 
 function getPicaPitchResultFromAnalysis(analysis) {
-  if (analysis.maxAmplitude < PICA_MIN_WINDOW_MAX_AMPLITUDE) {
+  if (analysis.maxAmplitude < analysis.settings.minAmp) {
     return {
       hz: Number.NaN,
       rejectionReason: "low_amplitude",
@@ -435,7 +452,7 @@ function getPicaPitchResultFromAnalysis(analysis) {
 
   if (
     analysis.winningCandidate.comparedRegionMaxAmplitude !== undefined &&
-    analysis.winningCandidate.comparedRegionMaxAmplitude < PICA_MIN_WINDOW_MAX_AMPLITUDE
+    analysis.winningCandidate.comparedRegionMaxAmplitude < analysis.settings.minAmp
   ) {
     return {
       hz: Number.NaN,
@@ -488,6 +505,7 @@ export function getPicaPitchAnalysisFromWaveform(
   };
   const { zeroCrossingCount, maxAmplitude } = getWindowStats(samples);
   const analysis = {
+    settings: picaSettings,
     zeroCrossingCount,
     maxAmplitude,
     foldExtrema: [],
@@ -495,7 +513,7 @@ export function getPicaPitchAnalysisFromWaveform(
     winningCandidate: null,
   };
 
-  if (maxAmplitude < PICA_MIN_WINDOW_MAX_AMPLITUDE || zeroCrossingCount === 0) {
+  if (maxAmplitude < picaSettings.minAmp || zeroCrossingCount === 0) {
     return {
       ...analysis,
       ...getPicaPitchResultFromAnalysis(analysis, picaSettings),

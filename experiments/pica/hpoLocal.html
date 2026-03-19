@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PICA Local Sensitivity</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        background: #050505;
+        color: #e2e8f0;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          sans-serif;
+      }
+
+      #app {
+        display: grid;
+        grid-template-rows: auto auto auto minmax(0, 1fr);
+        min-height: 100dvh;
+      }
+
+      #toolbar,
+      #summary {
+        padding: 10px 14px;
+        border-bottom: 1px solid #1f2937;
+        background: #0b0b0b;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: 12px;
+      }
+
+      #content {
+        padding: 14px;
+      }
+
+      #charts {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+        gap: 18px;
+      }
+
+      .chart-card {
+        display: grid;
+        justify-items: center;
+        gap: 8px;
+      }
+
+      .chart-title {
+        color: #cbd5e1;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .chart-plot {
+        width: 500px;
+        height: 500px;
+        border: 1px solid #1f2937;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      .toolbar-btn {
+        border: 1px solid #334155;
+        background: #111827;
+        color: #e2e8f0;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        text-decoration: none;
+      }
+
+      .toolbar-btn.dirty {
+        border-color: #f59e0b;
+        background: #422006;
+        color: #fde68a;
+      }
+
+      .toolbar-btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      .toolbar-field {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #94a3b8;
+        white-space: nowrap;
+      }
+
+      .toolbar-number {
+        border: 1px solid #334155;
+        background: #111827;
+        color: #e2e8f0;
+        border-radius: 6px;
+        padding: 6px 8px;
+        font-size: 12px;
+        width: 84px;
+      }
+
+      #status {
+        color: #a7f3d0;
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      #summary {
+        color: #93c5fd;
+      }
+
+      #runLogDetails {
+        border-bottom: 1px solid #1f2937;
+        background: #0b0b0b;
+        padding: 10px 14px;
+      }
+
+      #runLogDetails summary {
+        color: #cbd5e1;
+        cursor: pointer;
+        user-select: none;
+        font-size: 12px;
+      }
+
+      #runLog {
+        margin: 8px 0 0;
+        max-height: 220px;
+        overflow: auto;
+        color: #cbd5e1;
+        font-size: 12px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="toolbar">
+        <button id="rerunAllButton" class="toolbar-btn" type="button">Re-run all charts</button>
+        <a class="toolbar-btn" href="hpo.html">Open Heatmap Sweep</a>
+        <div id="settingInputs"></div>
+        <div id="status">Ready.</div>
+      </div>
+      <div id="summary">Carry-forward accuracy vs carry-forward speed.</div>
+      <details id="runLogDetails" open>
+        <summary>Run log</summary>
+        <pre id="runLog"></pre>
+      </details>
+      <div id="content">
+        <div id="charts"></div>
+      </div>
+    </div>
+    <script type="module" src="hpoLocal.js"></script>
+  </body>
+</html>

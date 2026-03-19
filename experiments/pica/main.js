@@ -1,6 +1,6 @@
 import { analyzePreparedPitchSample, loadPitchSample } from "./picaExperiment.js";
 import { createActualLabelEditor } from "./actualLabels.js";
-import { renderPicaPitchCharts } from "./charts.js";
+import { readStoredMethodVisibility, renderPicaPitchCharts } from "./charts.js";
 import {
   DEFAULT_ASSET_URL,
   PICA_SETTING_FIELDS,
@@ -24,8 +24,9 @@ const SELECTED_WINDOW_STORAGE_KEY = `${STORAGE_PREFIX}selectedWindowIndex`;
 const CANDIDATE_PANEL_OPEN_STORAGE_KEY = `${STORAGE_PREFIX}candidatePanelOpen`;
 
 let currentPreparedSample = null;
-let currentResult = null;
-let hasPrintedMaterializedActualPitch = false;
+let currentControls = [];
+let currentSourceSelect = null;
+let currentSettingInputs = null;
 
 function getStorageKey(settingKey) {
   return `${STORAGE_PREFIX}${settingKey}`;
@@ -115,26 +116,27 @@ function getMethodAccuracyLabel(result, methodKey) {
   return getAccuracyLabel(summary?.accuracy, summary?.correctCount, summary?.comparedCount);
 }
 
-function updatePerformanceInfo(result) {
+function updatePerformanceInfo(result, methodVisibility = readStoredMethodVisibility()) {
   const infoElement = document.getElementById("perfInfo");
+  const visibleMethods = result.methods.filter((method) => methodVisibility[method.key]);
   infoElement.innerHTML = `
     <table class="perf-table">
       <thead>
         <tr>
           <th></th>
-          ${result.methods.map((method) => `<th>${method.label}</th>`).join("")}
+          ${visibleMethods.map((method) => `<th>${method.label}</th>`).join("")}
         </tr>
       </thead>
       <tbody>
         <tr>
           <th>Realtime</th>
-          ${result.methods
+          ${visibleMethods
             .map((method) => `<td>${getRealtimeLabel(method.msPerSecondAudio)}</td>`)
             .join("")}
         </tr>
         <tr>
           <th>Accuracy</th>
-          ${result.methods.map((method) => `<td>${getMethodAccuracyLabel(result, method.key)}</td>`).join("")}
+          ${visibleMethods.map((method) => `<td>${getMethodAccuracyLabel(result, method.key)}</td>`).join("")}
         </tr>
       </tbody>
     </table>
@@ -175,8 +177,14 @@ function setControlsDisabled(controls, disabled) {
   document.body.classList.toggle("loading", disabled);
 }
 
+function resetStoredState() {
+  PICA_SETTING_FIELDS.forEach((field) => {
+    localStorage.removeItem(getStorageKey(field.key));
+  });
+  location.reload();
+}
+
 async function renderResult(result) {
-  const autoFixButton = document.getElementById("autoFixButton");
   const actualLabelEditor = hasActuals(result)
     ? createActualLabelEditor(
         localStorage.getItem(SELECTED_SOURCE_STORAGE_KEY) || "",
@@ -191,7 +199,6 @@ async function renderResult(result) {
       : "No actual labels for this source. Shortcuts: A/D move.";
   }
 
-  autoFixButton.disabled = !actualLabelEditor;
   updateActualPitchInfo();
 
   await renderPicaPitchCharts(result, {
@@ -202,48 +209,29 @@ async function renderResult(result) {
       updateActualPitchInfo();
     },
     onWindowSelect: writeStoredWindowIndex,
+    onMethodVisibilityChange: () => {
+      if (!currentSourceSelect || !currentSettingInputs) return;
+      void rerun(currentControls, currentSourceSelect, currentSettingInputs, "Applying method filters...");
+    },
   });
-
-  // if (!hasPrintedMaterializedActualPitch) {
-  //   hasPrintedMaterializedActualPitch = true;
-  //   console.log("Materialized actual pitch", actualLabelEditor ? result.actualPitchHz : null);
-  // }
 }
 
 function getStatusText(sourceLabel, result) {
   const settings = result.picaSettings;
-  return `Loaded ${sourceLabel}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, picaWindow=${PICA_WINDOW_SAMPLES_AT_48K} samples @ 48k, maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxPatches=${settings.maxComparisonPatches}, maxWalk=${settings.maxWalkSteps}, carryThr=${settings.carryForwardCorrelationThreshold.toFixed(3)}, corrHzRatio=${settings.correlationToHzWeightRatio.toFixed(3)}`;
+  return `Loaded ${sourceLabel}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, picaWindow=${PICA_WINDOW_SAMPLES_AT_48K} samples @ 48k, minAmp=${settings.minAmp.toFixed(2)}, maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxPatches=${settings.maxComparisonPatches}, corrPts=${settings.corrSamplePoints}, maxWalk=${settings.maxWalkSteps}, carryThr=${settings.carryForwardCorrelationThreshold.toFixed(3)}, corrHzRatio=${settings.correlationToHzWeightRatio.toFixed(3)}`;
 }
 
 async function analyzePreparedSample(preparedSample, sourceLabel, settingInputs) {
   const settings = getSettingsFromInputs(settingInputs);
   writeStoredSettings(settings);
-  const result = await analyzePreparedPitchSample(preparedSample, settings);
-  currentResult = result;
+  const result = await analyzePreparedPitchSample(
+    preparedSample,
+    settings,
+    readStoredMethodVisibility(),
+  );
   await renderResult(result);
-  updatePerformanceInfo(result);
+  updatePerformanceInfo(result, readStoredMethodVisibility());
   setStatus(getStatusText(sourceLabel, result));
-}
-
-async function autoFixActuals(controls, sourceSelect) {
-  if (!currentResult || !hasActuals(currentResult)) return;
-  setControlsDisabled(controls, true);
-  try {
-    setStatus("Auto-fixing actuals...");
-    const actualLabelEditor = createActualLabelEditor(
-      getSelectedSource(sourceSelect).key,
-      currentResult,
-      (windowIndex) => getPicaWaveformWindow(currentResult, windowIndex),
-    );
-    actualLabelEditor.autoFixFromFft();
-    await renderResult(currentResult);
-    setStatus(`Auto-fixed actuals for ${getSelectedSource(sourceSelect).label}.`);
-  } catch (error) {
-    console.error(error);
-    setStatus(error instanceof Error ? error.message : String(error), true);
-  } finally {
-    setControlsDisabled(controls, false);
-  }
 }
 
 async function rerun(controls, sourceSelect, settingInputs, statusText, getPreparedSample) {
@@ -268,15 +256,17 @@ async function rerun(controls, sourceSelect, settingInputs, statusText, getPrepa
 }
 
 function main() {
+  const resetStorageButton = document.getElementById("resetStorageButton");
   const sourceSelect = document.getElementById("sourceSelect");
   const recordButton = document.getElementById("recordButton");
-  const autoFixButton = document.getElementById("autoFixButton");
   const candidatePanelDetails = document.getElementById("candidatePanelDetails");
   const settingInputs = Object.fromEntries(
     PICA_SETTING_FIELDS.map((field) => [field.key, document.getElementById(field.key)]),
   );
-  const controls = [recordButton, autoFixButton, sourceSelect, ...Object.values(settingInputs)];
-  autoFixButton.disabled = true;
+  const controls = [resetStorageButton, recordButton, sourceSelect, ...Object.values(settingInputs)];
+  currentControls = controls;
+  currentSourceSelect = sourceSelect;
+  currentSettingInputs = settingInputs;
 
   writeSettingsToInputs(settingInputs, getStoredSettings());
   const selectedSource = resolveSelectedSource(
@@ -286,6 +276,10 @@ function main() {
   );
   renderSourceOptions(sourceSelect, selectedSource.key);
   candidatePanelDetails.open = readStoredCandidatePanelOpen();
+
+  resetStorageButton.addEventListener("click", () => {
+    resetStoredState();
+  });
 
   recordButton.addEventListener("click", () =>
     rerun(controls, sourceSelect, settingInputs, "Recording from microphone...", async () => {
@@ -298,10 +292,6 @@ function main() {
       return loadPitchSample(capturedAudio);
     }),
   );
-
-  autoFixButton.addEventListener("click", () => {
-    void autoFixActuals(controls, sourceSelect);
-  });
 
   candidatePanelDetails.addEventListener("toggle", () => {
     writeStoredCandidatePanelOpen(candidatePanelDetails.open);

@@ -199,6 +199,14 @@
         white-space: nowrap;
       }
 
+      .toolbar-checkbox {
+        color: #cbd5e1;
+      }
+
+      .toolbar-checkbox input {
+        margin: 0;
+      }
+
       .toolbar-number {
         border: 1px solid #334155;
         background: #111827;
@@ -228,9 +236,21 @@
   <body>
     <div id="app">
       <div id="toolbar">
+        <button id="resetStorageButton" class="toolbar-btn" type="button">Reset stored params</button>
         <button id="recordButton" class="toolbar-btn" type="button">Record 5s</button>
-        <button id="autoFixButton" class="toolbar-btn" type="button">Auto Fix Actuals</button>
         <select id="sourceSelect" class="toolbar-select" aria-label="Audio source"></select>
+        <label class="toolbar-field"
+          >minAmp
+          <input
+            id="minAmp"
+            class="toolbar-number"
+            type="number"
+            min="0"
+            max="1"
+            step="0.01"
+            value="0.01"
+            title="Minimum window or compared-region peak amplitude required before Pica accepts it."
+        /></label>
         <label class="toolbar-field"
           >maxExtremaPerFold
           <input
@@ -251,7 +271,7 @@
             type="number"
             min="2"
             max="64"
-            step="1"
+            step="2"
             value="20"
             title="Maximum zero crossings to allow in one period when collecting recent folds."
         /></label>
@@ -268,6 +288,18 @@
             title="Maximum number of trailing period-sized patches to compare when scoring a candidate period."
         /></label>
         <label class="toolbar-field"
+          >corrPts
+          <input
+            id="corrSamplePoints"
+            class="toolbar-number"
+            type="number"
+            min="1"
+            max="128"
+            step="1"
+            value="30"
+            title="Approximate number of sampled points per compared patch when computing correlation."
+        /></label>
+        <label class="toolbar-field"
           >maxWalk
           <input
             id="maxWalkSteps"
@@ -275,7 +307,7 @@
             type="number"
             min="0"
             max="64"
-            step="1"
+            step="2"
             value="10"
             title="Maximum number of one-sample period adjustments to try when hill-climbing a candidate period."
         /></label>
@@ -287,7 +319,7 @@
             type="number"
             min="0"
             max="20"
-            step="0.01"
+            step="0.1"
             value="3"
             title="Minimum prior and walked correlation required before the carry-forward path can win."
         /></label>
@@ -298,8 +330,8 @@
             class="toolbar-number"
             type="number"
             min="0"
-            max="5"
-            step="0.01"
+            max="10"
+            step="0.5"
             value="0.5"
             title="Correlation feature weight relative to the Hz feature weight of 1."
         /></label>
@@ -310,6 +342,7 @@
         <div id="windowInfo">
           Sample window uses 2 cycles at E1, which is 2330 samples at 48 kHz (~48.5 ms).
         </div>
+        <div id="methodToggleControls"></div>
         <div id="actualPitchInfo">
           Actual labels 0. Shortcuts: A/D move always. Q/E copy, W null + next, S forget + next in
           labeling mode.

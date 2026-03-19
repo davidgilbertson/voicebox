@@ -126,6 +126,23 @@ function getPriorStep(analysis) {
   };
 }
 
+function getMethodVisibility(methodVisibility = {}) {
+  if (typeof methodVisibility === "boolean") {
+    return {
+      pitchy: methodVisibility,
+      fft: true,
+      pica: true,
+      carryForward: true,
+    };
+  }
+  return {
+    pitchy: methodVisibility.pitchy !== false,
+    fft: methodVisibility.fft !== false,
+    pica: methodVisibility.pica !== false,
+    carryForward: methodVisibility.carryForward !== false,
+  };
+}
+
 function analyzePitchTrack(timeSec, samples, sampleRate, picaSettings, mode, timestepsPerSecond) {
   const pitchHz = new Array(timeSec.length);
   let priorStep = null;
@@ -154,7 +171,9 @@ function analyzePitchTrack(timeSec, samples, sampleRate, picaSettings, mode, tim
 export async function analyzePreparedPitchSample(
   preparedSample,
   settings = PICA_SETTINGS_DEFAULTS,
+  methodVisibility = {},
 ) {
+  const visibleMethods = getMethodVisibility(methodVisibility);
   const picaSettings = getPicaSettings(settings);
   const { actualPitchHz, fftAnalysis, sampleRate, samples } = preparedSample;
   console.assert(
@@ -165,28 +184,33 @@ export async function analyzePreparedPitchSample(
       timeSecLength: fftAnalysis.timeSec.length,
     },
   );
-  const picaTrack = analyzePitchTrack(
-    fftAnalysis.timeSec,
-    samples,
-    sampleRate,
-    picaSettings,
-    "pica",
-    fftAnalysis.samplesPerSecond,
-  );
-  const carryForwardTrack = analyzePitchTrack(
-    fftAnalysis.timeSec,
-    samples,
-    sampleRate,
-    picaSettings,
-    "carryForward",
-    fftAnalysis.samplesPerSecond,
-  );
-  const pitchyTrack = await analyzePitchyTrack(
-    fftAnalysis.timeSec,
-    samples,
-    sampleRate,
-    fftAnalysis.samplesPerSecond,
-  );
+  const emptyTrack = {
+    pitchHz: new Array(fftAnalysis.timeSec.length).fill(Number.NaN),
+    msPerSecondAudio: Number.NaN,
+  };
+  const picaTrack = visibleMethods.pica
+    ? analyzePitchTrack(
+        fftAnalysis.timeSec,
+        samples,
+        sampleRate,
+        picaSettings,
+        "pica",
+        fftAnalysis.samplesPerSecond,
+      )
+    : emptyTrack;
+  const carryForwardTrack = visibleMethods.carryForward
+    ? analyzePitchTrack(
+        fftAnalysis.timeSec,
+        samples,
+        sampleRate,
+        picaSettings,
+        "carryForward",
+        fftAnalysis.samplesPerSecond,
+      )
+    : emptyTrack;
+  const pitchyTrack = visibleMethods.pitchy
+    ? await analyzePitchyTrack(fftAnalysis.timeSec, samples, sampleRate, fftAnalysis.samplesPerSecond)
+    : emptyTrack;
 
   const accuracyByMethodKey = createAccuracySummaryByMethod(actualPitchHz, {
     fft: fftAnalysis.pitchHz,
@@ -246,27 +270,32 @@ export async function analyzePreparedPitchSample(
 export async function analyzePreparedActualPitchSample(
   preparedSample,
   settings = PICA_SETTINGS_DEFAULTS,
+  methodVisibility = {},
 ) {
+  const visibleMethods = getMethodVisibility(methodVisibility);
   const picaSettings = getPicaSettings(settings);
   const { actualPitchHz, sampleRate, samples } = preparedSample;
   const timeSec = actualPitchHz.map((_, index) => index / TIMESTEPS_PER_SECOND);
-  const picaTrack = analyzePitchTrack(
-    timeSec,
-    samples,
-    sampleRate,
-    picaSettings,
-    "pica",
-    TIMESTEPS_PER_SECOND,
-  );
-  const carryForwardTrack = analyzePitchTrack(
-    timeSec,
-    samples,
-    sampleRate,
-    picaSettings,
-    "carryForward",
-    TIMESTEPS_PER_SECOND,
-  );
-  const pitchyTrack = await analyzePitchyTrack(timeSec, samples, sampleRate, TIMESTEPS_PER_SECOND);
+  const emptyTrack = {
+    pitchHz: new Array(timeSec.length).fill(Number.NaN),
+    msPerSecondAudio: Number.NaN,
+  };
+  const picaTrack = visibleMethods.pica
+    ? analyzePitchTrack(timeSec, samples, sampleRate, picaSettings, "pica", TIMESTEPS_PER_SECOND)
+    : emptyTrack;
+  const carryForwardTrack = visibleMethods.carryForward
+    ? analyzePitchTrack(
+        timeSec,
+        samples,
+        sampleRate,
+        picaSettings,
+        "carryForward",
+        TIMESTEPS_PER_SECOND,
+      )
+    : emptyTrack;
+  const pitchyTrack = visibleMethods.pitchy
+    ? await analyzePitchyTrack(timeSec, samples, sampleRate, TIMESTEPS_PER_SECOND)
+    : emptyTrack;
   const accuracyByMethodKey = createAccuracySummaryByMethod(actualPitchHz, {
     fft: new Array(timeSec.length).fill(Number.NaN),
     pica: picaTrack.pitchHz,
