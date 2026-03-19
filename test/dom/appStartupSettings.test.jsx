@@ -36,6 +36,7 @@ test("readConfig groups persisted values for initial app initialization", () => 
       pitchLineColorMode: "terrain",
       spectrogramMinHz: 30,
       spectrogramMaxHz: 11_000,
+      usePica: false,
     },
     scales: {
       bpm: 320,

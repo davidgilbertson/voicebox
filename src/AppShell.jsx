@@ -23,6 +23,7 @@ import {
   writeRunAt30Fps,
   writeSpectrogramMaxHz,
   writeSpectrogramMinHz,
+  writeUsePica,
 } from "./Recorder/config.js";
 import { readConfig } from "./config.js";
 
@@ -69,6 +70,7 @@ export default function AppShell({ downloadingUpdate = false }) {
   );
   const [spectrogramMinHz, setSpectrogramMinHz] = useState(() => config.recorder.spectrogramMinHz);
   const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => config.recorder.spectrogramMaxHz);
+  const [usePica, setUsePica] = useState(() => config.recorder.usePica);
   const [batteryUsagePerMinute, setBatteryUsagePerMinute] = useState(null);
   const onScalesPage = activeView === "scales";
   const isLiveHost = document.location.host === "voicebox.dgapps.io";
@@ -151,6 +153,10 @@ export default function AppShell({ downloadingUpdate = false }) {
   }, [spectrogramMaxHz, spectrogramMinHz]);
 
   useEffect(() => {
+    writeUsePica(usePica);
+  }, [usePica]);
+
+  useEffect(() => {
     recorderEngine.setActiveView(activeView);
   }, [activeView, recorderEngine]);
 
@@ -167,6 +173,7 @@ export default function AppShell({ downloadingUpdate = false }) {
       halfResolutionCanvas,
       spectrogramMinHz,
       spectrogramMaxHz,
+      usePica,
     });
   }, [
     autoPauseOnSilence,
@@ -181,6 +188,7 @@ export default function AppShell({ downloadingUpdate = false }) {
     runAt30Fps,
     spectrogramMaxHz,
     spectrogramMinHz,
+    usePica,
   ]);
 
   useEffect(() => {
@@ -423,6 +431,8 @@ export default function AppShell({ downloadingUpdate = false }) {
             spectrogramMaxHz={spectrogramMaxHz}
             onSpectrogramMinHzChange={onSpectrogramMinHzChange}
             onSpectrogramMaxHzChange={onSpectrogramMaxHzChange}
+            usePica={usePica}
+            onUsePicaChange={setUsePica}
             batteryUsagePerMinute={batteryUsagePerMinute}
             showRecorderShare={!onScalesPage}
           />

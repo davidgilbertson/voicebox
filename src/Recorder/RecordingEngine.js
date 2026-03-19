@@ -29,6 +29,7 @@ import {
   readRawAudioSamples,
   resetRawAudioState,
 } from "./rawAudio.js";
+import { getPicaWindowSampleCount } from "./picaPitch.js";
 
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
 const STARTUP_MAX_VOLUME_DECAY_FACTOR = 0.9;
@@ -52,6 +53,10 @@ function formatShareTimestamp(date) {
 function getCapturedSeconds(rawAudioState) {
   if (!(rawAudioState.sampleRate > 0)) return 0;
   return rawAudioState.ring.sampleCount / rawAudioState.sampleRate;
+}
+
+function createPicaWindowSamples(sampleRate, minHz) {
+  return new Float32Array(getPicaWindowSampleCount(sampleRate, minHz));
 }
 
 function setStreamListeningEnabled(stream, enabled) {
@@ -116,6 +121,7 @@ export class RecordingEngine {
       autoPauseOnSilence: config.autoPauseOnSilence,
       runAt30Fps: config.runAt30Fps,
       highResSpectrogram: config.highResSpectrogram,
+      usePica: config.usePica,
       pitchRange: {
         minHz: noteNameToHz(config.pitchMinNote),
         maxHz: noteNameToHz(config.pitchMaxNote),
@@ -150,6 +156,8 @@ export class RecordingEngine {
       silentOutputGain: null,
       hzBuffer: null,
       hzIndex: 0,
+      picaPriorStep: null,
+      picaWindowSamples: createPicaWindowSamples(48_000, noteNameToHz(config.pitchMinNote)),
       sampleRate: 48000,
     };
     this.pitchProcessingState = createPitchProcessingState({
@@ -197,9 +205,11 @@ export class RecordingEngine {
         lineStrengthEma: this.state.lineStrengthEma,
         autoPauseOnSilence: this.state.autoPauseOnSilence,
         skipNextSpectrumFrame: this.state.skipNextSpectrumFrame,
+        usePica: this.state.usePica,
       },
       hopState: {
         audioSessionState: this.audioSessionState,
+        rawAudioState: this.rawAudioState,
         processingState: this.pitchProcessingState,
         spectrogramBuffers: this.spectrogramBuffers,
         highResSpectrogramBuffers: this.highResSpectrogramBuffers,
@@ -270,6 +280,10 @@ export class RecordingEngine {
       this.audioSessionState.silentOutputGain = session.silentOutputGain;
       this.audioSessionState.sampleRate = session.sampleRate;
       this.audioSessionState.hzBuffer = hzBuffer;
+      this.audioSessionState.picaWindowSamples = createPicaWindowSamples(
+        session.sampleRate,
+        this.state.pitchRange.minHz,
+      );
       resetRawAudioState(this.rawAudioState, {
         sampleRate: session.sampleRate,
         seconds: getChartSeconds(this.state.chartWidthPx),
@@ -335,6 +349,11 @@ export class RecordingEngine {
     this.audioSessionState.analyser = null;
     this.audioSessionState.highResAnalyser = null;
     this.audioSessionState.silentOutputGain = null;
+    this.audioSessionState.picaPriorStep = null;
+    this.audioSessionState.picaWindowSamples = createPicaWindowSamples(
+      this.audioSessionState.sampleRate,
+      this.state.pitchRange.minHz,
+    );
     this.highResSpectrogramBuffers = null;
     this.state.volume = 0;
     this.state.frameDirty = false;
@@ -507,6 +526,7 @@ export class RecordingEngine {
     autoPauseOnSilence,
     runAt30Fps,
     highResSpectrogram,
+    usePica,
     minVolumeThreshold,
     pitchMinNote,
     pitchMaxNote,
@@ -523,6 +543,10 @@ export class RecordingEngine {
     }
     if (typeof runAt30Fps === "boolean") {
       this.state.runAt30Fps = runAt30Fps;
+    }
+    if (typeof usePica === "boolean") {
+      this.state.usePica = usePica;
+      this.audioSessionState.picaPriorStep = null;
     }
     if (Number.isFinite(minVolumeThreshold) && minVolumeThreshold > 0) {
       this.state.minVolumeThreshold = minVolumeThreshold;
@@ -544,6 +568,11 @@ export class RecordingEngine {
         minCents: noteNameToCents(pitchMinNote),
         maxCents: noteNameToCents(pitchMaxNote),
       };
+      this.audioSessionState.picaWindowSamples = createPicaWindowSamples(
+        this.audioSessionState.sampleRate,
+        this.state.pitchRange.minHz,
+      );
+      this.audioSessionState.picaPriorStep = null;
     }
     this.chartRenderers.pitch.updateOptions({
       minCents: this.state.pitchRange.minCents,

@@ -1,5 +1,6 @@
 import { clamp } from "../tools.js";
 import { getPitchFromSpectrum } from "./pitchDetection.js";
+import { fillPicaWindowSamples, getPicaPitchResult } from "./picaPitch.js";
 import { processPitchSample } from "./pitchProcessing.js";
 
 function getRelativeVolumeStrength(volume, minVolumeThreshold, maxHeardVolume) {
@@ -108,15 +109,16 @@ function processHopSpectrogram({
   spectrogramBuffers,
   highResSpectrogramBuffers,
   skipNextSpectrumFrame,
+  usePica,
 }) {
   const analyser = audioSessionState.analyser;
   const highResAnalyser = audioSessionState.highResAnalyser;
 
-  // Base analyser always drives pitch detection.
   const baseCaptureResult = captureSpectrumForHop({
     analyser,
     spectrogramBuffers,
     skipNextSpectrumFrame,
+    includePitchDetection: !usePica,
   });
   const pitchSpectrum = baseCaptureResult.capturedSpectrum;
   const spectrumForPitchDetection = pitchSpectrum?.spectrumForPitchDetection ?? null;
@@ -149,6 +151,7 @@ function processHopSpectrogram({
 function processHopPitch({
   processingState,
   audioSessionState,
+  rawAudioState,
   volume,
   minVolumeThreshold,
   volumeTracking,
@@ -156,6 +159,7 @@ function processHopPitch({
   autoPauseOnSilence,
   pitchRange,
   spectrumForPitchDetection,
+  usePica,
 }) {
   const minHz = pitchRange.minHz;
   const maxHz = pitchRange.maxHz;
@@ -169,10 +173,32 @@ function processHopPitch({
   const volumeStrength = getRelativeVolumeStrength(volume, minVolumeThreshold, maxHeardVolume);
 
   const isAboveSilenceThreshold = volume > minVolumeThreshold;
-  // The same derived loudness floor gates pitch detection, even when auto-pause is disabled.
-  const cents = isAboveSilenceThreshold
-    ? getPitchFromSpectrum(audioSessionState, spectrumForPitchDetection, minHz, maxHz)
-    : Number.NaN;
+  let cents = Number.NaN;
+  if (usePica) {
+    if (isAboveSilenceThreshold) {
+      if (rawAudioState.ring.sampleCount < audioSessionState.picaWindowSamples.length) {
+        audioSessionState.picaPriorStep = null;
+      } else {
+        fillPicaWindowSamples(rawAudioState.ring, audioSessionState.picaWindowSamples);
+        const picaPitchResult = getPicaPitchResult(
+          audioSessionState.picaWindowSamples,
+          rawAudioState.sampleRate,
+          minHz,
+          maxHz,
+          audioSessionState.picaPriorStep,
+        );
+        cents = picaPitchResult.cents;
+        audioSessionState.picaPriorStep = picaPitchResult.priorStep;
+      }
+    } else {
+      audioSessionState.picaPriorStep = null;
+    }
+  } else {
+    audioSessionState.picaPriorStep = null;
+    cents = isAboveSilenceThreshold
+      ? getPitchFromSpectrum(audioSessionState, spectrumForPitchDetection, minHz, maxHz)
+      : Number.NaN;
+  }
 
   let didFrameDataChange = false;
   let pitchWriteResult = null;
@@ -210,15 +236,23 @@ export function processOneAudioHop({ engineState, hopState }) {
     lineStrengthEma,
     autoPauseOnSilence,
     skipNextSpectrumFrame,
+    usePica,
   } = engineState;
   const activeVolumeTracking = volumeTracking;
-  const { audioSessionState, processingState, spectrogramBuffers, highResSpectrogramBuffers } =
+  const {
+    audioSessionState,
+    rawAudioState,
+    processingState,
+    spectrogramBuffers,
+    highResSpectrogramBuffers,
+  } =
     hopState;
   const spectrogramResult = processHopSpectrogram({
     audioSessionState,
     spectrogramBuffers,
     highResSpectrogramBuffers,
     skipNextSpectrumFrame,
+    usePica,
   });
   const {
     spectrumDb,
@@ -228,7 +262,7 @@ export function processOneAudioHop({ engineState, hopState }) {
     highResSpectrogramBuffers: nextHighResSpectrogramBuffers,
   } = spectrogramResult;
 
-  if (!spectrumForPitchDetection) {
+  if (!spectrumDb) {
     return {
       didFrameDataChange: false,
       nextSkipNextSpectrumFrame,
@@ -249,7 +283,9 @@ export function processOneAudioHop({ engineState, hopState }) {
     autoPauseOnSilence,
     processingState,
     audioSessionState,
+    rawAudioState,
     spectrumForPitchDetection,
+    usePica,
   });
   const nextSpectrumDb = pitchResult.isSilencePaused ? null : spectrumDb;
   const didFrameDataChange = pitchResult.didFrameDataChange || Boolean(nextSpectrumDb);

@@ -49,6 +49,8 @@ export default function SettingsPanel({
   spectrogramMaxHz,
   onSpectrogramMinHzChange,
   onSpectrogramMaxHzChange,
+  usePica,
+  onUsePicaChange,
   batteryUsagePerMinute,
   showRecorderShare,
 }) {
@@ -384,6 +386,20 @@ export default function SettingsPanel({
           </fieldset>
           <div className="h-2 border-t border-slate-700/80" />
           <div className={settingsSectionHeadingClass}>Performance</div>
+          <label className="flex items-start justify-between gap-4 text-sm">
+            <div className="flex flex-col gap-1">
+              <span>Use PICA</span>
+              <span className="text-xs text-slate-400">
+                Use raw-sample PICA instead of FFT. Faster, but experimental.
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              checked={usePica}
+              onChange={(event) => onUsePicaChange(event.target.checked)}
+              className={settingsCheckboxClass}
+            />
+          </label>
           <label className="flex items-start justify-between gap-4 text-sm">
             <div className="flex flex-col gap-1">
               <span>Run at 30 FPS</span>

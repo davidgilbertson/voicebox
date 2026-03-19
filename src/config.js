@@ -18,6 +18,7 @@ import {
   readRunAt30Fps,
   readSpectrogramMaxHz,
   readSpectrogramMinHz,
+  readUsePica,
 } from "./Recorder/config.js";
 
 export function readConfig() {
@@ -40,6 +41,7 @@ export function readConfig() {
       pitchLineColorMode: readPitchLineColorMode(),
       spectrogramMinHz: readSpectrogramMinHz(),
       spectrogramMaxHz: readSpectrogramMaxHz(),
+      usePica: readUsePica(),
     },
     scales: {
       bpm: readScaleBpm(),
