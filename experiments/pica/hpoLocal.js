@@ -13,6 +13,8 @@ let isRunningAll = false;
 let currentFingerprint = "";
 const chartFingerprintByKey = new Map();
 const settingInputs = new Map();
+const settingEnabledInputs = new Map();
+const chartCards = new Map();
 let sharedAccuracyRange = [0, 100];
 
 function appendRunLog(text) {
@@ -35,6 +37,10 @@ function getStorageKey(settingKey) {
   return `${STORAGE_PREFIX}${settingKey}`;
 }
 
+function getEnabledStorageKey(settingKey) {
+  return `${getStorageKey(settingKey)}.enabled`;
+}
+
 function readStoredNumber(key, fallback) {
   const stored = localStorage.getItem(getStorageKey(key));
   if (stored === null) return fallback;
@@ -44,6 +50,18 @@ function readStoredNumber(key, fallback) {
 
 function writeStoredNumber(key, value) {
   localStorage.setItem(getStorageKey(key), String(value));
+}
+
+function readStoredBoolean(key, fallback) {
+  const stored = localStorage.getItem(key);
+  if (stored === null) return fallback;
+  if (stored === "true") return true;
+  if (stored === "false") return false;
+  return fallback;
+}
+
+function writeStoredBoolean(key, value) {
+  localStorage.setItem(key, String(value));
 }
 
 function getPrecision(step) {
@@ -62,6 +80,10 @@ function getSettingsFingerprint(settings) {
   return JSON.stringify(PICA_SETTING_FIELDS.map((field) => [field.key, settings[field.key]]));
 }
 
+function getSelectedFields() {
+  return PICA_SETTING_FIELDS.filter((field) => settingEnabledInputs.get(field.key)?.checked);
+}
+
 function setStatus(text, isError = false) {
   const status = document.getElementById("status");
   status.textContent = text;
@@ -70,10 +92,18 @@ function setStatus(text, isError = false) {
 
 function updateDirtyState() {
   const rerunAllButton = document.getElementById("rerunAllButton");
-  const isDirty = PICA_SETTING_FIELDS.some(
+  const isDirty = getSelectedFields().some(
     (field) => chartFingerprintByKey.get(field.key) !== currentFingerprint,
   );
   rerunAllButton.classList.toggle("dirty", isDirty);
+}
+
+function updateChartVisibility() {
+  PICA_SETTING_FIELDS.forEach((field) => {
+    const card = chartCards.get(field.key);
+    if (!card) return;
+    card.hidden = !settingEnabledInputs.get(field.key)?.checked;
+  });
 }
 
 function buildPointValues(field, currentValue) {
@@ -217,21 +247,26 @@ async function rerunAllCharts() {
   isRunningAll = true;
   const rerunAllButton = document.getElementById("rerunAllButton");
   rerunAllButton.disabled = true;
+  const selectedFields = getSelectedFields();
   const settings = getSettings();
   currentFingerprint = getSettingsFingerprint(settings);
   clearRunLog();
   try {
+    if (selectedFields.length === 0) {
+      setStatus("Select at least one parameter to run.", true);
+      return;
+    }
     const chartPointsByKey = new Map();
-    for (let index = 0; index < PICA_SETTING_FIELDS.length; index += 1) {
-      const field = PICA_SETTING_FIELDS[index];
-      setStatus(`Running ${index + 1}/${PICA_SETTING_FIELDS.length}: ${field.inputLabel}`);
+    for (let index = 0; index < selectedFields.length; index += 1) {
+      const field = selectedFields[index];
+      setStatus(`Running ${index + 1}/${selectedFields.length}: ${field.inputLabel}`);
       chartPointsByKey.set(field.key, await getChartPoints(field, settings));
     }
     sharedAccuracyRange = getAccuracyRangeFromCharts(chartPointsByKey);
-    for (const field of PICA_SETTING_FIELDS) {
+    for (const field of selectedFields) {
       await renderChart(field, settings, chartPointsByKey.get(field.key));
     }
-    setStatus(`Done. ${PICA_SETTING_FIELDS.length * POINT_OFFSETS.length} runs.`);
+    setStatus(`Done. ${selectedFields.length * POINT_OFFSETS.length} runs.`);
   } catch (error) {
     console.error(error);
     setStatus(error instanceof Error ? error.message : String(error), true);
@@ -245,7 +280,19 @@ async function rerunAllCharts() {
 function createSettingInput(field) {
   const label = document.createElement("label");
   label.className = "toolbar-field";
-  label.textContent = field.inputLabel;
+
+  const text = document.createElement("span");
+  text.textContent = field.inputLabel;
+
+  const enabledInput = document.createElement("input");
+  enabledInput.type = "checkbox";
+  enabledInput.checked = readStoredBoolean(getEnabledStorageKey(field.key), true);
+  enabledInput.title = `Include ${field.inputLabel} when running all charts`;
+  enabledInput.addEventListener("input", () => {
+    writeStoredBoolean(getEnabledStorageKey(field.key), enabledInput.checked);
+    updateChartVisibility();
+    updateDirtyState();
+  });
 
   const input = document.createElement("input");
   input.id = field.key;
@@ -264,8 +311,9 @@ function createSettingInput(field) {
     updateDirtyState();
   });
 
-  label.append(input);
+  label.append(text, enabledInput, input);
   settingInputs.set(field.key, input);
+  settingEnabledInputs.set(field.key, enabledInput);
   return label;
 }
 
@@ -285,13 +333,14 @@ function main() {
       <div id="chart-${field.key}" class="chart-plot"></div>
     `;
     charts.append(card);
+    chartCards.set(field.key, card);
   });
+
+  updateChartVisibility();
 
   document.getElementById("rerunAllButton").addEventListener("click", () => {
     void rerunAllCharts();
   });
-
-  void rerunAllCharts();
 }
 
 main();

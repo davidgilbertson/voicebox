@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pica Similarity Explorer</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        background: #050505;
+        color: #e2e8f0;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          sans-serif;
+      }
+
+      body.loading .chart-panel {
+        opacity: 0.6;
+      }
+
+      #app {
+        min-height: 100dvh;
+        display: grid;
+        grid-template-rows: auto auto auto minmax(0, 1fr);
+        gap: 12px;
+        padding: 12px;
+      }
+
+      #toolbar,
+      #selectionInfo,
+      #statusPanel {
+        border: 1px solid #1f2937;
+        background: #0b0b0b;
+        border-radius: 12px;
+        padding: 12px 14px;
+      }
+
+      #toolbar h1 {
+        margin: 0 0 6px;
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      #toolbar p,
+      #selectionInfo,
+      #statusPanel {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .score-card {
+        border-bottom: 1px solid #1e293b;
+        padding: 10px 12px;
+        background: #020617;
+      }
+
+      .score-label {
+        color: #94a3b8;
+        font-size: 12px;
+      }
+
+      .score-value {
+        margin-top: 4px;
+        font-size: 22px;
+        font-weight: 700;
+        color: #f8fafc;
+      }
+
+      .score-detail {
+        margin-top: 4px;
+        color: #cbd5e1;
+        font-size: 12px;
+      }
+
+      .score-button {
+        margin-top: 10px;
+        width: 100%;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: #111827;
+        color: #e2e8f0;
+        padding: 8px 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .score-button:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      #selectionInfo {
+        color: #bfdbfe;
+      }
+
+      #statusPanel {
+        color: #a7f3d0;
+        white-space: pre-wrap;
+      }
+
+      #chartsGrid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        min-height: 360px;
+      }
+
+      .chart-panel {
+        border: 1px solid #1f2937;
+        background: #0b0b0b;
+        border-radius: 12px;
+        min-height: 360px;
+        overflow: hidden;
+        transition: opacity 120ms linear;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+
+      #waveformPanel {
+        border: 1px solid #1f2937;
+        background: #0b0b0b;
+        border-radius: 12px;
+        min-height: 420px;
+        overflow: hidden;
+      }
+
+      .chart-plot,
+      #waveformChart {
+        width: 100%;
+        height: 100%;
+        min-height: 360px;
+      }
+
+      #waveformChart {
+        min-height: 420px;
+      }
+
+      @media (max-width: 1100px) {
+        #chartsGrid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body class="loading">
+    <div id="app">
+      <div id="toolbar">
+        <h1>Similarity Explorer</h1>
+        <p>
+          Vocal sampler only. Each line is one timestep, comparing adjacent waveform patches at
+          half, actual, and double the actual period.
+        </p>
+      </div>
+      <div id="selectionInfo">Loading vocal sampler...</div>
+      <div id="chartsGrid">
+        <div class="chart-panel">
+          <div class="score-card" id="cosineCard"></div>
+          <div class="chart-plot" id="cosineChart"></div>
+        </div>
+        <div class="chart-panel">
+          <div class="score-card" id="weightedCosineCard"></div>
+          <div class="chart-plot" id="weightedCosineChart"></div>
+        </div>
+        <div class="chart-panel">
+          <div class="score-card" id="maeCard"></div>
+          <div class="chart-plot" id="maeChart"></div>
+        </div>
+        <div class="chart-panel">
+          <div class="score-card" id="rmseCard"></div>
+          <div class="chart-plot" id="rmseChart"></div>
+        </div>
+      </div>
+      <div id="waveformPanel">
+        <div id="waveformChart"></div>
+      </div>
+      <div id="statusPanel">Loading...</div>
+    </div>
+    <script type="module" src="./similarities.js"></script>
+  </body>
+</html>

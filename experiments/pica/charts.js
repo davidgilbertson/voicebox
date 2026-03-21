@@ -1,5 +1,5 @@
-import { PICA_MAX_HZ, PICA_MIN_HZ, PICA_SETTINGS_DEFAULTS, USE_COSINE } from "./config.js";
-import { getPicaPitchAnalysisFromWaveform, getPicaSettings } from "./picaPitch.js";
+import { PICA_MAX_HZ, PICA_MIN_HZ, PICA_SETTINGS_DEFAULTS } from "./config.js";
+import { getPicaCorrelationSeries, getPicaPitchAnalysisFromWaveform } from "./picaPitch.js";
 import {
   PICA_WINDOW_CYCLES,
   PICA_WINDOW_DURATION_SEC,
@@ -7,8 +7,9 @@ import {
 } from "./windowing.js";
 
 let detachWindowKeyHandler = null;
-const MIN_PITCH_CHART_HZ = 40;
-const MAX_PITCH_CHART_HZ = 1300;
+const CORRELATION_CHART_TICKS_HZ = [
+  40, 50, 60, 80, 100, 150, 200, 300, 400, 600, 800, 1000, 1500, 2000,
+].filter((hz) => hz >= PICA_MIN_HZ && hz <= PICA_MAX_HZ);
 const METHOD_VISIBILITY_STORAGE_KEY = "voicebox.picaPitch.methodVisibility";
 const PITCH_METHODS = [
   { key: "pitchy", label: "Pitchy" },
@@ -78,109 +79,6 @@ function renderMethodVisibilityControls(methodVisibility, onChange) {
   });
 }
 
-function buildPicaCorrelationHistogram(samples, sampleRate, settings = PICA_SETTINGS_DEFAULTS) {
-  const picaSettings = getPicaSettings(settings);
-  const correlationByPeriodSize = new Map();
-  let maxAmplitudeFromRight = null;
-  const hz = [];
-  const correlation = [];
-  const minPeriodSize = Math.max(1, Math.ceil(sampleRate / PICA_MAX_HZ));
-  const maxPeriodSize = Math.max(minPeriodSize, Math.floor(sampleRate / PICA_MIN_HZ));
-
-  function getMaxAmplitudeFromRight() {
-    if (maxAmplitudeFromRight) {
-      return maxAmplitudeFromRight;
-    }
-
-    maxAmplitudeFromRight = new Float32Array(samples.length);
-    let maxAmplitude = 0;
-    for (let sampleIndex = samples.length - 1; sampleIndex >= 0; sampleIndex -= 1) {
-      const amplitude = Math.abs(samples[sampleIndex]);
-      if (amplitude > maxAmplitude) {
-        maxAmplitude = amplitude;
-      }
-      maxAmplitudeFromRight[sampleIndex] = maxAmplitude;
-    }
-    return maxAmplitudeFromRight;
-  }
-
-  function getCorrelation(periodSize) {
-    const cachedCorrelation = correlationByPeriodSize.get(periodSize);
-    if (cachedCorrelation !== undefined) {
-      return cachedCorrelation;
-    }
-
-    if (periodSize < 1) return -1;
-    const patchCount = Math.min(
-      picaSettings.maxComparisonPatches,
-      Math.floor(samples.length / periodSize),
-    );
-    if (patchCount < 2) return -1;
-    const corrSamplePoints = Math.max(1, Math.round(picaSettings.corrSamplePoints));
-    const stride = Math.max(1, Math.floor(periodSize / corrSamplePoints));
-    const startSample = samples.length - patchCount * periodSize;
-    const maxAbs = USE_COSINE ? 0 : getMaxAmplitudeFromRight()[startSample];
-    if (!USE_COSINE && maxAbs <= 0) return -1;
-
-    let totalCorrelation = 0;
-    let comparisonCount = 0;
-    for (let patchIndex = 0; patchIndex < patchCount - 1; patchIndex += 1) {
-      const rightEnd = samples.length - patchIndex * periodSize;
-      const rightStart = rightEnd - periodSize;
-      const leftStart = rightStart - periodSize;
-      if (leftStart < 0) break;
-
-      let dot = 0;
-      let leftPower = 0;
-      let rightPower = 0;
-      for (let sampleIndex = 0; sampleIndex < periodSize; sampleIndex += stride) {
-        const left = USE_COSINE
-          ? samples[leftStart + sampleIndex]
-          : samples[leftStart + sampleIndex] / maxAbs;
-        const right = USE_COSINE
-          ? samples[rightStart + sampleIndex]
-          : samples[rightStart + sampleIndex] / maxAbs;
-        dot += left * right;
-        if (USE_COSINE) {
-          leftPower += left * left;
-          rightPower += right * right;
-        } else {
-          comparisonCount += 1;
-        }
-      }
-
-      if (USE_COSINE) {
-        if (leftPower <= 0 || rightPower <= 0) {
-          continue;
-        }
-        totalCorrelation += dot / Math.sqrt(leftPower * rightPower);
-        comparisonCount += 1;
-        continue;
-      }
-      totalCorrelation += dot;
-    }
-
-    if (!USE_COSINE) {
-      totalCorrelation *= 100;
-    }
-    const value = comparisonCount > 0 ? totalCorrelation / comparisonCount : -1;
-    correlationByPeriodSize.set(periodSize, value);
-    return value;
-  }
-
-  for (let periodSize = maxPeriodSize; periodSize >= minPeriodSize; periodSize -= 1) {
-    hz.push(sampleRate / periodSize);
-    correlation.push(getCorrelation(periodSize));
-  }
-
-  return {
-    minHz: PICA_MIN_HZ,
-    maxHz: PICA_MAX_HZ,
-    hz,
-    correlation,
-  };
-}
-
 function getBottomLegend() {
   return {
     orientation: "h",
@@ -191,25 +89,35 @@ function getBottomLegend() {
   };
 }
 
+function getTraceVisibilityByName(chartId) {
+  const chart = document.getElementById(chartId);
+  const data = Array.isArray(chart?.data) ? chart.data : [];
+  return new Map(
+    data
+      .filter((trace) => typeof trace?.name === "string")
+      .map((trace) => [trace.name, trace.visible ?? true]),
+  );
+}
+
 function getHeatmapStyle(value, maxValue = 3) {
   const intensity = Math.max(0, Math.min(1, value / maxValue));
   const alpha = 0.15 + intensity * 0.55;
   return `background: rgba(192, 132, 252, ${alpha.toFixed(3)});`;
 }
 
-function getNearestHistogramY(histogram, hz) {
+function getNearestCorrelationY(correlationSeries, hz) {
   if (!Number.isFinite(hz)) return [];
 
   let bestIndex = 0;
-  let bestDistance = Math.abs(histogram.hz[0] - hz);
-  for (let index = 1; index < histogram.hz.length; index += 1) {
-    const distance = Math.abs(histogram.hz[index] - hz);
+  let bestDistance = Math.abs(correlationSeries.hz[0] - hz);
+  for (let index = 1; index < correlationSeries.hz.length; index += 1) {
+    const distance = Math.abs(correlationSeries.hz[index] - hz);
     if (distance < bestDistance) {
       bestDistance = distance;
       bestIndex = index;
     }
   }
-  return [histogram.correlation[bestIndex]];
+  return [correlationSeries.correlation[bestIndex]];
 }
 
 function getSelectedPitchLabel(hz) {
@@ -407,7 +315,7 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
 async function renderHistogram(
   plotly,
   waveformWindow,
-  histogram,
+  correlationSeries,
   actualPitchHz,
   onActualPitchSelect,
   methodVisibility,
@@ -416,23 +324,23 @@ async function renderHistogram(
   const picaPitchHz = waveformWindow.picaPitchHz;
   const carryForwardPitchHz = waveformWindow.carryForwardPitchHz;
   const fftMarkerX = methodVisibility.fft && Number.isFinite(fftPitchHz) ? [fftPitchHz] : [];
-  const fftMarkerY = getNearestHistogramY(histogram, fftPitchHz);
+  const fftMarkerY = getNearestCorrelationY(correlationSeries, fftPitchHz);
   const picaMarkerX = methodVisibility.pica && Number.isFinite(picaPitchHz) ? [picaPitchHz] : [];
-  const picaMarkerY = getNearestHistogramY(histogram, picaPitchHz);
+  const picaMarkerY = getNearestCorrelationY(correlationSeries, picaPitchHz);
   const carryForwardMarkerX =
     methodVisibility.carryForward && Number.isFinite(carryForwardPitchHz)
       ? [carryForwardPitchHz]
       : [];
-  const carryForwardMarkerY = getNearestHistogramY(histogram, carryForwardPitchHz);
+  const carryForwardMarkerY = getNearestCorrelationY(correlationSeries, carryForwardPitchHz);
   const actualMarkerX = Number.isFinite(actualPitchHz) ? [actualPitchHz] : [];
-  const actualMarkerY = getNearestHistogramY(histogram, actualPitchHz);
+  const actualMarkerY = getNearestCorrelationY(correlationSeries, actualPitchHz);
 
   await plotly.newPlot(
     "harmonicChart",
     [
       {
-        x: histogram.hz,
-        y: histogram.correlation,
+        x: correlationSeries.hz,
+        y: correlationSeries.correlation,
         type: "scatter",
         mode: "lines+markers",
         line: { color: "rgba(255, 255, 255, 0.95)", width: 1.5 },
@@ -460,7 +368,7 @@ async function renderHistogram(
         x: carryForwardMarkerX,
         y: carryForwardMarkerY,
         mode: "markers",
-        marker: { color: "#facc15", size: 12, symbol: "diamond" },
+        marker: { color: "#facc15", size: 9, symbol: "diamond" },
         hovertemplate: "Carry=%{x:.2f} Hz<br>corr=%{y:.3f}<extra></extra>",
         showlegend: false,
       },
@@ -474,7 +382,7 @@ async function renderHistogram(
       },
     ],
     {
-      title: `Correlation histogram (${histogram.minHz}-${histogram.maxHz} Hz)`,
+      title: `Correlation by period size (${correlationSeries.minHz}-${correlationSeries.maxHz} Hz)`,
       paper_bgcolor: "#050505",
       plot_bgcolor: "#050505",
       font: { color: "#e2e8f0" },
@@ -484,13 +392,13 @@ async function renderHistogram(
       xaxis: {
         title: "Hz",
         gridcolor: "#1f2937",
-        // range: [histogram.minHz, 1300],
         type: "log",
-        range: [Math.log10(histogram.minHz), Math.log10(1300)],
-        tick0: 0,
-        dtick: 100,
+        range: [Math.log10(correlationSeries.minHz), Math.log10(correlationSeries.maxHz)],
+        tickmode: "array",
+        tickvals: CORRELATION_CHART_TICKS_HZ,
+        ticktext: CORRELATION_CHART_TICKS_HZ.map(String),
       },
-      yaxis: { title: "corr", gridcolor: "#1f2937", rangemode: "tozero" },
+      yaxis: { title: "corr", gridcolor: "#1f2937", range: [-1, 1] },
       annotations: [],
     },
     { responsive: true },
@@ -508,7 +416,7 @@ async function renderDisabledHistogram(plotly) {
     "harmonicChart",
     [],
     {
-      title: "Correlation histogram disabled",
+      title: "Correlation chart disabled",
       paper_bgcolor: "#050505",
       plot_bgcolor: "#050505",
       font: { color: "#e2e8f0" },
@@ -565,6 +473,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
   const candidatePanel = document.getElementById("candidatePanel");
   const candidatePanelDetails = document.getElementById("candidatePanelDetails");
   const methodVisibility = readStoredMethodVisibility();
+  const priorPitchChartVisibilityByName = getTraceVisibilityByName("pitchChart");
   const actualPitchHz = [];
   const actualPitchColor = [];
   const hasActuals = Array.isArray(result.actualPitchHz);
@@ -626,18 +535,6 @@ export async function renderPicaPitchCharts(result, options = {}) {
       name: "Voicebox FFT",
     });
   }
-  if (methodVisibility.pica) {
-    pitchChartSeries.push({
-      x: result.timeSec,
-      y: result.picaPitchHz,
-      mode: "lines",
-      customdata: pitchChartWindowIndex,
-      line: { width: 1, color: "rgba(248, 113, 113, 0.95)" },
-      connectgaps: false,
-      hovertemplate: "t=%{x:.3f}s<br>Pica=%{y:.2f} Hz<extra></extra>",
-      name: "PICA",
-    });
-  }
   if (methodVisibility.carryForward) {
     pitchChartSeries.push({
       x: result.timeSec,
@@ -649,30 +546,59 @@ export async function renderPicaPitchCharts(result, options = {}) {
       hovertemplate: "t=%{x:.3f}s<br>Carry=%{y:.2f} Hz<extra></extra>",
       name: "Carry",
     });
+    pitchChartSeries.push({
+      x: result.timeSec,
+      y: result.carryForwardCorrelation,
+      mode: "lines",
+      customdata: pitchChartWindowIndex,
+      line: { width: 1.25, color: "rgba(250, 204, 21, 0.5)" },
+      connectgaps: false,
+      hovertemplate: "t=%{x:.3f}s<br>Carry corr=%{y:.3f}<extra></extra>",
+      name: "Carry corr",
+      yaxis: "y2",
+    });
+  }
+  if (methodVisibility.pica) {
+    pitchChartSeries.push({
+      x: result.timeSec,
+      y: result.picaPitchHz,
+      mode: "lines",
+      customdata: pitchChartWindowIndex,
+      line: { width: 1, color: "rgba(248, 113, 113, 0.95)" },
+      connectgaps: false,
+      hovertemplate: "t=%{x:.3f}s<br>Pica=%{y:.2f} Hz<extra></extra>",
+      name: "PICA",
+    });
+    pitchChartSeries.push({
+      x: result.timeSec,
+      y: result.picaCorrelation,
+      mode: "lines",
+      customdata: pitchChartWindowIndex,
+      line: { width: 1.25, color: "rgba(248, 113, 113, 0.45)" },
+      connectgaps: false,
+      hovertemplate: "t=%{x:.3f}s<br>Pica corr=%{y:.3f}<extra></extra>",
+      name: "Pica corr",
+      yaxis: "y2",
+    });
   }
   actualTraceIndex = pitchChartSeries.length;
-  pitchChartSeries.push(
-    {
-      x: result.timeSec,
-      y: actualPitchHz,
-      mode: "markers",
-      customdata: pitchChartWindowIndex,
-      marker: { size: 6, color: actualPitchColor },
-      hovertemplate: "t=%{x:.3f}s<br>Actual=%{y:.2f} Hz<extra></extra>",
-      name: "Actual",
-      showlegend: false,
-      visible: hasActuals,
-    },
-    {
-      x: [result.timeSec[0] ?? 0],
-      y: [result.actualPitchHz?.find((hz) => Number.isFinite(hz)) ?? MIN_PITCH_CHART_HZ],
-      mode: "markers",
-      marker: { size: 8, color: "rgba(74, 222, 128, 1)" },
-      hoverinfo: "skip",
-      name: "Actual",
-      visible: hasActuals,
-    },
-  );
+  pitchChartSeries.push({
+    x: result.timeSec,
+    y: actualPitchHz,
+    mode: "markers",
+    customdata: pitchChartWindowIndex,
+    marker: { size: 6, color: actualPitchColor },
+    hovertemplate: "t=%{x:.3f}s<br>Actual=%{y:.2f} Hz<extra></extra>",
+    name: "Actual",
+    visible: hasActuals,
+  });
+
+  for (const trace of pitchChartSeries) {
+    const priorVisibility = priorPitchChartVisibilityByName.get(trace.name);
+    if (priorVisibility !== undefined) {
+      trace.visible = priorVisibility;
+    }
+  }
 
   await plotly.newPlot(
     "pitchChart",
@@ -684,13 +610,25 @@ export async function renderPicaPitchCharts(result, options = {}) {
       font: { color: "#e2e8f0" },
       showlegend: true,
       legend: getBottomLegend(),
+      uirevision: "pitchChart",
       margin: { l: 52, r: 24, t: 48, b: 76 },
-      xaxis: { title: "Time (s)", gridcolor: "#1f2937" },
+      xaxis: {
+        title: "Time (s)",
+        gridcolor: "#1f2937",
+        range: [result.timeSec[0] ?? 0, result.timeSec[result.timeSec.length - 1] ?? 1],
+      },
       yaxis: {
         title: "Pitch (Hz)",
         gridcolor: "#1f2937",
         type: "log",
-        range: [Math.log10(MIN_PITCH_CHART_HZ), Math.log10(MAX_PITCH_CHART_HZ)],
+        domain: [0.24, 1],
+        range: [Math.log10(PICA_MIN_HZ), Math.log10(PICA_MAX_HZ)],
+      },
+      yaxis2: {
+        title: "Corr",
+        gridcolor: "#1f2937",
+        domain: [0, 0.16],
+        range: [0, 1],
       },
     },
     { responsive: true },
@@ -703,15 +641,19 @@ export async function renderPicaPitchCharts(result, options = {}) {
     activeWindowIndex = Math.max(0, Math.min(maxWindowIndex, windowIndex));
     const waveformWindow = getWaveformWindow(activeWindowIndex);
     const needsPicaAnalysis = methodVisibility.pica || methodVisibility.carryForward;
+    const priorStep = methodVisibility.carryForward
+      ? (result.carryForwardPriorStepByWindow?.[activeWindowIndex] ?? null)
+      : null;
     const analysis = needsPicaAnalysis
       ? getPicaPitchAnalysisFromWaveform(
           waveformWindow.samples,
           waveformWindow.sampleRate,
           result.picaSettings,
+          priorStep,
         )
       : null;
-    const histogram = needsPicaAnalysis
-      ? buildPicaCorrelationHistogram(
+    const correlationSeries = needsPicaAnalysis
+      ? getPicaCorrelationSeries(
           waveformWindow.samples,
           waveformWindow.sampleRate,
           result.picaSettings,
@@ -806,11 +748,11 @@ export async function renderPicaPitchCharts(result, options = {}) {
     } else {
       candidatePanel.innerHTML = "";
     }
-    if (histogram) {
+    if (correlationSeries) {
       await renderHistogram(
         plotly,
         waveformWindow,
-        histogram,
+        correlationSeries,
         getResolvedActualPitchHz(activeWindowIndex),
         hasActuals
           ? (pitchHz) => {

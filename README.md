@@ -89,6 +89,28 @@ Where it is used:
 2. The renderer maps dB values into display brightness.
 3. It then applies device/session gain based on the current remembered maximum volume.
 
+## PICA Pitch Detection
+
+PICA stands for `Pitch Inference by Candidate Analysis`.
+
+It is the alternate pitch detector used when the recorder is configured to use PICA instead of the older FFT-bin picker.
+
+High-level flow:
+
+1. Take a short trailing waveform window sized to a couple of cycles of the lowest supported pitch.
+2. Bail out early if the window is too quiet or has no zero crossings.
+3. Split the recent waveform into folds between zero crossings and keep the strongest local extrema from those folds.
+4. Turn spacing between pairs of extrema into candidate periods.
+5. For each candidate period, score waveform similarity by comparing several period-sized patches of recent audio.
+6. Walk each seed period uphill to a nearby local correlation peak and refine it to a sub-sample pitch.
+7. Rank surviving candidates using both correlation and octave position, then choose the best one.
+
+If recent history is trustworthy, try a carry-forward fast path first by starting from the previous pitch and locally re-walking it instead of rebuilding candidates from scratch. The carry-forward path is intentionally conservative:
+
+1. It only starts after several full non-carry predictions in a row, to prevent locking on to the wrong pitch before the signal is strong.
+2. It uses its own minimum correlation threshold.
+3. It is capped to a maximum run length before a fresh search is forced.
+
 ## Real Device Examples
 
 `Moderate` is regular singing volume.

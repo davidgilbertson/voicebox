@@ -245,8 +245,7 @@ export function processOneAudioHop({ engineState, hopState }) {
     processingState,
     spectrogramBuffers,
     highResSpectrogramBuffers,
-  } =
-    hopState;
+  } = hopState;
   const spectrogramResult = processHopSpectrogram({
     audioSessionState,
     spectrogramBuffers,

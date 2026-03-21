@@ -1,10 +1,7 @@
-import {
-  PICA_MAX_HZ,
-  PICA_MIN_HZ,
-  PICA_SETTINGS_DEFAULTS,
-  USE_COSINE,
-} from "./config.js";
+import { PICA_MAX_HZ, PICA_MIN_HZ, PICA_SETTINGS_DEFAULTS } from "./config.js";
 import { hasZeroCrossing } from "./utils.js";
+
+const CARRY_FORWARD_WARMUP_FULL_PREDICTIONS = 5;
 
 /*
 Terminology:
@@ -19,7 +16,9 @@ export function getPicaSettings(settings = {}) {
   return {
     ...PICA_SETTINGS_DEFAULTS,
     ...settings,
+    minCorr: settings.minCorr ?? PICA_SETTINGS_DEFAULTS.minCorr,
     maxExtremaPerFold: settings.maxExtremaPerFold ?? PICA_SETTINGS_DEFAULTS.maxExtremaPerFold,
+    maxCarryRun: settings.maxCarryRun ?? PICA_SETTINGS_DEFAULTS.maxCarryRun,
   };
 }
 
@@ -29,17 +28,12 @@ function getCorrelation(samples, periodSize, settings, cache = null) {
     return cachedCorrelation;
   }
 
-  if (periodSize < 1) return -1;
+  if (periodSize < 1) return 0;
   const patchCount = Math.min(
     settings.maxComparisonPatches,
     Math.floor(samples.length / periodSize),
   );
-  if (patchCount < 2) return -1;
-
-  const comparedRegionMaxAmplitude = USE_COSINE
-    ? 0
-    : getComparedRegionMaxAmplitude(samples, periodSize, settings, cache);
-  if (!USE_COSINE && comparedRegionMaxAmplitude <= 0) return -1;
+  if (patchCount < 2) return 0;
 
   const corrSamplePoints = Math.max(1, Math.round(settings.corrSamplePoints));
   const stride = Math.max(1, Math.floor(periodSize / corrSamplePoints));
@@ -55,38 +49,30 @@ function getCorrelation(samples, periodSize, settings, cache = null) {
     let dot = 0;
     let leftPower = 0;
     let rightPower = 0;
+    let hasZeroCrossing = patchIndex !== 0;
+    let lastRightSample = samples[rightStart];
     for (let sampleIndex = 0; sampleIndex < periodSize; sampleIndex += stride) {
-      const left = USE_COSINE
-        ? samples[leftStart + sampleIndex]
-        : samples[leftStart + sampleIndex] / comparedRegionMaxAmplitude;
-      const right = USE_COSINE
-        ? samples[rightStart + sampleIndex]
-        : samples[rightStart + sampleIndex] / comparedRegionMaxAmplitude;
-      dot += left * right;
-      if (USE_COSINE) {
-        leftPower += left * left;
-        rightPower += right * right;
-      } else {
-        comparisonCount += 1;
+      const left = samples[leftStart + sampleIndex];
+      const right = samples[rightStart + sampleIndex];
+      if (patchIndex === 0 && sampleIndex > 0 && lastRightSample < 0 !== right < 0) {
+        hasZeroCrossing = true;
       }
+      lastRightSample = right;
+      dot += left * right;
+      leftPower += left * left;
+      rightPower += right * right;
     }
 
-    if (USE_COSINE) {
-      if (leftPower <= 0 || rightPower <= 0) {
-        continue;
-      }
-      totalCorrelation += dot / Math.sqrt(leftPower * rightPower);
-      comparisonCount += 1;
+    if (!hasZeroCrossing) {
+      return 0;
+    }
+    if (leftPower <= 0 || rightPower <= 0) {
       continue;
     }
-
-    totalCorrelation += dot;
+    totalCorrelation += dot / Math.sqrt(leftPower * rightPower);
+    comparisonCount += 1;
   }
-
-  if (!USE_COSINE) {
-    totalCorrelation *= 100;
-  }
-  const correlation = comparisonCount > 0 ? totalCorrelation / comparisonCount : -1;
+  const correlation = comparisonCount > 0 ? totalCorrelation / comparisonCount : 0;
   cache?.correlationByPeriodSize.set(periodSize, correlation);
   return correlation;
 }
@@ -123,6 +109,29 @@ function getComparedRegionMaxAmplitude(samples, periodSize, settings, cache = nu
 
   const startSample = Math.max(0, samples.length - patchCount * periodSize);
   return getMaxAmplitudeFromRight(samples, cache)[startSample];
+}
+
+export function getPicaCorrelationSeries(samples, sampleRate, settings = PICA_SETTINGS_DEFAULTS) {
+  const picaSettings = getPicaSettings(settings);
+  const cache = {
+    correlationByPeriodSize: new Map(),
+  };
+  const hz = [];
+  const correlation = [];
+  const minPeriodSize = Math.max(1, Math.ceil(sampleRate / PICA_MAX_HZ));
+  const maxPeriodSize = Math.max(minPeriodSize, Math.floor(sampleRate / PICA_MIN_HZ));
+
+  for (let periodSize = maxPeriodSize; periodSize >= minPeriodSize; periodSize -= 1) {
+    hz.push(sampleRate / periodSize);
+    correlation.push(getCorrelation(samples, periodSize, picaSettings, cache));
+  }
+
+  return {
+    minHz: PICA_MIN_HZ,
+    maxHz: PICA_MAX_HZ,
+    hz,
+    correlation,
+  };
 }
 
 function getRefinedPitchHz(samples, periodSize, sampleRate, settings, cache = null) {
@@ -389,7 +398,7 @@ function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, ca
       if (sourceHz < PICA_MIN_HZ || sourceHz > PICA_MAX_HZ) continue;
 
       const walkedPeriod = getWalkedPeriod(samples, sourcePeriodSize, settings, sampleRate, cache);
-      if (!walkedPeriod) continue;
+      if (!walkedPeriod || walkedPeriod.correlation < settings.minCorr) continue;
       const hzFeature = Math.log2(walkedPeriod.hz / PICA_MIN_HZ);
       const correlationFeature = walkedPeriod.correlation;
 
@@ -460,6 +469,16 @@ function getPicaPitchResultFromAnalysis(analysis) {
     };
   }
 
+  if (
+    analysis.winningCandidate.type !== "carryForward" &&
+    analysis.winningCandidate.correlation < analysis.settings.minCorr
+  ) {
+    return {
+      hz: Number.NaN,
+      rejectionReason: "low_correlation",
+    };
+  }
+
   return {
     hz: analysis.winningCandidate.hz,
     rejectionReason: null,
@@ -467,10 +486,12 @@ function getPicaPitchResultFromAnalysis(analysis) {
 }
 
 function getCarryForwardCandidate(samples, sampleRate, settings, priorStep, cache = null) {
-  const threshold = settings.carryForwardCorrelationThreshold;
+  const threshold = settings.minCarryCorr;
   if (
     !Number.isFinite(priorStep?.hz) ||
     !Number.isFinite(priorStep?.correlation) ||
+    priorStep.fullPredictionCountSinceLastNaN < CARRY_FORWARD_WARMUP_FULL_PREDICTIONS ||
+    priorStep.carryForwardRunLength >= settings.maxCarryRun ||
     priorStep.correlation <= threshold
   ) {
     return null;

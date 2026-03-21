@@ -1,6 +1,6 @@
-# PICA - Pitch Inference from Candidate Analysis
+# PICA - Pitch Inference by Candidate Analysis
 
-This experiment compares the existing FFT-based pitch timeline against a newer pica-sample detector and gives you a quick way to build hand-labeled ground truth.
+This experiment compares the existing FFT-based pitch timeline against a newer PICA detector and gives you a quick way to build hand-labeled ground truth.
 
 ## High-level flow
 

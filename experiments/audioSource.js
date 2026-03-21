@@ -19,6 +19,7 @@ const ASSET_FILES = [
   "opera-female-vocals_140bpm_A_major.wav",
   "opera-vocals_129bpm_F_minor.wav",
   "rozette_vibrato.wav",
+  "voicebox-last-6-seconds-2026-03-20-0607.wav",
 ];
 
 function bytesToBase64(bytes) {

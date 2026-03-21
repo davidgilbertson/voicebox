@@ -5,25 +5,37 @@ export const PICA_MAX_HZ = 2200;
 export const PICA_MIN_WINDOW_MAX_AMPLITUDE = 0.01; // TODO (@davidgilbertson): doesn't do much in practice
 export const PICA_ACCURACY_CENTS = 50;
 
-export const USE_COSINE = true;
+export const SIMILARITY_FUNC = "cosine";
 export const PICA_SETTINGS_DEFAULTS = {
   minAmp: PICA_MIN_WINDOW_MAX_AMPLITUDE,
+  minCorr: 0.9,
+  minCarryCorr: 0.5,
   maxExtremaPerFold: 6,
   maxCrossingsPerPeriod: 20,
   maxComparisonPatches: 6,
-  corrSamplePoints: 6,
+  corrSamplePoints: 20,
   maxWalkSteps: 10,
-  carryForwardCorrelationThreshold: 0.7,
-  correlationToHzWeightRatio: 27,
+  maxCarryRun: 10,
+  correlationToHzWeightRatio: 36,
 };
 
-// export const USE_COSINE = false;
+// export const SIMILARITY_FUNC = "scaledDot";
 // export const PICA_SETTINGS_DEFAULTS = {
 //   maxExtremaPerFold: 2,
 //   maxCrossingsPerPeriod: 18,
 //   maxComparisonPatches: 3,
 //   maxWalkSteps: 10,
-//   carryForwardCorrelationThreshold: 3,
+//   minCarryCorr: 3,
+//   correlationToHzWeightRatio: 2.5,
+// };
+
+// export const SIMILARITY_FUNC = "mae";
+// export const PICA_SETTINGS_DEFAULTS = {
+//   maxExtremaPerFold: 2,
+//   maxCrossingsPerPeriod: 18,
+//   maxComparisonPatches: 3,
+//   maxWalkSteps: 10,
+//   minCarryCorr: 3,
 //   correlationToHzWeightRatio: 2.5,
 // };
 
@@ -36,6 +48,24 @@ export const PICA_SETTING_FIELDS = [
     max: 1,
     step: 0.01,
     title: "Minimum window or compared-region peak amplitude required before Pica accepts it.",
+  },
+  {
+    key: "minCorr",
+    label: "min correlation",
+    inputLabel: "minCorr",
+    min: 0,
+    max: 1,
+    step: 0.01,
+    title: "Minimum winning-candidate correlation required before Pica accepts it.",
+  },
+  {
+    key: "minCarryCorr",
+    label: "min carry correlation",
+    inputLabel: "minCarryCorr",
+    min: 0,
+    max: 20,
+    step: 0.1,
+    title: "Minimum prior and walked correlation required before the carry-forward path can win.",
   },
   {
     key: "maxExtremaPerFold",
@@ -85,20 +115,21 @@ export const PICA_SETTING_FIELDS = [
       "Maximum number of one-sample period adjustments to try when hill-climbing a candidate period.",
   },
   {
-    key: "carryForwardCorrelationThreshold",
-    label: "carry threshold",
-    inputLabel: "carryThr",
-    min: 0,
-    max: 20,
-    step: 0.1,
-    title: "Minimum prior and walked correlation required before the carry-forward path can win.",
+    key: "maxCarryRun",
+    label: "max carry run",
+    inputLabel: "maxCarryRun",
+    min: 1,
+    max: 200,
+    step: 1,
+    title:
+      "Maximum number of consecutive carry-forward windows before Pica forces a fresh extrema search.",
   },
   {
     key: "correlationToHzWeightRatio",
     label: "corr/hz ratio",
     inputLabel: "corrHzRatio",
     min: 0,
-    max: 10,
+    max: 100,
     step: 0.2,
     title: "Correlation feature weight relative to the Hz feature weight of 1.",
   },

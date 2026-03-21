@@ -7,6 +7,10 @@ import { analyzePitchyTrack } from "./pitchyPitch.js";
 const TIMESTEPS_PER_SECOND = 80;
 const VOCAL_SAMPLER_FILE_NAME = "vocal_sampler.wav";
 const VOCAL_SAMPLER_ACTUAL_FILE_NAME = "vocal_sampler_actual.json";
+const SMOOTH_RADIUS = 3;
+const SMOOTH_KERNEL = [0.01, 0.08, 0.22, 0.38, 0.22, 0.08, 0.01];
+const ANCHOR_MAX_DIFF_CENTS = 400;
+const OCTAVE_OUTLIER_CENTS_THRESHOLD = 1000;
 
 function createResolvedPitchMethod(label, key, pitchHz, msPerSecondAudio) {
   return {
@@ -64,12 +68,25 @@ async function loadActualPitchHz(audioInput) {
   return await response.json();
 }
 
+function normalizeActualPitchHzLength(actualPitchHz, targetLength) {
+  if (!Array.isArray(actualPitchHz) || actualPitchHz.length === targetLength) {
+    return actualPitchHz;
+  }
+  if (actualPitchHz.length > targetLength) {
+    return actualPitchHz.slice(0, targetLength);
+  }
+  return actualPitchHz.concat(new Array(targetLength - actualPitchHz.length).fill(null));
+}
+
 export async function loadPitchSample(audioInput) {
   const { analyzeDecodedPitchSample, loadAudioSample } =
     await import("../pitchDetection/analysis.js");
   const loaded = await loadAudioSample(audioInput);
-  const actualPitchHz = await loadActualPitchHz(audioInput);
   const fftAnalysis = await analyzeDecodedPitchSample(loaded);
+  const actualPitchHz = normalizeActualPitchHzLength(
+    await loadActualPitchHz(audioInput),
+    fftAnalysis.timeSec.length,
+  );
   return {
     sampleRate: loaded.sampleRate,
     samples: loaded.samples,
@@ -116,13 +133,83 @@ function getPitchAccuracy(actualPitchHz, predictedPitchHz) {
   );
 }
 
-function getPriorStep(analysis) {
-  if (!Number.isFinite(analysis?.hz) || !Number.isFinite(analysis?.winningCandidate?.correlation)) {
-    return null;
+function hzToCents(hz) {
+  return hz > 0 ? 1200 * Math.log2(hz / 440) + 6900 : Number.NaN;
+}
+
+function centsToHz(cents) {
+  return Number.isFinite(cents) ? 440 * Math.pow(2, (cents - 6900) / 1200) : Number.NaN;
+}
+
+function postProcessPitchTrack(pitchHz) {
+  const rawPitchCents = pitchHz.map(hzToCents);
+  const smoothedPitchCents = [...rawPitchCents];
+
+  for (let index = 0; index < rawPitchCents.length; index += 1) {
+    if (index >= 4) {
+      const leftAnchorCents = rawPitchCents[index - 4];
+      const rightAnchorCents = rawPitchCents[index];
+      const centerCents = rawPitchCents[index - 2];
+      if (
+        Number.isFinite(leftAnchorCents) &&
+        Number.isFinite(rightAnchorCents) &&
+        Number.isFinite(centerCents) &&
+        Math.abs(leftAnchorCents - rightAnchorCents) <= ANCHOR_MAX_DIFF_CENTS
+      ) {
+        const anchorMeanCents = (leftAnchorCents + rightAnchorCents) / 2;
+        if (Math.abs(centerCents - anchorMeanCents) > OCTAVE_OUTLIER_CENTS_THRESHOLD) {
+          rawPitchCents[index - 2] = anchorMeanCents;
+          smoothedPitchCents[index - 2] = anchorMeanCents;
+        }
+      }
+    }
+
+    if (index >= SMOOTH_RADIUS * 2) {
+      let smoothed = 0;
+      let hasGap = false;
+      for (let offset = -SMOOTH_RADIUS; offset <= SMOOTH_RADIUS; offset += 1) {
+        const sample = rawPitchCents[index - SMOOTH_RADIUS + offset];
+        if (!Number.isFinite(sample)) {
+          hasGap = true;
+          break;
+        }
+        smoothed += sample * SMOOTH_KERNEL[offset + SMOOTH_RADIUS];
+      }
+      if (!hasGap) {
+        smoothedPitchCents[index - SMOOTH_RADIUS] = smoothed;
+      }
+    }
   }
+
+  return smoothedPitchCents.map(centsToHz);
+}
+
+function getPriorStep(analysis, priorStep) {
+  const hasPrediction =
+    Number.isFinite(analysis?.hz) && Number.isFinite(analysis?.winningCandidate?.correlation);
+
+  if (!hasPrediction) {
+    return {
+      hz: Number.NaN,
+      correlation: Number.NaN,
+      carryForwardRunLength: 0,
+      fullPredictionCountSinceLastNaN: 0,
+    };
+  }
+
+  const fullPredictionCountSinceLastNaN =
+    analysis.winningCandidate.type === "carryForward"
+      ? (priorStep?.fullPredictionCountSinceLastNaN ?? 0)
+      : (priorStep?.fullPredictionCountSinceLastNaN ?? 0) + 1;
+
   return {
     hz: analysis.hz,
     correlation: analysis.winningCandidate.correlation,
+    carryForwardRunLength:
+      analysis.winningCandidate.type === "carryForward"
+        ? (priorStep?.carryForwardRunLength ?? 0) + 1
+        : 0,
+    fullPredictionCountSinceLastNaN,
   };
 }
 
@@ -145,10 +232,13 @@ function getMethodVisibility(methodVisibility = {}) {
 
 function analyzePitchTrack(timeSec, samples, sampleRate, picaSettings, mode, timestepsPerSecond) {
   const pitchHz = new Array(timeSec.length);
+  const correlation = new Array(timeSec.length);
+  const priorStepByWindow = new Array(timeSec.length);
   let priorStep = null;
 
   const startMs = performance.now();
   for (let windowIndex = 0; windowIndex < timeSec.length; windowIndex += 1) {
+    priorStepByWindow[windowIndex] = priorStep ? { ...priorStep } : null;
     const picaWindow = getPicaWindowSamples(samples, sampleRate, timeSec[windowIndex]);
     const analysis = getPicaPitchAnalysisFromWaveform(
       picaWindow,
@@ -157,12 +247,16 @@ function analyzePitchTrack(timeSec, samples, sampleRate, picaSettings, mode, tim
       mode === "carryForward" ? priorStep : null,
     );
     pitchHz[windowIndex] = analysis.hz;
-    priorStep = getPriorStep(analysis);
+    correlation[windowIndex] = analysis.winningCandidate?.correlation ?? Number.NaN;
+    priorStep = getPriorStep(analysis, priorStep);
   }
 
   const elapsedMs = performance.now() - startMs;
   return {
     pitchHz,
+    correlation,
+    priorStepByWindow,
+    // pitchHz: postProcessPitchTrack(pitchHz),
     msPerSecondAudio:
       timeSec.length > 0 ? elapsedMs / (timeSec.length / timestepsPerSecond) : Number.NaN,
   };
@@ -186,6 +280,8 @@ export async function analyzePreparedPitchSample(
   );
   const emptyTrack = {
     pitchHz: new Array(fftAnalysis.timeSec.length).fill(Number.NaN),
+    correlation: new Array(fftAnalysis.timeSec.length).fill(Number.NaN),
+    priorStepByWindow: new Array(fftAnalysis.timeSec.length).fill(null),
     msPerSecondAudio: Number.NaN,
   };
   const picaTrack = visibleMethods.pica
@@ -208,8 +304,19 @@ export async function analyzePreparedPitchSample(
         fftAnalysis.samplesPerSecond,
       )
     : emptyTrack;
+  const rawPitchyTrack = visibleMethods.pitchy
+    ? await analyzePitchyTrack(
+        fftAnalysis.timeSec,
+        samples,
+        sampleRate,
+        fftAnalysis.samplesPerSecond,
+      )
+    : emptyTrack;
   const pitchyTrack = visibleMethods.pitchy
-    ? await analyzePitchyTrack(fftAnalysis.timeSec, samples, sampleRate, fftAnalysis.samplesPerSecond)
+    ? {
+        ...rawPitchyTrack,
+        pitchHz: postProcessPitchTrack(rawPitchyTrack.pitchHz),
+      }
     : emptyTrack;
 
   const accuracyByMethodKey = createAccuracySummaryByMethod(actualPitchHz, {
@@ -226,8 +333,11 @@ export async function analyzePreparedPitchSample(
     actualPitchHz,
     pitchHz: fftAnalysis.pitchHz,
     picaPitchHz: picaTrack.pitchHz,
+    picaCorrelation: picaTrack.correlation,
     pitchyPitchHz: pitchyTrack.pitchHz,
     carryForwardPitchHz: carryForwardTrack.pitchHz,
+    carryForwardCorrelation: carryForwardTrack.correlation,
+    carryForwardPriorStepByWindow: carryForwardTrack.priorStepByWindow,
     picaSettings,
     metrics: {
       accuracyByMethodKey,
@@ -278,6 +388,8 @@ export async function analyzePreparedActualPitchSample(
   const timeSec = actualPitchHz.map((_, index) => index / TIMESTEPS_PER_SECOND);
   const emptyTrack = {
     pitchHz: new Array(timeSec.length).fill(Number.NaN),
+    correlation: new Array(timeSec.length).fill(Number.NaN),
+    priorStepByWindow: new Array(timeSec.length).fill(null),
     msPerSecondAudio: Number.NaN,
   };
   const picaTrack = visibleMethods.pica
@@ -293,8 +405,14 @@ export async function analyzePreparedActualPitchSample(
         TIMESTEPS_PER_SECOND,
       )
     : emptyTrack;
-  const pitchyTrack = visibleMethods.pitchy
+  const rawPitchyTrack = visibleMethods.pitchy
     ? await analyzePitchyTrack(timeSec, samples, sampleRate, TIMESTEPS_PER_SECOND)
+    : emptyTrack;
+  const pitchyTrack = visibleMethods.pitchy
+    ? {
+        ...rawPitchyTrack,
+        pitchHz: postProcessPitchTrack(rawPitchyTrack.pitchHz),
+      }
     : emptyTrack;
   const accuracyByMethodKey = createAccuracySummaryByMethod(actualPitchHz, {
     fft: new Array(timeSec.length).fill(Number.NaN),
@@ -310,8 +428,11 @@ export async function analyzePreparedActualPitchSample(
     actualPitchHz,
     pitchHz: new Array(timeSec.length).fill(Number.NaN),
     picaPitchHz: picaTrack.pitchHz,
+    picaCorrelation: picaTrack.correlation,
     pitchyPitchHz: pitchyTrack.pitchHz,
     carryForwardPitchHz: carryForwardTrack.pitchHz,
+    carryForwardCorrelation: carryForwardTrack.correlation,
+    carryForwardPriorStepByWindow: carryForwardTrack.priorStepByWindow,
     picaSettings,
     metrics: {
       accuracyByMethodKey,

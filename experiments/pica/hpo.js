@@ -1,5 +1,5 @@
 import { analyzePreparedActualPitchSample, loadActualPitchSample } from "./picaExperiment.js";
-import { PICA_SETTINGS_DEFAULTS, USE_COSINE } from "./config.js";
+import { PICA_SETTINGS_DEFAULTS, SIMILARITY_FUNC } from "./config.js";
 
 const VOCAL_SAMPLER_URL = "../../.private/assets/vocal_sampler.wav";
 const VOCAL_SAMPLER_LABEL = "vocal_sampler.wav";
@@ -23,7 +23,7 @@ function setSummary(text) {
 
 function setSweepInfo() {
   document.getElementById("sweepInfo").textContent =
-    `Sweep against actuals for ${VOCAL_SAMPLER_LABEL}: mode=${USE_COSINE ? "cosine" : "scaled-dot"}, carryThr=${CARRY_THRESHOLD_VALUES.join(", ")}, corrHzRatio=${CORRELATION_TO_HZ_RATIO_VALUES.join(", ")} | fixed: maxExtremaPerFold=${FIXED_SETTINGS.maxExtremaPerFold}, maxCrossingsPerPeriod=${FIXED_SETTINGS.maxCrossingsPerPeriod}, maxPatches=${FIXED_SETTINGS.maxComparisonPatches}, maxWalk=${FIXED_SETTINGS.maxWalkSteps}`;
+    `Sweep against actuals for ${VOCAL_SAMPLER_LABEL}: mode=${SIMILARITY_FUNC}, minCarryCorr=${CARRY_THRESHOLD_VALUES.join(", ")}, corrHzRatio=${CORRELATION_TO_HZ_RATIO_VALUES.join(", ")} | fixed: maxExtremaPerFold=${FIXED_SETTINGS.maxExtremaPerFold}, maxCrossingsPerPeriod=${FIXED_SETTINGS.maxCrossingsPerPeriod}, maxPatches=${FIXED_SETTINGS.maxComparisonPatches}, maxWalk=${FIXED_SETTINGS.maxWalkSteps}`;
 }
 
 function createGrid(fill = Number.NaN) {
@@ -50,13 +50,13 @@ async function runSweepForSample(preparedSample) {
     thresholdIndex < CARRY_THRESHOLD_VALUES.length;
     thresholdIndex += 1
   ) {
-    const carryForwardCorrelationThreshold = CARRY_THRESHOLD_VALUES[thresholdIndex];
+    const minCarryCorr = CARRY_THRESHOLD_VALUES[thresholdIndex];
     for (let ratioIndex = 0; ratioIndex < CORRELATION_TO_HZ_RATIO_VALUES.length; ratioIndex += 1) {
       const correlationToHzWeightRatio = CORRELATION_TO_HZ_RATIO_VALUES[ratioIndex];
       runNumber += 1;
       const message =
         `Run ${runNumber}/${TOTAL_RUNS}: ${VOCAL_SAMPLER_LABEL} | ` +
-        `carryThr=${carryForwardCorrelationThreshold} | ` +
+        `minCarryCorr=${minCarryCorr} | ` +
         `corrHzRatio=${correlationToHzWeightRatio}`;
       setStatus(message);
 
@@ -65,7 +65,7 @@ async function runSweepForSample(preparedSample) {
         preparedSample,
         {
           ...FIXED_SETTINGS,
-          carryForwardCorrelationThreshold,
+          minCarryCorr,
           correlationToHzWeightRatio,
         },
         false,
@@ -129,7 +129,7 @@ async function renderHeatmap(elementId, title, accuracy, bounds) {
         z: accuracy.map((row) =>
           row.map((value) => (Number.isFinite(value) ? value * 100 : Number.NaN)),
         ),
-        hovertemplate: "carryThr=%{y}<br>corrHzRatio=%{x}<br>accuracy=%{z:.1f}%<extra></extra>",
+        hovertemplate: "minCarryCorr=%{y}<br>corrHzRatio=%{x}<br>accuracy=%{z:.1f}%<extra></extra>",
         colorscale: "Viridis",
         zmin: bounds.zmin,
         zmax: bounds.zmax,
@@ -148,7 +148,7 @@ async function renderHeatmap(elementId, title, accuracy, bounds) {
         tickvals: CORRELATION_TO_HZ_RATIO_VALUES,
       },
       yaxis: {
-        title: "carryThr",
+        title: "minCarryCorr",
         tickmode: "array",
         tickvals: CARRY_THRESHOLD_VALUES,
       },
@@ -227,7 +227,7 @@ async function renderResults(sweepResult) {
 
   setSummary(
     Number.isFinite(bestPicaAccuracy) || Number.isFinite(bestCarryForwardAccuracy)
-      ? `Best PICA: carryThr=${bestPicaCarryThreshold}, corrHzRatio=${bestPicaCorrelationToHzWeightRatio}, accuracy=${(bestPicaAccuracy * 100).toFixed(1)}% | Best carry-forward: carryThr=${bestCarryForwardThreshold}, corrHzRatio=${bestCarryForwardCorrelationToHzWeightRatio}, accuracy=${(bestCarryForwardAccuracy * 100).toFixed(1)}%`
+      ? `Best PICA: minCarryCorr=${bestPicaCarryThreshold}, corrHzRatio=${bestPicaCorrelationToHzWeightRatio}, accuracy=${(bestPicaAccuracy * 100).toFixed(1)}% | Best carry-forward: minCarryCorr=${bestCarryForwardThreshold}, corrHzRatio=${bestCarryForwardCorrelationToHzWeightRatio}, accuracy=${(bestCarryForwardAccuracy * 100).toFixed(1)}%`
       : "No valid results.",
   );
 }

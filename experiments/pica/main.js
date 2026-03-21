@@ -211,14 +211,19 @@ async function renderResult(result) {
     onWindowSelect: writeStoredWindowIndex,
     onMethodVisibilityChange: () => {
       if (!currentSourceSelect || !currentSettingInputs) return;
-      void rerun(currentControls, currentSourceSelect, currentSettingInputs, "Applying method filters...");
+      void rerun(
+        currentControls,
+        currentSourceSelect,
+        currentSettingInputs,
+        "Applying method filters...",
+      );
     },
   });
 }
 
 function getStatusText(sourceLabel, result) {
   const settings = result.picaSettings;
-  return `Loaded ${sourceLabel}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, picaWindow=${PICA_WINDOW_SAMPLES_AT_48K} samples @ 48k, minAmp=${settings.minAmp.toFixed(2)}, maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxPatches=${settings.maxComparisonPatches}, corrPts=${settings.corrSamplePoints}, maxWalk=${settings.maxWalkSteps}, carryThr=${settings.carryForwardCorrelationThreshold.toFixed(3)}, corrHzRatio=${settings.correlationToHzWeightRatio.toFixed(3)}`;
+  return `Loaded ${sourceLabel}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, picaWindow=${PICA_WINDOW_SAMPLES_AT_48K} samples @ 48k, minAmp=${settings.minAmp.toFixed(2)}, minCorr=${settings.minCorr.toFixed(2)}, minCarryCorr=${settings.minCarryCorr.toFixed(3)}, maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxPatches=${settings.maxComparisonPatches}, corrPts=${settings.corrSamplePoints}, maxWalk=${settings.maxWalkSteps}, maxCarryRun=${settings.maxCarryRun}, corrHzRatio=${settings.correlationToHzWeightRatio.toFixed(3)}`;
 }
 
 async function analyzePreparedSample(preparedSample, sourceLabel, settingInputs) {
@@ -263,7 +268,12 @@ function main() {
   const settingInputs = Object.fromEntries(
     PICA_SETTING_FIELDS.map((field) => [field.key, document.getElementById(field.key)]),
   );
-  const controls = [resetStorageButton, recordButton, sourceSelect, ...Object.values(settingInputs)];
+  const controls = [
+    resetStorageButton,
+    recordButton,
+    sourceSelect,
+    ...Object.values(settingInputs),
+  ];
   currentControls = controls;
   currentSourceSelect = sourceSelect;
   currentSettingInputs = settingInputs;

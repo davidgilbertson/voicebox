@@ -8,7 +8,7 @@
     "build": "vite build",
     "deploy": "npm run build && wrangler deploy",
     "preview": "vite build && vite preview",
-    "format": "prettier . --write",
+    "format": "prettier . --write --cache",
     "test": "vitest run --config vitest.config.cjs",
     "test:watch": "vitest --config vitest.config.cjs"
   },
