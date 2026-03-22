@@ -61,7 +61,7 @@ export function createActualLabelEditor(sourceKey, result, getWaveformWindow) {
         waveformWindow.sampleRate,
         fftPitchHz,
         {
-          ...result.picaSettings,
+          ...result.settings,
           maxWalkSteps: Number.POSITIVE_INFINITY,
         },
       );
@@ -90,7 +90,7 @@ export function createActualLabelEditor(sourceKey, result, getWaveformWindow) {
       waveformWindow.sampleRate,
       seedPitchHz,
       {
-        ...result.picaSettings,
+        ...result.settings,
         maxWalkSteps: Number.POSITIVE_INFINITY,
       },
     );

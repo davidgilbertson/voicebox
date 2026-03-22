@@ -1,7 +1,7 @@
-import { PICA_ACCURACY_CENTS, PICA_SETTINGS_DEFAULTS } from "./config.js";
+import { PICA_ACCURACY_CENTS } from "./config.js";
 import { getCentsDifference } from "./utils.js";
 import { getPicaWindowSamples } from "./windowing.js";
-import { getPicaPitchAnalysisFromWaveform, getPicaSettings } from "./picaPitch.js";
+import { getPicaPitchAnalysisFromWaveform } from "./picaPitch.js";
 import { analyzePitchyTrack } from "./pitchyPitch.js";
 
 const TIMESTEPS_PER_SECOND = 80;
@@ -194,6 +194,7 @@ function getPriorStep(analysis, priorStep) {
       correlation: Number.NaN,
       carryForwardRunLength: 0,
       fullPredictionCountSinceLastNaN: 0,
+      suppressedOctaveJumpCount: 0,
     };
   }
 
@@ -210,6 +211,7 @@ function getPriorStep(analysis, priorStep) {
         ? (priorStep?.carryForwardRunLength ?? 0) + 1
         : 0,
     fullPredictionCountSinceLastNaN,
+    suppressedOctaveJumpCount: analysis.suppressedOctaveJumpCount ?? 0,
   };
 }
 
@@ -230,7 +232,7 @@ function getMethodVisibility(methodVisibility = {}) {
   };
 }
 
-function analyzePitchTrack(timeSec, samples, sampleRate, picaSettings, mode, timestepsPerSecond) {
+function analyzePitchTrack(timeSec, samples, sampleRate, settings, mode, timestepsPerSecond) {
   const pitchHz = new Array(timeSec.length);
   const correlation = new Array(timeSec.length);
   const priorStepByWindow = new Array(timeSec.length);
@@ -243,7 +245,7 @@ function analyzePitchTrack(timeSec, samples, sampleRate, picaSettings, mode, tim
     const analysis = getPicaPitchAnalysisFromWaveform(
       picaWindow,
       sampleRate,
-      picaSettings,
+      settings,
       mode === "carryForward" ? priorStep : null,
     );
     pitchHz[windowIndex] = analysis.hz;
@@ -262,13 +264,8 @@ function analyzePitchTrack(timeSec, samples, sampleRate, picaSettings, mode, tim
   };
 }
 
-export async function analyzePreparedPitchSample(
-  preparedSample,
-  settings = PICA_SETTINGS_DEFAULTS,
-  methodVisibility = {},
-) {
+export async function analyzePreparedPitchSample(preparedSample, settings, methodVisibility = {}) {
   const visibleMethods = getMethodVisibility(methodVisibility);
-  const picaSettings = getPicaSettings(settings);
   const { actualPitchHz, fftAnalysis, sampleRate, samples } = preparedSample;
   console.assert(
     actualPitchHz === null || actualPitchHz.length === fftAnalysis.timeSec.length,
@@ -289,7 +286,7 @@ export async function analyzePreparedPitchSample(
         fftAnalysis.timeSec,
         samples,
         sampleRate,
-        picaSettings,
+        settings,
         "pica",
         fftAnalysis.samplesPerSecond,
       )
@@ -299,7 +296,7 @@ export async function analyzePreparedPitchSample(
         fftAnalysis.timeSec,
         samples,
         sampleRate,
-        picaSettings,
+        settings,
         "carryForward",
         fftAnalysis.samplesPerSecond,
       )
@@ -338,7 +335,7 @@ export async function analyzePreparedPitchSample(
     carryForwardPitchHz: carryForwardTrack.pitchHz,
     carryForwardCorrelation: carryForwardTrack.correlation,
     carryForwardPriorStepByWindow: carryForwardTrack.priorStepByWindow,
-    picaSettings,
+    settings,
     metrics: {
       accuracyByMethodKey,
     },
@@ -379,11 +376,10 @@ export async function analyzePreparedPitchSample(
 
 export async function analyzePreparedActualPitchSample(
   preparedSample,
-  settings = PICA_SETTINGS_DEFAULTS,
+  settings,
   methodVisibility = {},
 ) {
   const visibleMethods = getMethodVisibility(methodVisibility);
-  const picaSettings = getPicaSettings(settings);
   const { actualPitchHz, sampleRate, samples } = preparedSample;
   const timeSec = actualPitchHz.map((_, index) => index / TIMESTEPS_PER_SECOND);
   const emptyTrack = {
@@ -393,14 +389,14 @@ export async function analyzePreparedActualPitchSample(
     msPerSecondAudio: Number.NaN,
   };
   const picaTrack = visibleMethods.pica
-    ? analyzePitchTrack(timeSec, samples, sampleRate, picaSettings, "pica", TIMESTEPS_PER_SECOND)
+    ? analyzePitchTrack(timeSec, samples, sampleRate, settings, "pica", TIMESTEPS_PER_SECOND)
     : emptyTrack;
   const carryForwardTrack = visibleMethods.carryForward
     ? analyzePitchTrack(
         timeSec,
         samples,
         sampleRate,
-        picaSettings,
+        settings,
         "carryForward",
         TIMESTEPS_PER_SECOND,
       )
@@ -433,7 +429,7 @@ export async function analyzePreparedActualPitchSample(
     carryForwardPitchHz: carryForwardTrack.pitchHz,
     carryForwardCorrelation: carryForwardTrack.correlation,
     carryForwardPriorStepByWindow: carryForwardTrack.priorStepByWindow,
-    picaSettings,
+    settings,
     metrics: {
       accuracyByMethodKey,
     },

@@ -27,6 +27,7 @@ let currentPreparedSample = null;
 let currentControls = [];
 let currentSourceSelect = null;
 let currentSettingInputs = null;
+let pendingChartResizeToken = 0;
 
 function getStorageKey(settingKey) {
   return `${STORAGE_PREFIX}${settingKey}`;
@@ -92,6 +93,23 @@ function setStatus(text, isError = false) {
   const status = document.getElementById("status");
   status.textContent = text;
   status.style.color = isError ? "#fca5a5" : "#a7f3d0";
+}
+
+function scheduleChartResize() {
+  const resizeToken = ++pendingChartResizeToken;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (resizeToken !== pendingChartResizeToken) return;
+      const plotly = globalThis.Plotly;
+      if (!plotly?.Plots?.resize) return;
+      ["pitchChart", "waveformChart", "harmonicChart"].forEach((chartId) => {
+        const chart = document.getElementById(chartId);
+        if (chart) {
+          plotly.Plots.resize(chart);
+        }
+      });
+    });
+  });
 }
 
 function hasActuals(result) {
@@ -221,11 +239,6 @@ async function renderResult(result) {
   });
 }
 
-function getStatusText(sourceLabel, result) {
-  const settings = result.picaSettings;
-  return `Loaded ${sourceLabel}. windows=${result.timeSec.length}, sampleRate=${result.sampleRate}, picaWindow=${PICA_WINDOW_SAMPLES_AT_48K} samples @ 48k, minAmp=${settings.minAmp.toFixed(2)}, minCorr=${settings.minCorr.toFixed(2)}, minCarryCorr=${settings.minCarryCorr.toFixed(3)}, maxExtremaPerFold=${settings.maxExtremaPerFold}, maxCrossingsPerPeriod=${settings.maxCrossingsPerPeriod}, maxPatches=${settings.maxComparisonPatches}, corrPts=${settings.corrSamplePoints}, maxWalk=${settings.maxWalkSteps}, maxCarryRun=${settings.maxCarryRun}, corrHzRatio=${settings.correlationToHzWeightRatio.toFixed(3)}`;
-}
-
 async function analyzePreparedSample(preparedSample, sourceLabel, settingInputs) {
   const settings = getSettingsFromInputs(settingInputs);
   writeStoredSettings(settings);
@@ -236,7 +249,8 @@ async function analyzePreparedSample(preparedSample, sourceLabel, settingInputs)
   );
   await renderResult(result);
   updatePerformanceInfo(result, readStoredMethodVisibility());
-  setStatus(getStatusText(sourceLabel, result));
+  setStatus("Done.");
+  scheduleChartResize();
 }
 
 async function rerun(controls, sourceSelect, settingInputs, statusText, getPreparedSample) {
@@ -308,7 +322,7 @@ function main() {
   });
 
   sourceSelect.addEventListener("change", () =>
-    rerun(controls, sourceSelect, settingInputs, "Analyzing selected source...", async () =>
+    rerun(controls, sourceSelect, settingInputs, "", async () =>
       loadPitchSample(loadAudioInputForSource(getSelectedSource(sourceSelect))),
     ),
   );
@@ -319,7 +333,7 @@ function main() {
     );
   });
 
-  void rerun(controls, sourceSelect, settingInputs, "Analyzing selected source...", async () =>
+  void rerun(controls, sourceSelect, settingInputs, "", async () =>
     loadPitchSample(loadAudioInputForSource(getSelectedSource(sourceSelect))),
   );
 }

@@ -4,16 +4,19 @@ import { analyzePreparedActualPitchSample, loadActualPitchSample } from "./picaE
 const STORAGE_PREFIX = "voicebox.picaPitch.";
 const VOCAL_SAMPLER_URL = "../../.private/assets/vocal_sampler.wav";
 const VOCAL_SAMPLER_LABEL = "vocal_sampler.wav";
-const POINT_OFFSETS = [-2, -1, 0, 1, 2];
 const METHOD_KEY = "carryForward";
 const METHOD_LABEL = "Carry-forward";
+const DEFAULT_STEP_COUNT = 5;
 
 let preparedSamplePromise = null;
 let isRunningAll = false;
 let currentFingerprint = "";
 const chartFingerprintByKey = new Map();
-const settingInputs = new Map();
+const settingMidpointInputs = new Map();
+const settingStepInputs = new Map();
+const settingStepCountInputs = new Map();
 const settingEnabledInputs = new Map();
+const settingValuePreviews = new Map();
 const chartCards = new Map();
 let sharedAccuracyRange = [0, 100];
 
@@ -41,15 +44,23 @@ function getEnabledStorageKey(settingKey) {
   return `${getStorageKey(settingKey)}.enabled`;
 }
 
+function getStepStorageKey(settingKey) {
+  return `${getStorageKey(settingKey)}.step`;
+}
+
+function getStepsStorageKey(settingKey) {
+  return `${getStorageKey(settingKey)}.steps`;
+}
+
 function readStoredNumber(key, fallback) {
-  const stored = localStorage.getItem(getStorageKey(key));
+  const stored = localStorage.getItem(key);
   if (stored === null) return fallback;
   const value = Number(stored);
   return Number.isNaN(value) ? fallback : value;
 }
 
 function writeStoredNumber(key, value) {
-  localStorage.setItem(getStorageKey(key), String(value));
+  localStorage.setItem(key, String(value));
 }
 
 function readStoredBoolean(key, fallback) {
@@ -64,20 +75,41 @@ function writeStoredBoolean(key, value) {
   localStorage.setItem(key, String(value));
 }
 
-function getPrecision(step) {
-  const stepText = String(step);
-  const dotIndex = stepText.indexOf(".");
-  return dotIndex === -1 ? 0 : stepText.length - dotIndex - 1;
+function isIntegerField(field) {
+  return Number.isInteger(field.step);
+}
+
+function isValueWithinSensibleRange(field, value) {
+  if (field.min !== undefined && value < field.min) return false;
+  if (field.max !== undefined && value > field.max) return false;
+  return true;
+}
+
+function getStepCount(field) {
+  const steps = Math.trunc(Number(settingStepCountInputs.get(field.key).value));
+  return Number.isFinite(steps) ? Math.max(1, steps) : DEFAULT_STEP_COUNT;
+}
+
+function getFieldInputValues(field) {
+  const midpoint = Number(settingMidpointInputs.get(field.key).value);
+  const step = Number(settingStepInputs.get(field.key).value);
+  const steps = getStepCount(field);
+  return { midpoint, step, steps };
 }
 
 function getSettings() {
   return Object.fromEntries(
-    PICA_SETTING_FIELDS.map((field) => [field.key, Number(settingInputs.get(field.key).value)]),
+    PICA_SETTING_FIELDS.map((field) => [field.key, getFieldInputValues(field).midpoint]),
   );
 }
 
 function getSettingsFingerprint(settings) {
-  return JSON.stringify(PICA_SETTING_FIELDS.map((field) => [field.key, settings[field.key]]));
+  return JSON.stringify(
+    PICA_SETTING_FIELDS.map((field) => {
+      const { midpoint, step, steps } = getFieldInputValues(field);
+      return [field.key, settings[field.key], midpoint, step, steps];
+    }),
+  );
 }
 
 function getSelectedFields() {
@@ -106,11 +138,22 @@ function updateChartVisibility() {
   });
 }
 
-function buildPointValues(field, currentValue) {
-  const precision = getPrecision(field.step);
-  return POINT_OFFSETS.map((offset) =>
-    Number((currentValue + offset * field.step).toFixed(precision)),
-  );
+function buildPointValues(field) {
+  const { midpoint, step, steps } = getFieldInputValues(field);
+  const offsetRadius = Math.floor(steps / 2);
+  const values = Array.from({ length: steps }, (_, index) =>
+    isIntegerField(field)
+      ? Math.round(midpoint + (index - offsetRadius) * step)
+      : midpoint + (index - offsetRadius) * step,
+  ).filter((value) => isValueWithinSensibleRange(field, value));
+  return [...new Set(values)];
+}
+
+function updateValuePreview(field) {
+  const preview = settingValuePreviews.get(field.key);
+  if (!preview) return;
+  const values = buildPointValues(field);
+  preview.textContent = values.length === 0 ? "No in-range values" : values.join(", ");
 }
 
 async function getPreparedSample() {
@@ -146,8 +189,12 @@ function getAccuracyRangeFromCharts(chartPointsByKey) {
 }
 
 async function getChartPoints(field, settings) {
-  const values = buildPointValues(field, settings[field.key]);
-  setStatus(`Running ${field.inputLabel} around ${settings[field.key]}...`);
+  const values = buildPointValues(field);
+  if (values.length === 0) {
+    setStatus(`No in-range values for ${field.inputLabel}.`, true);
+    return [];
+  }
+  setStatus(`Running ${field.inputLabel} from ${values[0]} to ${values.at(-1)}...`);
 
   const points = [];
   for (const value of values) {
@@ -192,7 +239,11 @@ async function renderChart(field, settings, points) {
         line: { color: "#60a5fa", width: 2 },
         marker: {
           size: 18,
-          color: points.map((_, pointIndex) => (pointIndex === 2 ? "#22c55e" : "#60a5fa")),
+          color: points.map((point, pointIndex) => {
+            if (point.value === settings[field.key]) return "#22c55e";
+            const alpha = points.length <= 1 ? 1 : 0.5 + (pointIndex / (points.length - 1)) * 0.5;
+            return `rgba(96, 165, 250, ${alpha})`;
+          }),
           line: { color: "#020617", width: 1.5 },
         },
         hovertemplate: `${field.inputLabel}=%{customdata}<br>x realtime=%{x:.2f}<br>accuracy=%{y:.1f}%<extra></extra>`,
@@ -229,9 +280,10 @@ async function renderChart(field, settings, points) {
 }
 
 async function setCurrentValueAndRerun(field, value) {
-  const input = settingInputs.get(field.key);
-  input.value = String(value);
-  writeStoredNumber(field.key, value);
+  const nextMidpoint = value;
+  settingMidpointInputs.get(field.key).value = String(nextMidpoint);
+  writeStoredNumber(getStorageKey(field.key), nextMidpoint);
+  updateValuePreview(field);
   const settings = getSettings();
   currentFingerprint = getSettingsFingerprint(settings);
   updateDirtyState();
@@ -240,6 +292,24 @@ async function setCurrentValueAndRerun(field, value) {
   chartPointsByKey.set(field.key, points);
   sharedAccuracyRange = getAccuracyRangeFromCharts(chartPointsByKey);
   await renderChart(field, settings, points);
+}
+
+async function rerunChart(field) {
+  if (isRunningAll) return;
+  const settings = getSettings();
+  currentFingerprint = getSettingsFingerprint(settings);
+  try {
+    const points = await getChartPoints(field, settings);
+    const chartPointsByKey = new Map();
+    chartPointsByKey.set(field.key, points);
+    sharedAccuracyRange = getAccuracyRangeFromCharts(chartPointsByKey);
+    await renderChart(field, settings, points);
+  } catch (error) {
+    console.error(error);
+    setStatus(error instanceof Error ? error.message : String(error), true);
+  } finally {
+    updateDirtyState();
+  }
 }
 
 async function rerunAllCharts() {
@@ -266,7 +336,11 @@ async function rerunAllCharts() {
     for (const field of selectedFields) {
       await renderChart(field, settings, chartPointsByKey.get(field.key));
     }
-    setStatus(`Done. ${selectedFields.length * POINT_OFFSETS.length} runs.`);
+    const totalRuns = selectedFields.reduce(
+      (count, field) => count + buildPointValues(field).length,
+      0,
+    );
+    setStatus(`Done. ${totalRuns} runs.`);
   } catch (error) {
     console.error(error);
     setStatus(error instanceof Error ? error.message : String(error), true);
@@ -278,14 +352,12 @@ async function rerunAllCharts() {
 }
 
 function createSettingInput(field) {
-  const label = document.createElement("label");
-  label.className = "toolbar-field";
-
-  const text = document.createElement("span");
-  text.textContent = field.inputLabel;
+  const row = document.createElement("div");
+  row.className = "settings-grid settings-row";
 
   const enabledInput = document.createElement("input");
   enabledInput.type = "checkbox";
+  enabledInput.className = "settings-checkbox";
   enabledInput.checked = readStoredBoolean(getEnabledStorageKey(field.key), true);
   enabledInput.title = `Include ${field.inputLabel} when running all charts`;
   enabledInput.addEventListener("input", () => {
@@ -294,35 +366,88 @@ function createSettingInput(field) {
     updateDirtyState();
   });
 
-  const input = document.createElement("input");
-  input.id = field.key;
-  input.className = "toolbar-number";
-  input.type = "number";
-  input.min = String(field.min);
-  input.max = String(field.max);
-  input.step = String(field.step);
-  input.title = field.title;
-  input.value = String(readStoredNumber(field.key, PICA_SETTINGS_DEFAULTS[field.key]));
-  input.addEventListener("input", () => {
-    const value = Number(input.value);
+  const currentValue = readStoredNumber(
+    getStorageKey(field.key),
+    PICA_SETTINGS_DEFAULTS[field.key],
+  );
+  const midpointInput = document.createElement("input");
+  midpointInput.className = "toolbar-number";
+  midpointInput.type = "number";
+  midpointInput.step = "any";
+  midpointInput.title = `${field.title} Midpoint value`;
+  midpointInput.value = String(readStoredNumber(getStorageKey(field.key), currentValue));
+  midpointInput.addEventListener("input", () => {
+    const value = Number(midpointInput.value);
     if (Number.isNaN(value)) return;
-    writeStoredNumber(field.key, value);
+    writeStoredNumber(getStorageKey(field.key), value);
     currentFingerprint = getSettingsFingerprint(getSettings());
+    updateValuePreview(field);
     updateDirtyState();
   });
 
-  label.append(text, enabledInput, input);
-  settingInputs.set(field.key, input);
+  const stepInput = document.createElement("input");
+  stepInput.className = "toolbar-number";
+  stepInput.type = "number";
+  stepInput.step = "any";
+  stepInput.title = `${field.title} Step size`;
+  stepInput.value = String(readStoredNumber(getStepStorageKey(field.key), field.step));
+  stepInput.addEventListener("input", () => {
+    const value = Number(stepInput.value);
+    if (Number.isNaN(value)) return;
+    writeStoredNumber(getStepStorageKey(field.key), value);
+    currentFingerprint = getSettingsFingerprint(getSettings());
+    updateValuePreview(field);
+    updateDirtyState();
+  });
+
+  const stepsInput = document.createElement("input");
+  stepsInput.className = "toolbar-number settings-steps";
+  stepsInput.type = "number";
+  stepsInput.min = "1";
+  stepsInput.step = "1";
+  stepsInput.title = `Number of points to sample for ${field.inputLabel}`;
+  stepsInput.value = String(readStoredNumber(getStepsStorageKey(field.key), DEFAULT_STEP_COUNT));
+  stepsInput.addEventListener("input", () => {
+    const value = Number(stepsInput.value);
+    if (Number.isNaN(value)) return;
+    writeStoredNumber(getStepsStorageKey(field.key), value);
+    currentFingerprint = getSettingsFingerprint(getSettings());
+    updateValuePreview(field);
+    updateDirtyState();
+  });
+
+  const rerunButton = document.createElement("button");
+  rerunButton.className = "toolbar-btn";
+  rerunButton.type = "button";
+  rerunButton.textContent = "Re-run";
+  rerunButton.addEventListener("click", () => {
+    void rerunChart(field);
+  });
+
+  const valuesPreview = document.createElement("div");
+  valuesPreview.className = "settings-values";
+
+  row.innerHTML = `<div class="settings-label" title="${field.title}">${field.inputLabel}</div>`;
+  row.append(enabledInput, midpointInput, stepInput, stepsInput, rerunButton, valuesPreview);
+
+  settingMidpointInputs.set(field.key, midpointInput);
+  settingStepInputs.set(field.key, stepInput);
+  settingStepCountInputs.set(field.key, stepsInput);
   settingEnabledInputs.set(field.key, enabledInput);
-  return label;
+  settingValuePreviews.set(field.key, valuesPreview);
+  updateValuePreview(field);
+  return row;
 }
 
 function main() {
   const inputsContainer = document.getElementById("settingInputs");
-  inputsContainer.style.display = "contents";
+  const rows = document.createElement("div");
+  rows.className = "settings-body";
+  rows.setAttribute("role", "rowgroup");
   PICA_SETTING_FIELDS.forEach((field) => {
-    inputsContainer.append(createSettingInput(field));
+    rows.append(createSettingInput(field));
   });
+  inputsContainer.append(rows);
 
   const charts = document.getElementById("charts");
   PICA_SETTING_FIELDS.forEach((field) => {

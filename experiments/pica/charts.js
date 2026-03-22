@@ -1,5 +1,8 @@
-import { PICA_MAX_HZ, PICA_MIN_HZ, PICA_SETTINGS_DEFAULTS } from "./config.js";
-import { getPicaCorrelationSeries, getPicaPitchAnalysisFromWaveform } from "./picaPitch.js";
+import { PICA_MAX_HZ, PICA_MIN_HZ } from "./config.js";
+import {
+  getCorrelation,
+  getPicaPitchAnalysisFromWaveform,
+} from "./picaPitch.js";
 import {
   PICA_WINDOW_CYCLES,
   PICA_WINDOW_DURATION_SEC,
@@ -120,6 +123,28 @@ function getNearestCorrelationY(correlationSeries, hz) {
   return [correlationSeries.correlation[bestIndex]];
 }
 
+function getPicaCorrelationSeries(samples, sampleRate, settings) {
+  const cache = {
+    correlationByPeriodSize: new Map(),
+  };
+  const hz = [];
+  const correlation = [];
+  const minPeriodSize = Math.max(1, Math.ceil(sampleRate / PICA_MAX_HZ));
+  const maxPeriodSize = Math.max(minPeriodSize, Math.floor(sampleRate / PICA_MIN_HZ));
+
+  for (let periodSize = maxPeriodSize; periodSize >= minPeriodSize; periodSize -= 1) {
+    hz.push(sampleRate / periodSize);
+    correlation.push(getCorrelation(samples, periodSize, settings, cache));
+  }
+
+  return {
+    minHz: PICA_MIN_HZ,
+    maxHz: PICA_MAX_HZ,
+    hz,
+    correlation,
+  };
+}
+
 function getSelectedPitchLabel(hz) {
   return Number.isFinite(hz) ? `${hz.toFixed(2)} Hz` : "n/a";
 }
@@ -130,11 +155,10 @@ function getActualPitchLabel(label) {
   return "n/a";
 }
 
-function getWaveformTitle(waveformWindow, analysis) {
+function getWaveformTitle(waveformWindow) {
   const durationMs =
     waveformWindow.durationMs > 0 ? waveformWindow.durationMs : PICA_WINDOW_DURATION_SEC * 1000;
-  const reason = analysis.rejectionReason ? `, rejected: ${analysis.rejectionReason}` : "";
-  return `Waveform ending at t=${waveformWindow.endTimeSec.toFixed(3)}s, I=${waveformWindow.windowIndex} (${durationMs.toFixed(1)} ms window, ${PICA_WINDOW_SAMPLES_AT_48K} samples @ 48k, ${PICA_WINDOW_CYCLES} cycles at E1${reason})`;
+  return `Waveform ending at t=${waveformWindow.endTimeSec.toFixed(3)}s, I=${waveformWindow.windowIndex} (${durationMs.toFixed(1)} ms window)`;
 }
 
 function getAmplitudeRange(samples) {
@@ -206,11 +230,13 @@ function getExtremaMarkers(waveformWindow, analysis) {
   const color = [];
   const symbol = [];
   const winningPointPair = analysis.winningCandidate?.pointPair ?? [];
-  for (const extremum of analysis.foldExtrema) {
-    x.push((waveformWindow.startSample + extremum.index) / waveformWindow.sampleRate);
-    y.push(waveformWindow.samples[extremum.index]);
-    color.push(winningPointPair.includes(extremum.index) ? "#f87171" : "#f59e0b");
-    symbol.push(extremum.type === "trough" ? "triangle-down" : "circle");
+  for (const extrema of [analysis.foldExtrema.peaks, analysis.foldExtrema.troughs]) {
+    for (const extremum of extrema) {
+      x.push((waveformWindow.startSample + extremum.index) / waveformWindow.sampleRate);
+      y.push(waveformWindow.samples[extremum.index]);
+      color.push(winningPointPair.includes(extremum.index) ? "#f87171" : "#f59e0b");
+      symbol.push(extremum.type === "trough" ? "triangle-down" : "circle");
+    }
   }
   return { x, y, color, symbol };
 }
@@ -300,7 +326,7 @@ function renderCandidateTable(panel, analysis, fftPitchHz) {
   };
 
   const winningText = analysis.winningCandidate
-    ? `Winner ${analysis.winningCandidate.hz.toFixed(2)} Hz, corr ${analysis.winningCandidate.correlation.toFixed(3)}, score ${analysis.winningCandidate.weightedScore.toFixed(3)}`
+    ? `Winner ${analysis.winningCandidate.hz.toFixed(2)} Hz, corr ${analysis.winningCandidate.correlation.toFixed(3)}`
     : `Rejected: ${analysis.rejectionReason}`;
 
   panel.innerHTML = `
@@ -352,7 +378,7 @@ async function renderHistogram(
         x: fftMarkerX,
         y: fftMarkerY,
         mode: "markers",
-        marker: { color: "#00b7ff", size: 12, symbol: "x" },
+        marker: { color: "rgba(74, 222, 128, 0.95)", size: 12, symbol: "x" },
         hovertemplate: "FFT=%{x:.2f} Hz<br>corr=%{y:.3f}<extra></extra>",
         showlegend: false,
       },
@@ -360,7 +386,7 @@ async function renderHistogram(
         x: picaMarkerX,
         y: picaMarkerY,
         mode: "markers",
-        marker: { color: "#ff0066", size: 12, symbol: "cross" },
+        marker: { color: "rgba(96, 165, 250, 0.95)", size: 12, symbol: "cross" },
         hovertemplate: "Pica=%{x:.2f} Hz<br>corr=%{y:.3f}<extra></extra>",
         showlegend: false,
       },
@@ -368,7 +394,7 @@ async function renderHistogram(
         x: carryForwardMarkerX,
         y: carryForwardMarkerY,
         mode: "markers",
-        marker: { color: "#facc15", size: 9, symbol: "diamond" },
+        marker: { color: "rgba(251, 146, 60, 0.95)", size: 12, symbol: "x" },
         hovertemplate: "Carry=%{x:.2f} Hz<br>corr=%{y:.3f}<extra></extra>",
         showlegend: false,
       },
@@ -376,7 +402,7 @@ async function renderHistogram(
         x: actualMarkerX,
         y: actualMarkerY,
         mode: "markers",
-        marker: { color: "#39ff14", size: 9, line: { color: "#000000", width: 1.5 } },
+        marker: { color: "rgba(74, 222, 128, 0.8)", size: 9 },
         hovertemplate: "Actual=%{x:.2f} Hz<br>corr=%{y:.3f}<extra></extra>",
         showlegend: false,
       },
@@ -475,7 +501,6 @@ export async function renderPicaPitchCharts(result, options = {}) {
   const methodVisibility = readStoredMethodVisibility();
   const priorPitchChartVisibilityByName = getTraceVisibilityByName("pitchChart");
   const actualPitchHz = [];
-  const actualPitchColor = [];
   const hasActuals = Array.isArray(result.actualPitchHz);
 
   renderMethodVisibilityControls(methodVisibility, onMethodVisibilityChange);
@@ -488,20 +513,9 @@ export async function renderPicaPitchCharts(result, options = {}) {
 
   function refreshActualSeries() {
     actualPitchHz.splice(0, actualPitchHz.length);
-    actualPitchColor.splice(0, actualPitchColor.length);
     for (let index = 0; index < result.timeSec.length; index += 1) {
       const actualHz = getResolvedActualPitchHz(index);
-      if (actualHz === null) {
-        actualPitchHz.push(Number.NaN);
-        actualPitchColor.push("rgba(74, 222, 128, 0)");
-      } else {
-        actualPitchHz.push(actualHz);
-        actualPitchColor.push(
-          actualLabelEditor?.hasStoredLabel(index)
-            ? "rgba(74, 222, 128, 1)"
-            : "rgba(37, 111, 64, 1)",
-        );
-      }
+      actualPitchHz.push(actualHz === null ? Number.NaN : actualHz);
     }
   }
 
@@ -509,7 +523,18 @@ export async function renderPicaPitchCharts(result, options = {}) {
 
   const pitchChartSeries = [];
   const pitchChartWindowIndex = result.timeSec.map((_, index) => index);
-  let actualTraceIndex = null;
+  const actualTraceIndex = 0;
+
+  pitchChartSeries.push({
+    x: result.timeSec,
+    y: actualPitchHz,
+    mode: "lines+markers",
+    customdata: pitchChartWindowIndex,
+    line: { width: 1.5, color: "rgba(74, 222, 128, 0.8)" },
+    marker: { size: 6, color: "rgba(74, 222, 128, 0.5)" },
+    hovertemplate: "t=%{x:.3f}s<br>Actual=%{y:.2f} Hz<extra></extra>",
+    name: "Actual",
+  });
 
   if (methodVisibility.pitchy) {
     pitchChartSeries.push({
@@ -517,7 +542,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
       y: result.pitchyPitchHz,
       mode: "lines",
       customdata: pitchChartWindowIndex,
-      line: { width: 1.5, color: "rgba(196, 181, 253, 0.95)" },
+      line: { width: 1.5, color: "rgba(255, 255, 255, 0.95)" },
       connectgaps: false,
       hovertemplate: "t=%{x:.3f}s<br>Pitchy=%{y:.2f} Hz<extra></extra>",
       name: "Pitchy",
@@ -529,7 +554,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
       y: result.pitchHz,
       mode: "lines",
       customdata: pitchChartWindowIndex,
-      line: { width: 3, color: "rgba(56, 189, 248, 0.4)", dash: "dash" },
+      line: { width: 3, color: "rgba(74, 222, 128, 0.6)", dash: "dash" },
       connectgaps: false,
       hovertemplate: "t=%{x:.3f}s<br>FFT=%{y:.2f} Hz<extra></extra>",
       name: "Voicebox FFT",
@@ -541,7 +566,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
       y: result.carryForwardPitchHz,
       mode: "lines",
       customdata: pitchChartWindowIndex,
-      line: { width: 1.25, color: "rgba(250, 204, 21, 0.95)" },
+      line: { width: 1.25, color: "rgba(251, 146, 60, 0.95)" },
       connectgaps: false,
       hovertemplate: "t=%{x:.3f}s<br>Carry=%{y:.2f} Hz<extra></extra>",
       name: "Carry",
@@ -551,7 +576,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
       y: result.carryForwardCorrelation,
       mode: "lines",
       customdata: pitchChartWindowIndex,
-      line: { width: 1.25, color: "rgba(250, 204, 21, 0.5)" },
+      line: { width: 1.25, color: "rgba(251, 146, 60, 0.5)" },
       connectgaps: false,
       hovertemplate: "t=%{x:.3f}s<br>Carry corr=%{y:.3f}<extra></extra>",
       name: "Carry corr",
@@ -564,7 +589,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
       y: result.picaPitchHz,
       mode: "lines",
       customdata: pitchChartWindowIndex,
-      line: { width: 1, color: "rgba(248, 113, 113, 0.95)" },
+      line: { width: 1, color: "rgba(96, 165, 250, 0.95)", dash: "dot" },
       connectgaps: false,
       hovertemplate: "t=%{x:.3f}s<br>Pica=%{y:.2f} Hz<extra></extra>",
       name: "PICA",
@@ -574,24 +599,13 @@ export async function renderPicaPitchCharts(result, options = {}) {
       y: result.picaCorrelation,
       mode: "lines",
       customdata: pitchChartWindowIndex,
-      line: { width: 1.25, color: "rgba(248, 113, 113, 0.45)" },
+      line: { width: 1.25, color: "rgba(96, 165, 250, 0.45)" },
       connectgaps: false,
       hovertemplate: "t=%{x:.3f}s<br>Pica corr=%{y:.3f}<extra></extra>",
       name: "Pica corr",
       yaxis: "y2",
     });
   }
-  actualTraceIndex = pitchChartSeries.length;
-  pitchChartSeries.push({
-    x: result.timeSec,
-    y: actualPitchHz,
-    mode: "markers",
-    customdata: pitchChartWindowIndex,
-    marker: { size: 6, color: actualPitchColor },
-    hovertemplate: "t=%{x:.3f}s<br>Actual=%{y:.2f} Hz<extra></extra>",
-    name: "Actual",
-    visible: hasActuals,
-  });
 
   for (const trace of pitchChartSeries) {
     const priorVisibility = priorPitchChartVisibilityByName.get(trace.name);
@@ -639,24 +653,21 @@ export async function renderPicaPitchCharts(result, options = {}) {
 
   async function selectWindow(windowIndex) {
     activeWindowIndex = Math.max(0, Math.min(maxWindowIndex, windowIndex));
+    window.windowIndex = activeWindowIndex;
     const waveformWindow = getWaveformWindow(activeWindowIndex);
     const needsPicaAnalysis = methodVisibility.pica || methodVisibility.carryForward;
-    const priorStep = methodVisibility.carryForward
-      ? (result.carryForwardPriorStepByWindow?.[activeWindowIndex] ?? null)
-      : null;
     const analysis = needsPicaAnalysis
       ? getPicaPitchAnalysisFromWaveform(
           waveformWindow.samples,
           waveformWindow.sampleRate,
-          result.picaSettings,
-          priorStep,
+          result.settings,
         )
       : null;
     const correlationSeries = needsPicaAnalysis
       ? getPicaCorrelationSeries(
           waveformWindow.samples,
           waveformWindow.sampleRate,
-          result.picaSettings,
+          result.settings,
         )
       : null;
     const extremaMarkers = analysis
@@ -707,7 +718,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
         },
       ],
       {
-        title: getWaveformTitle(waveformWindow, analysis ?? {}),
+        title: getWaveformTitle(waveformWindow),
         paper_bgcolor: "#050505",
         plot_bgcolor: "#050505",
         font: { color: "#e2e8f0" },
@@ -722,7 +733,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
         yaxis: {
           title: "Amplitude",
           showgrid: false,
-          range: getAmplitudeRange(waveformWindow.samples),
+          range: [-1, 1],
         },
         shapes: [
           ...getWinningPeriodBox(waveformWindow, analysis ?? {}),
@@ -763,7 +774,6 @@ export async function renderPicaPitchCharts(result, options = {}) {
                 "pitchChart",
                 {
                   y: [actualPitchHz],
-                  "marker.color": [actualPitchColor],
                   x: [result.timeSec],
                 },
                 [actualTraceIndex],
@@ -822,7 +832,6 @@ export async function renderPicaPitchCharts(result, options = {}) {
         "pitchChart",
         {
           y: [actualPitchHz],
-          "marker.color": [actualPitchColor],
           x: [result.timeSec],
         },
         [actualTraceIndex],

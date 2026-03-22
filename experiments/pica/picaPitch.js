@@ -1,4 +1,4 @@
-import { PICA_MAX_HZ, PICA_MIN_HZ, PICA_SETTINGS_DEFAULTS } from "./config.js";
+import { PICA_MAX_HZ, PICA_MIN_HZ } from "./config.js";
 import { hasZeroCrossing } from "./utils.js";
 
 const CARRY_FORWARD_WARMUP_FULL_PREDICTIONS = 5;
@@ -12,66 +12,80 @@ Terminology:
   then refined by the period walk
 */
 
-export function getPicaSettings(settings = {}) {
-  return {
-    ...PICA_SETTINGS_DEFAULTS,
-    ...settings,
-    minCorr: settings.minCorr ?? PICA_SETTINGS_DEFAULTS.minCorr,
-    maxExtremaPerFold: settings.maxExtremaPerFold ?? PICA_SETTINGS_DEFAULTS.maxExtremaPerFold,
-    maxCarryRun: settings.maxCarryRun ?? PICA_SETTINGS_DEFAULTS.maxCarryRun,
-  };
-}
-
-function getCorrelation(samples, periodSize, settings, cache = null) {
+export function getCorrelation(samples, periodSize, settings, cache = null) {
   const cachedCorrelation = cache?.correlationByPeriodSize.get(periodSize);
   if (cachedCorrelation !== undefined) {
     return cachedCorrelation;
   }
 
   if (periodSize < 1) return 0;
-  const patchCount = Math.min(
-    settings.maxComparisonPatches,
-    Math.floor(samples.length / periodSize),
-  );
+  const sampleCount = samples.length;
+  const patchCount = Math.min(settings.maxComparisonPatches, Math.floor(sampleCount / periodSize));
   if (patchCount < 2) return 0;
 
-  const corrSamplePoints = Math.max(1, Math.round(settings.corrSamplePoints));
-  const stride = Math.max(1, Math.floor(periodSize / corrSamplePoints));
-
+  const stride = Math.ceil(periodSize / settings.corrSamplePoints);
   let totalCorrelation = 0;
   let comparisonCount = 0;
-  for (let patchIndex = 0; patchIndex < patchCount - 1; patchIndex += 1) {
-    const rightEnd = samples.length - patchIndex * periodSize;
-    const rightStart = rightEnd - periodSize;
-    const leftStart = rightStart - periodSize;
-    if (leftStart < 0) break;
 
-    let dot = 0;
-    let leftPower = 0;
-    let rightPower = 0;
-    let hasZeroCrossing = patchIndex !== 0;
-    let lastRightSample = samples[rightStart];
-    for (let sampleIndex = 0; sampleIndex < periodSize; sampleIndex += stride) {
-      const left = samples[leftStart + sampleIndex];
-      const right = samples[rightStart + sampleIndex];
-      if (patchIndex === 0 && sampleIndex > 0 && lastRightSample < 0 !== right < 0) {
-        hasZeroCrossing = true;
-      }
-      lastRightSample = right;
-      dot += left * right;
-      leftPower += left * left;
-      rightPower += right * right;
-    }
+  let rightStart = sampleCount - periodSize;
+  let leftStart = rightStart - periodSize;
+  if (leftStart < 0) return 0;
 
-    if (!hasZeroCrossing) {
-      return 0;
+  let dot = 0;
+  let leftPower = 0;
+  let rightPower = 0;
+  let hasZeroCrossing = false;
+  let lastRightSample = samples[rightStart];
+  for (let leftIndex = leftStart, rightIndex = rightStart; rightIndex < rightStart + periodSize; ) {
+    const left = samples[leftIndex];
+    const right = samples[rightIndex];
+    if (!hasZeroCrossing && rightIndex > rightStart && lastRightSample < 0 !== right < 0) {
+      hasZeroCrossing = true;
     }
-    if (leftPower <= 0 || rightPower <= 0) {
-      continue;
-    }
+    lastRightSample = right;
+    dot += left * right;
+    leftPower += left * left;
+    rightPower += right * right;
+    leftIndex += stride;
+    rightIndex += stride;
+  }
+
+  if (!hasZeroCrossing) return 0;
+  if (leftPower > 0 && rightPower > 0) {
     totalCorrelation += dot / Math.sqrt(leftPower * rightPower);
     comparisonCount += 1;
   }
+
+  rightStart -= periodSize;
+  leftStart -= periodSize;
+  for (let patchIndex = 1; patchIndex < patchCount - 1; patchIndex += 1) {
+    if (leftStart < 0) break;
+
+    dot = 0;
+    leftPower = 0;
+    rightPower = 0;
+    for (
+      let leftIndex = leftStart, rightIndex = rightStart;
+      rightIndex < rightStart + periodSize;
+    ) {
+      const left = samples[leftIndex];
+      const right = samples[rightIndex];
+      dot += left * right;
+      leftPower += left * left;
+      rightPower += right * right;
+      leftIndex += stride;
+      rightIndex += stride;
+    }
+
+    if (leftPower > 0 && rightPower > 0) {
+      totalCorrelation += dot / Math.sqrt(leftPower * rightPower);
+      comparisonCount += 1;
+    }
+
+    rightStart -= periodSize;
+    leftStart -= periodSize;
+  }
+
   const correlation = comparisonCount > 0 ? totalCorrelation / comparisonCount : 0;
   cache?.correlationByPeriodSize.set(periodSize, correlation);
   return correlation;
@@ -80,17 +94,17 @@ function getCorrelation(samples, periodSize, settings, cache = null) {
 // Quick window-level checks let us bail out before the slower candidate search.
 function getWindowStats(samples) {
   let zeroCrossingCount = 0;
-  let maxAmplitude = 0;
+  let lastSample = samples[0];
+  let maxAmplitude = Math.abs(lastSample);
 
-  for (let sampleIndex = 0; sampleIndex < samples.length; sampleIndex += 1) {
+  for (let sampleIndex = 1; sampleIndex < samples.length; sampleIndex += 1) {
     const sample = samples[sampleIndex];
     const absolute = Math.abs(sample);
-    if (absolute > maxAmplitude) {
-      maxAmplitude = absolute;
-    }
-    if (sampleIndex > 0 && hasZeroCrossing(samples[sampleIndex - 1], sample)) {
+    if (absolute > maxAmplitude) maxAmplitude = absolute;
+    if (lastSample < 0 !== sample < 0) {
       zeroCrossingCount += 1;
     }
+    lastSample = sample;
   }
 
   return {
@@ -111,29 +125,6 @@ function getComparedRegionMaxAmplitude(samples, periodSize, settings, cache = nu
   return getMaxAmplitudeFromRight(samples, cache)[startSample];
 }
 
-export function getPicaCorrelationSeries(samples, sampleRate, settings = PICA_SETTINGS_DEFAULTS) {
-  const picaSettings = getPicaSettings(settings);
-  const cache = {
-    correlationByPeriodSize: new Map(),
-  };
-  const hz = [];
-  const correlation = [];
-  const minPeriodSize = Math.max(1, Math.ceil(sampleRate / PICA_MAX_HZ));
-  const maxPeriodSize = Math.max(minPeriodSize, Math.floor(sampleRate / PICA_MIN_HZ));
-
-  for (let periodSize = maxPeriodSize; periodSize >= minPeriodSize; periodSize -= 1) {
-    hz.push(sampleRate / periodSize);
-    correlation.push(getCorrelation(samples, periodSize, picaSettings, cache));
-  }
-
-  return {
-    minHz: PICA_MIN_HZ,
-    maxHz: PICA_MAX_HZ,
-    hz,
-    correlation,
-  };
-}
-
 function getRefinedPitchHz(samples, periodSize, sampleRate, settings, cache = null) {
   const centerCorrelation = getCorrelation(samples, periodSize, settings, cache);
   const lowerCorrelation = getCorrelation(samples, periodSize - 1, settings, cache);
@@ -152,7 +143,14 @@ function getRefinedPitchHz(samples, periodSize, sampleRate, settings, cache = nu
 }
 
 // Starting from one seed period, walk uphill on correlation until a local best is found.
-function getWalkedPeriod(samples, seedPeriodSize, settings, sampleRate, cache = null) {
+function getWalkedPeriod(
+  samples,
+  seedPeriodSize,
+  settings,
+  sampleRate,
+  mode = "candidateSearch",
+  cache = null,
+) {
   const cachedWalkedPeriod = cache?.walkedPeriodByPeriodSize.get(seedPeriodSize);
   if (cachedWalkedPeriod !== undefined) {
     return cachedWalkedPeriod;
@@ -200,17 +198,23 @@ function getWalkedPeriod(samples, seedPeriodSize, settings, sampleRate, cache = 
   const walkedPeriod =
     refinedHz < PICA_MIN_HZ || refinedHz > PICA_MAX_HZ
       ? null
-      : {
-          periodSize: bestPeriodSize,
-          correlation: bestCorrelation,
-          comparedRegionMaxAmplitude: getComparedRegionMaxAmplitude(
-            samples,
-            bestPeriodSize,
-            settings,
-            cache,
-          ),
-          hz: refinedHz,
-        };
+      : mode === "carryForward"
+        ? {
+            periodSize: bestPeriodSize,
+            correlation: bestCorrelation,
+            hz: refinedHz,
+          }
+        : {
+            periodSize: bestPeriodSize,
+            correlation: bestCorrelation,
+            comparedRegionMaxAmplitude: getComparedRegionMaxAmplitude(
+              samples,
+              bestPeriodSize,
+              settings,
+              cache,
+            ),
+            hz: refinedHz,
+          };
 
   for (const periodSize of visitedPeriodSizes) {
     cache?.walkedPeriodByPeriodSize.set(periodSize, walkedPeriod);
@@ -219,30 +223,10 @@ function getWalkedPeriod(samples, seedPeriodSize, settings, sampleRate, cache = 
   return walkedPeriod;
 }
 
-export function getWalkedPitchHz(samples, sampleRate, seedHz, settings = PICA_SETTINGS_DEFAULTS) {
-  const picaSettings = getPicaSettings(settings);
+export function getWalkedPitchHz(samples, sampleRate, seedHz, settings) {
   const seedPeriodSize = Math.round(sampleRate / seedHz);
-  const walkedPeriod = getWalkedPeriod(samples, seedPeriodSize, picaSettings, sampleRate);
+  const walkedPeriod = getWalkedPeriod(samples, seedPeriodSize, settings, sampleRate);
   return walkedPeriod ? walkedPeriod.hz : Number.NaN;
-}
-
-function pushStrongestExtremum(extrema, extremum, maxExtremaPerFold) {
-  if (maxExtremaPerFold < 1) {
-    return;
-  }
-
-  let insertIndex = extrema.length;
-  while (insertIndex > 0 && Math.abs(extremum.value) > Math.abs(extrema[insertIndex - 1].value)) {
-    insertIndex -= 1;
-  }
-  if (insertIndex >= maxExtremaPerFold) {
-    return;
-  }
-
-  extrema.splice(insertIndex, 0, extremum);
-  if (extrema.length > maxExtremaPerFold) {
-    extrema.length = maxExtremaPerFold;
-  }
 }
 
 // This stays separate from fold/extrema scanning because the carry-forward fast path needs
@@ -267,124 +251,93 @@ function getMaxAmplitudeFromRight(samples, cache = null) {
   return maxAmplitudeFromRight;
 }
 
-function getFoldExtremaFromWaveform(samples, settings, cache = null) {
-  const foldExtrema = [];
+function getFoldExtremaFromWaveform(samples, settings) {
+  const peaks = [];
+  const troughs = [];
   let foldIndex = 0;
-  let foldStartSample = samples.length - 1;
+  const maxFoldCount = settings.maxCrossingsPerPeriod * 2;
+  // We tried keeping multiple extrema per fold, but one worked just as well and was ~30% faster.
+  let rightSample = samples[samples.length - 1];
+  let currentSample = samples[samples.length - 2];
+  let type = currentSample > 0 ? "peak" : currentSample < 0 ? "trough" : null;
+  let bestIndex = type ? samples.length - 2 : -1;
+  let bestValue = currentSample;
 
-  while (foldStartSample > 0 && foldIndex < settings.maxCrossingsPerPeriod * 2) {
-    let type = null;
-    let strongestIndex = foldStartSample;
-    const localExtrema = [];
-
-    while (true) {
-      const sample = samples[foldStartSample];
-      if (type === null) {
-        if (sample > 0) type = "peak";
-        if (sample < 0) type = "trough";
-      }
-
-      if (Math.abs(sample) > Math.abs(samples[strongestIndex])) {
-        strongestIndex = foldStartSample;
-      }
-
-      if (foldStartSample > 0 && foldStartSample < samples.length - 1) {
-        const previous = samples[foldStartSample - 1];
-        const next = samples[foldStartSample + 1];
-        const isPeak = previous < sample && sample > next;
-        const isTrough = previous > sample && sample < next;
-        if (type === "peak" && isPeak) {
-          pushStrongestExtremum(
-            localExtrema,
-            {
-              index: foldStartSample,
-              value: sample,
-            },
-            settings.maxExtremaPerFold,
-          );
-        }
-        if (type === "trough" && isTrough) {
-          pushStrongestExtremum(
-            localExtrema,
-            {
-              index: foldStartSample,
-              value: sample,
-            },
-            settings.maxExtremaPerFold,
-          );
+  for (
+    let sampleIndex = samples.length - 2;
+    sampleIndex > 0 && foldIndex < maxFoldCount;
+    sampleIndex -= 1
+  ) {
+    const leftSample = samples[sampleIndex - 1];
+    if (currentSample < 0 !== rightSample < 0) {
+      if (bestIndex !== -1 && !(foldIndex === 0 && bestIndex === samples.length - 1)) {
+        const extremum = {
+          index: bestIndex,
+          value: bestValue,
+          type,
+          foldIndex,
+        };
+        if (type === "peak") {
+          peaks.push(extremum);
+        } else {
+          troughs.push(extremum);
         }
       }
-
-      if (foldStartSample === 0 || hasZeroCrossing(samples[foldStartSample - 1], sample)) {
+      foldIndex += 1;
+      if (foldIndex >= maxFoldCount) {
         break;
       }
-      foldStartSample -= 1;
+
+      type = currentSample > 0 ? "peak" : currentSample < 0 ? "trough" : null;
+      bestIndex = type ? sampleIndex : -1;
+      bestValue = currentSample;
     }
 
-    if (type) {
-      const extrema = localExtrema.length
-        ? localExtrema
-        : foldIndex === 0
-          ? []
-          : [
-              {
-                index: strongestIndex,
-                value: samples[strongestIndex],
-              },
-            ];
-
-      extrema
-        .sort((left, right) => right.index - left.index)
-        .forEach((extremum) => {
-          foldExtrema.push({
-            ...extremum,
-            type,
-            foldIndex,
-          });
-        });
+    if (
+      type !== null &&
+      (bestIndex === -1 ||
+        (type === "peak" ? currentSample >= bestValue : currentSample <= bestValue))
+    ) {
+      bestIndex = sampleIndex;
+      bestValue = currentSample;
     }
 
-    if (foldStartSample === 0) break;
-    foldStartSample -= 1;
-    foldIndex += 1;
+    rightSample = currentSample;
+    currentSample = leftSample;
   }
 
-  return foldExtrema;
-}
-
-function getAnchorFromTypedExtrema(typedExtrema, type) {
-  const anchorFoldIndex = typedExtrema[0]?.foldIndex;
-  if (anchorFoldIndex === undefined) return null;
-
-  let anchor = typedExtrema[0];
-  for (let extremumIndex = 1; extremumIndex < typedExtrema.length; extremumIndex += 1) {
-    const extremum = typedExtrema[extremumIndex];
-    if (extremum.foldIndex !== anchorFoldIndex) break;
-    if (type === "peak" ? extremum.value > anchor.value : extremum.value < anchor.value) {
-      anchor = extremum;
+  if (
+    foldIndex < maxFoldCount &&
+    bestIndex !== -1 &&
+    !(foldIndex === 0 && bestIndex === samples.length - 1)
+  ) {
+    const extremum = {
+      index: bestIndex,
+      value: bestValue,
+      type,
+      foldIndex,
+    };
+    if (type === "peak") {
+      peaks.push(extremum);
+    } else {
+      troughs.push(extremum);
     }
   }
-  return anchor;
+
+  return {
+    peaks,
+    troughs,
+  };
 }
 
 function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, cache = null) {
   const candidates = [];
-  const peakExtrema = [];
-  const troughExtrema = [];
-
-  for (const extremum of foldExtrema) {
-    if (extremum.type === "peak") {
-      peakExtrema.push(extremum);
-      continue;
-    }
-    troughExtrema.push(extremum);
-  }
 
   for (const [type, typedExtrema] of [
-    ["peak", peakExtrema],
-    ["trough", troughExtrema],
+    ["peak", foldExtrema.peaks],
+    ["trough", foldExtrema.troughs],
   ]) {
-    const anchor = getAnchorFromTypedExtrema(typedExtrema, type);
+    const anchor = typedExtrema[0];
     if (!anchor) continue;
 
     for (let extremumIndex = 0; extremumIndex < typedExtrema.length; extremumIndex += 1) {
@@ -397,7 +350,14 @@ function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, ca
       const sourceHz = sampleRate / sourcePeriodSize;
       if (sourceHz < PICA_MIN_HZ || sourceHz > PICA_MAX_HZ) continue;
 
-      const walkedPeriod = getWalkedPeriod(samples, sourcePeriodSize, settings, sampleRate, cache);
+      const walkedPeriod = getWalkedPeriod(
+        samples,
+        sourcePeriodSize,
+        settings,
+        sampleRate,
+        "candidateSearch",
+        cache,
+      );
       if (!walkedPeriod || walkedPeriod.correlation < settings.minCorr) continue;
       const hzFeature = Math.log2(walkedPeriod.hz / PICA_MIN_HZ);
       const correlationFeature = walkedPeriod.correlation;
@@ -460,6 +420,7 @@ function getPicaPitchResultFromAnalysis(analysis) {
   }
 
   if (
+    analysis.winningCandidate.type !== "carryForward" &&
     analysis.winningCandidate.comparedRegionMaxAmplitude !== undefined &&
     analysis.winningCandidate.comparedRegionMaxAmplitude < analysis.settings.minAmp
   ) {
@@ -498,7 +459,14 @@ function getCarryForwardCandidate(samples, sampleRate, settings, priorStep, cach
   }
 
   const sourcePeriodSize = Math.round(sampleRate / priorStep.hz);
-  const walkedPeriod = getWalkedPeriod(samples, sourcePeriodSize, settings, sampleRate, cache);
+  const walkedPeriod = getWalkedPeriod(
+    samples,
+    sourcePeriodSize,
+    settings,
+    sampleRate,
+    "carryForward",
+    cache,
+  );
   if (!walkedPeriod || walkedPeriod.correlation <= threshold) {
     return null;
   }
@@ -512,13 +480,7 @@ function getCarryForwardCandidate(samples, sampleRate, settings, priorStep, cach
   };
 }
 
-export function getPicaPitchAnalysisFromWaveform(
-  samples,
-  sampleRate,
-  settings = PICA_SETTINGS_DEFAULTS,
-  priorStep = null,
-) {
-  const picaSettings = getPicaSettings(settings);
+export function getPicaPitchAnalysisFromWaveform(samples, sampleRate, settings, priorStep = null) {
   const cache = {
     correlationByPeriodSize: new Map(),
     maxAmplitudeFromRight: undefined,
@@ -526,44 +488,79 @@ export function getPicaPitchAnalysisFromWaveform(
   };
   const { zeroCrossingCount, maxAmplitude } = getWindowStats(samples);
   const analysis = {
-    settings: picaSettings,
+    settings,
     zeroCrossingCount,
     maxAmplitude,
-    foldExtrema: [],
+    foldExtrema: { peaks: [], troughs: [] },
     candidates: [],
     winningCandidate: null,
   };
 
-  if (maxAmplitude < picaSettings.minAmp || zeroCrossingCount === 0) {
+  if (maxAmplitude < settings.minAmp || zeroCrossingCount === 0) {
     return {
       ...analysis,
-      ...getPicaPitchResultFromAnalysis(analysis, picaSettings),
+      ...getPicaPitchResultFromAnalysis(analysis),
     };
   }
 
-  const carryForwardCandidate = getCarryForwardCandidate(
-    samples,
-    sampleRate,
-    picaSettings,
-    priorStep,
-    cache,
-  );
-  const foldExtrema = carryForwardCandidate
-    ? []
-    : getFoldExtremaFromWaveform(samples, picaSettings, cache);
-  const { candidates, winningCandidate } = carryForwardCandidate
+  const priorSuppressedOctaveJumpCount = priorStep?.suppressedOctaveJumpCount ?? 0;
+  const fastPathCarryForwardCandidate =
+    priorSuppressedOctaveJumpCount > 0
+      ? null
+      : getCarryForwardCandidate(samples, sampleRate, settings, priorStep, cache);
+  const extrema = fastPathCarryForwardCandidate
+    ? { peaks: [], troughs: [] }
+    : getFoldExtremaFromWaveform(samples, settings);
+  const { candidates, winningCandidate } = fastPathCarryForwardCandidate
     ? {
         candidates: [],
-        winningCandidate: carryForwardCandidate,
+        winningCandidate: fastPathCarryForwardCandidate,
       }
-    : getCandidatesFromExtrema(samples, sampleRate, foldExtrema, picaSettings, cache);
+    : getCandidatesFromExtrema(samples, sampleRate, extrema, settings, cache);
+  let suppressedOctaveJumpCount = 0;
+  let resolvedWinningCandidate = winningCandidate;
+
+  // If the pitch jumps a lot from the previous step with a full search,
+  //  we force a carryForward pass instead.
+  if (
+    !fastPathCarryForwardCandidate &&
+    resolvedWinningCandidate?.type !== "carryForward" &&
+    Number.isFinite(resolvedWinningCandidate?.hz) &&
+    Number.isFinite(priorStep?.hz)
+  ) {
+    const diff = resolvedWinningCandidate.hz / priorStep.hz;
+    // Around 1000 cents is close to an octave jump, so allow some wriggle room around 1:2 and 2:1.
+    if (diff < 0.56 || diff > 1.8) {
+      const sourcePeriodSize = Math.round(sampleRate / priorStep.hz);
+      const walkedPeriod = getWalkedPeriod(
+        samples,
+        sourcePeriodSize,
+        settings,
+        sampleRate,
+        "carryForward",
+        cache,
+      );
+      if (walkedPeriod && priorSuppressedOctaveJumpCount < 2) {
+        suppressedOctaveJumpCount = priorSuppressedOctaveJumpCount + 1;
+        resolvedWinningCandidate = {
+          type: "carryForward",
+          sourcePeriodSize,
+          periodSize: walkedPeriod.periodSize,
+          hz: walkedPeriod.hz,
+          correlation: walkedPeriod.correlation,
+          comparedRegionMaxAmplitude: walkedPeriod.comparedRegionMaxAmplitude,
+        };
+      }
+    }
+  }
   const completedAnalysis = {
     ...analysis,
-    foldExtrema,
+    foldExtrema: extrema,
     candidates,
-    winningCandidate,
+    winningCandidate: resolvedWinningCandidate,
+    suppressedOctaveJumpCount,
   };
-  const picaPitchResult = getPicaPitchResultFromAnalysis(completedAnalysis, picaSettings);
+  const picaPitchResult = getPicaPitchResultFromAnalysis(completedAnalysis);
 
   return {
     ...completedAnalysis,

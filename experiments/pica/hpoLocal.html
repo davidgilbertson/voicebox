@@ -105,6 +105,58 @@
         white-space: nowrap;
       }
 
+      #settingInputs {
+        display: grid;
+        gap: 6px;
+        width: fit-content;
+        max-width: 100%;
+        padding: 10px 14px;
+        justify-self: start;
+      }
+
+      .settings-grid {
+        display: grid;
+        grid-template-columns: 200px max-content max-content max-content max-content max-content max-content;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .settings-grid[role="rowgroup"] {
+        gap: 6px;
+      }
+
+      .settings-body {
+        display: grid;
+        gap: 6px;
+      }
+
+      .settings-row {
+        padding: 8px 10px;
+        border: 1px solid #1f2937;
+        border-radius: 10px;
+        background: #0f172a;
+      }
+
+      .settings-label {
+        color: #cbd5e1;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .settings-checkbox {
+        justify-self: center;
+      }
+
+      .settings-steps {
+        width: 100%;
+      }
+
+      .settings-values {
+        color: #94a3b8;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
       .toolbar-number {
         border: 1px solid #334155;
         background: #111827;
@@ -150,6 +202,16 @@
         line-height: 1.5;
         white-space: pre-wrap;
       }
+
+      @media (max-width: 900px) {
+        .settings-grid {
+          grid-template-columns: 160px max-content max-content max-content max-content max-content max-content;
+        }
+
+        .chart-plot {
+          width: min(100%, 500px);
+        }
+      }
     </style>
   </head>
   <body>
@@ -157,9 +219,9 @@
       <div id="toolbar">
         <button id="rerunAllButton" class="toolbar-btn" type="button">Run all charts</button>
         <a class="toolbar-btn" href="hpo.html">Open Heatmap Sweep</a>
-        <div id="settingInputs"></div>
         <div id="status">Ready.</div>
       </div>
+      <div id="settingInputs"></div>
       <div id="summary">Carry-forward accuracy vs carry-forward speed.</div>
       <details id="runLogDetails" open>
         <summary>Run log</summary>

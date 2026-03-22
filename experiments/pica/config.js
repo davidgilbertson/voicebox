@@ -8,20 +8,18 @@ export const PICA_ACCURACY_CENTS = 50;
 export const SIMILARITY_FUNC = "cosine";
 export const PICA_SETTINGS_DEFAULTS = {
   minAmp: PICA_MIN_WINDOW_MAX_AMPLITUDE,
-  minCorr: 0.9,
+  minCorr: 0.83,
   minCarryCorr: 0.5,
-  maxExtremaPerFold: 6,
-  maxCrossingsPerPeriod: 20,
-  maxComparisonPatches: 6,
-  corrSamplePoints: 20,
-  maxWalkSteps: 10,
+  maxCrossingsPerPeriod: 23,
+  maxComparisonPatches: 3,
+  corrSamplePoints: 18,
+  maxWalkSteps: 60,
   maxCarryRun: 10,
-  correlationToHzWeightRatio: 36,
+  correlationToHzWeightRatio: 250,
 };
 
 // export const SIMILARITY_FUNC = "scaledDot";
 // export const PICA_SETTINGS_DEFAULTS = {
-//   maxExtremaPerFold: 2,
 //   maxCrossingsPerPeriod: 18,
 //   maxComparisonPatches: 3,
 //   maxWalkSteps: 10,
@@ -31,7 +29,6 @@ export const PICA_SETTINGS_DEFAULTS = {
 
 // export const SIMILARITY_FUNC = "mae";
 // export const PICA_SETTINGS_DEFAULTS = {
-//   maxExtremaPerFold: 2,
 //   maxCrossingsPerPeriod: 18,
 //   maxComparisonPatches: 3,
 //   maxWalkSteps: 10,
@@ -63,25 +60,15 @@ export const PICA_SETTING_FIELDS = [
     label: "min carry correlation",
     inputLabel: "minCarryCorr",
     min: 0,
-    max: 20,
+    max: 1,
     step: 0.1,
     title: "Minimum prior and walked correlation required before the carry-forward path can win.",
-  },
-  {
-    key: "maxExtremaPerFold",
-    label: "extrema-per-fold",
-    inputLabel: "maxExtremaPerFold",
-    min: 1,
-    max: 8,
-    step: 1,
-    title: "How many same-sign extrema to keep from each fold.",
   },
   {
     key: "maxCrossingsPerPeriod",
     label: "crossings-per-period",
     inputLabel: "maxCrossingsPerPeriod",
-    min: 2,
-    max: 64,
+    min: 1,
     step: 2,
     title: "Maximum zero crossings to allow in one period when collecting recent folds.",
   },
@@ -90,7 +77,6 @@ export const PICA_SETTING_FIELDS = [
     label: "max comparison patches",
     inputLabel: "maxPatches",
     min: 2,
-    max: 16,
     step: 1,
     title:
       "Maximum number of trailing period-sized patches to compare when scoring a candidate period.",
@@ -100,7 +86,6 @@ export const PICA_SETTING_FIELDS = [
     label: "corr sample points",
     inputLabel: "corrPts",
     min: 1,
-    max: 128,
     step: 1,
     title: "Approximate number of sampled points per compared patch when computing correlation.",
   },
@@ -109,7 +94,6 @@ export const PICA_SETTING_FIELDS = [
     label: "max walk",
     inputLabel: "maxWalk",
     min: 0,
-    max: 64,
     step: 2,
     title:
       "Maximum number of one-sample period adjustments to try when hill-climbing a candidate period.",
@@ -118,8 +102,7 @@ export const PICA_SETTING_FIELDS = [
     key: "maxCarryRun",
     label: "max carry run",
     inputLabel: "maxCarryRun",
-    min: 1,
-    max: 200,
+    min: 0,
     step: 1,
     title:
       "Maximum number of consecutive carry-forward windows before Pica forces a fresh extrema search.",
@@ -129,7 +112,6 @@ export const PICA_SETTING_FIELDS = [
     label: "corr/hz ratio",
     inputLabel: "corrHzRatio",
     min: 0,
-    max: 100,
     step: 0.2,
     title: "Correlation feature weight relative to the Hz feature weight of 1.",
   },
