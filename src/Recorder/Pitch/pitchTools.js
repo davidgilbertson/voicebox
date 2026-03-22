@@ -8,9 +8,15 @@ import {
 } from "../canvasTools.js";
 import { mapWaveformIntensityToStrokeColor } from "../colorTools.js";
 
-const GRID_COLORS = {
-  octave: colors.slate[300],
+const GRID_LINE_COLORS = {
+  octave: colors.slate[400],
   natural: colors.slate[600],
+  accidental: colors.slate[800],
+};
+
+const GRID_LABEL_COLORS = {
+  octave: colors.slate[300],
+  natural: colors.slate[500],
   accidental: colors.slate[800],
 };
 
@@ -78,7 +84,7 @@ export class PitchChartRenderer {
       for (const line of lines) {
         const normalized = (line.cents - this.minCents) / centsSpan;
         const y = PLOT_Y_INSET + plotHeight - normalized * plotHeight;
-        bgCtx.strokeStyle = GRID_COLORS[line.tier];
+        bgCtx.strokeStyle = GRID_LINE_COLORS[line.tier];
         bgCtx.moveTo(PLOT_LEFT, y);
         bgCtx.lineTo(width, y);
         bgCtx.stroke();
@@ -91,7 +97,7 @@ export class PitchChartRenderer {
         if (!line.showLabel) continue;
         const normalized = (line.cents - this.minCents) / centsSpan;
         const y = PLOT_Y_INSET + plotHeight - normalized * plotHeight;
-        bgCtx.fillStyle = GRID_COLORS[line.tier];
+        bgCtx.fillStyle = GRID_LABEL_COLORS[line.tier];
         bgCtx.fillText(line.noteName.replace("#", ""), LABEL_X, y);
       }
     }
