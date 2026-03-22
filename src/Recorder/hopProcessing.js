@@ -113,13 +113,20 @@ function processHopSpectrogram({
 }) {
   const analyser = audioSessionState.analyser;
   const highResAnalyser = audioSessionState.highResAnalyser;
+  const shouldSkipBaseSpectrum = usePica && highResAnalyser;
 
-  const baseCaptureResult = captureSpectrumForHop({
-    analyser,
-    spectrogramBuffers,
-    skipNextSpectrumFrame,
-    includePitchDetection: !usePica,
-  });
+  const baseCaptureResult = shouldSkipBaseSpectrum
+    ? {
+        capturedSpectrum: null,
+        nextSkipNextSpectrumFrame: skipNextSpectrumFrame,
+        spectrogramBuffers,
+      }
+    : captureSpectrumForHop({
+        analyser,
+        spectrogramBuffers,
+        skipNextSpectrumFrame,
+        includePitchDetection: !usePica,
+      });
   const pitchSpectrum = baseCaptureResult.capturedSpectrum;
   const spectrumForPitchDetection = pitchSpectrum?.spectrumForPitchDetection ?? null;
   const nextSkipNextSpectrumFrame = baseCaptureResult.nextSkipNextSpectrumFrame;
