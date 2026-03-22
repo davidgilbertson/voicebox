@@ -1,8 +1,5 @@
 import { PICA_MAX_HZ, PICA_MIN_HZ } from "./config.js";
-import {
-  getCorrelation,
-  getPicaPitchAnalysisFromWaveform,
-} from "./picaPitch.js";
+import { getCorrelation, getPicaPitchAnalysisFromWaveform } from "./picaPitch.js";
 import {
   PICA_WINDOW_CYCLES,
   PICA_WINDOW_DURATION_SEC,
@@ -664,11 +661,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
         )
       : null;
     const correlationSeries = needsPicaAnalysis
-      ? getPicaCorrelationSeries(
-          waveformWindow.samples,
-          waveformWindow.sampleRate,
-          result.settings,
-        )
+      ? getPicaCorrelationSeries(waveformWindow.samples, waveformWindow.sampleRate, result.settings)
       : null;
     const extremaMarkers = analysis
       ? getExtremaMarkers(waveformWindow, analysis)

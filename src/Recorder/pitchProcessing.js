@@ -5,6 +5,7 @@ const SMOOTH_RADIUS = 3;
 const SMOOTH_KERNEL = [0.01, 0.08, 0.22, 0.38, 0.22, 0.08, 0.01];
 const ANCHOR_MAX_DIFF_CENTS = 400;
 const OCTAVE_OUTLIER_CENTS_THRESHOLD = 1000;
+const ISLAND_MAX_JUMP_CENTS = 200;
 
 function applyAnchorOutlierCorrectionAtWrite(processingState) {
   const rawPitchCentsRing = processingState.rawPitchCentsRing;
@@ -25,24 +26,10 @@ function applyAnchorOutlierCorrectionAtWrite(processingState) {
   // 1200 cents is one octave up/down; this catches near-octave-sized pitch jumps.
   if (Math.abs(centerCents - anchorMeanCents) <= OCTAVE_OUTLIER_CENTS_THRESHOLD) return;
 
+  // Replace near-octave center glitches with the anchor mean.
   const correctedCenterCents = anchorMeanCents;
   rawPitchCentsRing.setAt(-3, correctedCenterCents);
   processingState.smoothedPitchCentsRing.setAt(-3, correctedCenterCents);
-}
-
-function updateDisplaySmoothingAtWrite(processingState) {
-  const rawPitchCentsRing = processingState.rawPitchCentsRing;
-  if (rawPitchCentsRing.sampleCount < SMOOTH_RADIUS * 2 + 1) return;
-
-  let smoothed = 0;
-  for (let offset = -SMOOTH_RADIUS; offset <= SMOOTH_RADIUS; offset += 1) {
-    const sample = rawPitchCentsRing.at(-(SMOOTH_RADIUS - offset + 1));
-    if (!Number.isFinite(sample)) {
-      return;
-    }
-    smoothed += sample * SMOOTH_KERNEL[offset + SMOOTH_RADIUS];
-  }
-  processingState.smoothedPitchCentsRing.setAt(-(SMOOTH_RADIUS + 1), smoothed);
 }
 
 export function createPitchProcessingState({ columnRateHz, seconds, silencePauseStepThreshold }) {
@@ -58,6 +45,7 @@ export function createPitchProcessingState({ columnRateHz, seconds, silencePause
     vibratoRateHzRing,
     columnRateHz,
     silencePauseStepThreshold,
+    cleanupWindow: new Float32Array(SMOOTH_RADIUS * 2 + 1),
     silentStepCount: 0,
     silencePaused: false,
     diagnostics: {
@@ -66,13 +54,95 @@ export function createPitchProcessingState({ columnRateHz, seconds, silencePause
   };
 }
 
+function runDisplayCleanupAtWrite(processingState) {
+  const rawPitchCentsRing = processingState.rawPitchCentsRing;
+  if (rawPitchCentsRing.sampleCount < SMOOTH_RADIUS * 2 + 1) return;
+
+  const cleanupWindow = processingState.cleanupWindow;
+  for (let i = 0; i < cleanupWindow.length; i += 1) {
+    cleanupWindow[i] = rawPitchCentsRing.at(i - cleanupWindow.length);
+  }
+
+  // Island detection: if the finalized center run is disconnected from both sides, drop it.
+  if (Number.isFinite(cleanupWindow[SMOOTH_RADIUS])) {
+    let islandStart = SMOOTH_RADIUS;
+    while (islandStart > 0) {
+      const nextValue = cleanupWindow[islandStart - 1];
+      const currentValue = cleanupWindow[islandStart];
+      if (!Number.isFinite(nextValue)) break;
+      if (Math.abs(currentValue - nextValue) > ISLAND_MAX_JUMP_CENTS) break;
+      islandStart -= 1;
+    }
+
+    let islandEnd = SMOOTH_RADIUS;
+    while (islandEnd < cleanupWindow.length - 1) {
+      const currentValue = cleanupWindow[islandEnd];
+      const nextValue = cleanupWindow[islandEnd + 1];
+      if (!Number.isFinite(nextValue)) break;
+      if (Math.abs(currentValue - nextValue) > ISLAND_MAX_JUMP_CENTS) break;
+      islandEnd += 1;
+    }
+
+    if (islandStart > 0 && islandEnd < cleanupWindow.length - 1) {
+      let islandMinCents = cleanupWindow[islandStart];
+      let islandMaxCents = cleanupWindow[islandStart];
+      for (let i = islandStart + 1; i <= islandEnd; i += 1) {
+        islandMinCents = Math.min(islandMinCents, cleanupWindow[i]);
+        islandMaxCents = Math.max(islandMaxCents, cleanupWindow[i]);
+      }
+
+      let hasConnection = false;
+      for (let i = 0; i < islandStart; i += 1) {
+        const value = cleanupWindow[i];
+        if (!Number.isFinite(value)) continue;
+        if (
+          value >= islandMinCents - ISLAND_MAX_JUMP_CENTS &&
+          value <= islandMaxCents + ISLAND_MAX_JUMP_CENTS
+        ) {
+          hasConnection = true;
+          break;
+        }
+      }
+
+      for (let i = islandEnd + 1; i < cleanupWindow.length; i += 1) {
+        const value = cleanupWindow[i];
+        if (!Number.isFinite(value)) continue;
+        if (
+          value >= islandMinCents - ISLAND_MAX_JUMP_CENTS &&
+          value <= islandMaxCents + ISLAND_MAX_JUMP_CENTS
+        ) {
+          hasConnection = true;
+          break;
+        }
+      }
+
+      if (!hasConnection) {
+        for (let i = islandStart; i <= islandEnd; i += 1) {
+          rawPitchCentsRing.setAt(i - cleanupWindow.length, Number.NaN);
+          processingState.smoothedPitchCentsRing.setAt(i - cleanupWindow.length, Number.NaN);
+          cleanupWindow[i] = Number.NaN;
+        }
+      }
+    }
+  }
+
+  // Display smoothing: write the finalized center sample only when the whole 7-step window is valid.
+  let smoothed = 0;
+  for (let i = 0; i < cleanupWindow.length; i += 1) {
+    const sample = cleanupWindow[i];
+    if (!Number.isFinite(sample)) return;
+    smoothed += sample * SMOOTH_KERNEL[i];
+  }
+  processingState.smoothedPitchCentsRing.setAt(-(SMOOTH_RADIUS + 1), smoothed);
+}
+
 function pushPitchValue(processingState, value, lineStrength) {
   processingState.rawPitchCentsRing.push(value);
   processingState.smoothedPitchCentsRing.push(value);
   processingState.lineStrengthRing.push(lineStrength);
   processingState.vibratoRateHzRing.push(Number.NaN);
   applyAnchorOutlierCorrectionAtWrite(processingState);
-  updateDisplaySmoothingAtWrite(processingState);
+  runDisplayCleanupAtWrite(processingState);
   const estimatedRateNow = estimateTimelineVibratoRate({
     ring: processingState.smoothedPitchCentsRing,
     samplesPerSecond: processingState.columnRateHz,

@@ -210,6 +210,46 @@ test("display smoothing keeps raw value when smoothing window has NaN", () => {
   assert.equal(display[3], 10);
 });
 
+test("isolated five-sample island is removed from raw and display history", () => {
+  const state = createPitchProcessingState({
+    columnRateHz: 20,
+    seconds: 1,
+    silencePauseStepThreshold: silencePauseStepThreshold(20, 300),
+  });
+  const series = [0, 300, 320, 330, 340, 350, 0];
+  for (const cents of series) {
+    processPitchSample(state, {
+      cents,
+      lineStrength: 0.5,
+      autoPauseOnSilence: false,
+    });
+  }
+
+  const raw = orderedValues(state);
+  const display = orderedDisplayValues(state);
+  assert.deepEqual(raw.map(Number.isNaN), [false, true, true, true, true, true, false]);
+  assert.deepEqual(display.map(Number.isNaN), [false, true, true, true, true, true, false]);
+});
+
+test("connected middle run survives island cleanup when a side stays within jump range", () => {
+  const state = createPitchProcessingState({
+    columnRateHz: 20,
+    seconds: 1,
+    silencePauseStepThreshold: silencePauseStepThreshold(20, 300),
+  });
+  const series = [0, 300, 320, 330, 340, 350, 180];
+  for (const cents of series) {
+    processPitchSample(state, {
+      cents,
+      lineStrength: 0.5,
+      autoPauseOnSilence: false,
+    });
+  }
+
+  const raw = orderedValues(state);
+  assert.deepEqual(raw.map(Number.isNaN), [false, false, false, false, false, false, false]);
+});
+
 test("anchor outlier correction rewrites center sample (i-3) in-place", () => {
   const state = createPitchProcessingState({
     columnRateHz: 20,

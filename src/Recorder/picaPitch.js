@@ -110,7 +110,7 @@ function getCorrelation(samples, periodSize, cache) {
   for (let leftIndex = leftStart, rightIndex = rightStart; rightIndex < rightStart + periodSize; ) {
     const left = samples[leftIndex];
     const right = samples[rightIndex];
-    if (!hasZeroCrossing && rightIndex > rightStart && (lastRightSample < 0) !== (right < 0)) {
+    if (!hasZeroCrossing && rightIndex > rightStart && lastRightSample < 0 !== right < 0) {
       hasZeroCrossing = true;
     }
     lastRightSample = right;
@@ -135,7 +135,10 @@ function getCorrelation(samples, periodSize, cache) {
     dot = 0;
     leftPower = 0;
     rightPower = 0;
-    for (let leftIndex = leftStart, rightIndex = rightStart; rightIndex < rightStart + periodSize; ) {
+    for (
+      let leftIndex = leftStart, rightIndex = rightStart;
+      rightIndex < rightStart + periodSize;
+    ) {
       const left = samples[leftIndex];
       const right = samples[rightIndex];
       dot += left * right;
@@ -281,7 +284,7 @@ function getFoldExtremaFromWaveform(samples) {
     sampleIndex -= 1
   ) {
     const leftSample = samples[sampleIndex - 1];
-    if ((currentSample < 0) !== (rightSample < 0)) {
+    if (currentSample < 0 !== rightSample < 0) {
       if (bestIndex !== -1 && !(foldIndex === 0 && bestIndex === samples.length - 1)) {
         const extremum = {
           index: bestIndex,
