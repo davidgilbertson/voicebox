@@ -9,13 +9,13 @@ const PICA_MAX_CROSSINGS_PER_PERIOD = 23;
 // Maximum period-sized patches to compare when scoring correlation.
 const PICA_MAX_COMPARISON_PATCHES = 3;
 // Approximate samples per patch used when estimating correlation.
-const PICA_CORR_SAMPLE_POINTS = 18;
+const PICA_CORR_SAMPLE_POINTS = 50;
 // Maximum one-sample hill-climb steps when refining a period.
 const PICA_MAX_WALK_STEPS = 60;
 // Weight of correlation relative to octave position when ranking candidates.
 const PICA_CORRELATION_TO_HZ_WEIGHT_RATIO = 250;
 // Minimum correlation required for a fresh non-carry PICA candidate.
-const PICA_MIN_CORR = 0.83;
+const PICA_MIN_CORR = 0.5;
 // Minimum correlation required for carry-forward to continue.
 const PICA_MIN_CARRY_CORR = 0.5;
 // Maximum consecutive carry-forward hops before forcing a fresh search.
