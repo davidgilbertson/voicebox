@@ -1,35 +1,14 @@
 import { RingBuffer } from "./ringBuffer.js";
 import { estimateTimelineVibratoRate } from "./Vibrato/vibratoTools.js";
 
+const CLEANUP_WINDOW_SIZE = 7;
 const SMOOTH_RADIUS = 3;
 const SMOOTH_KERNEL = [0.01, 0.08, 0.22, 0.38, 0.22, 0.08, 0.01];
-const ANCHOR_MAX_DIFF_CENTS = 400;
-const OCTAVE_OUTLIER_CENTS_THRESHOLD = 1000;
-const ISLAND_MAX_JUMP_CENTS = 200;
+const MAX_CENTS_PER_STEP = 150; // Our biggest span is 6 -> 900 cents
+const OUTLIER_CENTS_THRESHOLD = 1000;
 
-function applyAnchorOutlierCorrectionAtWrite(processingState) {
-  const rawPitchCentsRing = processingState.rawPitchCentsRing;
-  if (rawPitchCentsRing.sampleCount < 5) return;
-
-  const leftAnchorCents = rawPitchCentsRing.at(-5);
-  const rightAnchorCents = rawPitchCentsRing.at(-1);
-  const centerCents = rawPitchCentsRing.at(-3);
-  if (
-    !Number.isFinite(leftAnchorCents) ||
-    !Number.isFinite(rightAnchorCents) ||
-    !Number.isFinite(centerCents)
-  )
-    return;
-  if (Math.abs(leftAnchorCents - rightAnchorCents) > ANCHOR_MAX_DIFF_CENTS) return;
-
-  const anchorMeanCents = (leftAnchorCents + rightAnchorCents) / 2;
-  // 1200 cents is one octave up/down; this catches near-octave-sized pitch jumps.
-  if (Math.abs(centerCents - anchorMeanCents) <= OCTAVE_OUTLIER_CENTS_THRESHOLD) return;
-
-  // Replace near-octave center glitches with the anchor mean.
-  const correctedCenterCents = anchorMeanCents;
-  rawPitchCentsRing.setAt(-3, correctedCenterCents);
-  processingState.smoothedPitchCentsRing.setAt(-3, correctedCenterCents);
+function isFiniteCents(value) {
+  return Number.isFinite(value);
 }
 
 export function createPitchProcessingState({ columnRateHz, seconds, silencePauseStepThreshold }) {
@@ -45,7 +24,7 @@ export function createPitchProcessingState({ columnRateHz, seconds, silencePause
     vibratoRateHzRing,
     columnRateHz,
     silencePauseStepThreshold,
-    cleanupWindow: new Float32Array(SMOOTH_RADIUS * 2 + 1),
+    cleanupWindow: new Float32Array(CLEANUP_WINDOW_SIZE),
     silentStepCount: 0,
     silencePaused: false,
     diagnostics: {
@@ -54,79 +33,249 @@ export function createPitchProcessingState({ columnRateHz, seconds, silencePause
   };
 }
 
-function runDisplayCleanupAtWrite(processingState) {
+function setCleanupSample(processingState, cleanupWindow, cleanupWindowIndex, cents) {
   const rawPitchCentsRing = processingState.rawPitchCentsRing;
-  if (rawPitchCentsRing.sampleCount < SMOOTH_RADIUS * 2 + 1) return;
+  const ringIndex = cleanupWindowIndex - cleanupWindow.length;
+  rawPitchCentsRing.setAt(ringIndex, cents);
+  processingState.smoothedPitchCentsRing.setAt(ringIndex, cents);
+  cleanupWindow[cleanupWindowIndex] = cents;
+}
+
+function adjustOutliers(processingState) {
+  const rawPitchCentsRing = processingState.rawPitchCentsRing;
+  if (rawPitchCentsRing.sampleCount < CLEANUP_WINDOW_SIZE) return;
 
   const cleanupWindow = processingState.cleanupWindow;
   for (let i = 0; i < cleanupWindow.length; i += 1) {
     cleanupWindow[i] = rawPitchCentsRing.at(i - cleanupWindow.length);
   }
 
-  // Island detection: if the finalized center run is disconnected from both sides, drop it.
-  if (Number.isFinite(cleanupWindow[SMOOTH_RADIUS])) {
-    let islandStart = SMOOTH_RADIUS;
-    while (islandStart > 0) {
-      const nextValue = cleanupWindow[islandStart - 1];
-      const currentValue = cleanupWindow[islandStart];
-      if (!Number.isFinite(nextValue)) break;
-      if (Math.abs(currentValue - nextValue) > ISLAND_MAX_JUMP_CENTS) break;
-      islandStart -= 1;
-    }
+  const [pos1, pos2, pos3, pos4, pos5, pos6, pos7] = cleanupWindow;
 
-    let islandEnd = SMOOTH_RADIUS;
-    while (islandEnd < cleanupWindow.length - 1) {
-      const currentValue = cleanupWindow[islandEnd];
-      const nextValue = cleanupWindow[islandEnd + 1];
-      if (!Number.isFinite(nextValue)) break;
-      if (Math.abs(currentValue - nextValue) > ISLAND_MAX_JUMP_CENTS) break;
-      islandEnd += 1;
-    }
-
-    if (islandStart > 0 && islandEnd < cleanupWindow.length - 1) {
-      let islandMinCents = cleanupWindow[islandStart];
-      let islandMaxCents = cleanupWindow[islandStart];
-      for (let i = islandStart + 1; i <= islandEnd; i += 1) {
-        islandMinCents = Math.min(islandMinCents, cleanupWindow[i]);
-        islandMaxCents = Math.max(islandMaxCents, cleanupWindow[i]);
-      }
-
-      let hasConnection = false;
-      for (let i = 0; i < islandStart; i += 1) {
-        const value = cleanupWindow[i];
-        if (!Number.isFinite(value)) continue;
-        if (
-          value >= islandMinCents - ISLAND_MAX_JUMP_CENTS &&
-          value <= islandMaxCents + ISLAND_MAX_JUMP_CENTS
-        ) {
-          hasConnection = true;
-          break;
-        }
-      }
-
-      for (let i = islandEnd + 1; i < cleanupWindow.length; i += 1) {
-        const value = cleanupWindow[i];
-        if (!Number.isFinite(value)) continue;
-        if (
-          value >= islandMinCents - ISLAND_MAX_JUMP_CENTS &&
-          value <= islandMaxCents + ISLAND_MAX_JUMP_CENTS
-        ) {
-          hasConnection = true;
-          break;
-        }
-      }
-
-      if (!hasConnection) {
-        for (let i = islandStart; i <= islandEnd; i += 1) {
-          rawPitchCentsRing.setAt(i - cleanupWindow.length, Number.NaN);
-          processingState.smoothedPitchCentsRing.setAt(i - cleanupWindow.length, Number.NaN);
-          cleanupWindow[i] = Number.NaN;
-        }
-      }
+  // Symbols: A=Anchor, O=Outlier, R=Replacement, N=NaN, .=ignored
+  // 5 outliers in last 7
+  // In:  [A O O O O O A]
+  //         ↓ ↓ ↓ ↓ ↓
+  // Out: [A R R R R R A]
+  if (
+    isFiniteCents(pos1) &&
+    isFiniteCents(pos2) &&
+    isFiniteCents(pos3) &&
+    isFiniteCents(pos4) &&
+    isFiniteCents(pos5) &&
+    isFiniteCents(pos6) &&
+    isFiniteCents(pos7)
+  ) {
+    const anchorSpanCents = Math.abs(pos1 - pos7);
+    const anchorMeanCents = (pos1 + pos7) / 2;
+    if (
+      anchorSpanCents <= MAX_CENTS_PER_STEP * 6 &&
+      Math.abs(pos2 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD &&
+      Math.abs(pos3 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD &&
+      Math.abs(pos4 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD &&
+      Math.abs(pos5 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD &&
+      Math.abs(pos6 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD
+    ) {
+      setCleanupSample(processingState, cleanupWindow, 1, anchorMeanCents);
+      setCleanupSample(processingState, cleanupWindow, 2, anchorMeanCents);
+      setCleanupSample(processingState, cleanupWindow, 3, anchorMeanCents);
+      setCleanupSample(processingState, cleanupWindow, 4, anchorMeanCents);
+      setCleanupSample(processingState, cleanupWindow, 5, anchorMeanCents);
+      return;
     }
   }
 
-  // Display smoothing: write the finalized center sample only when the whole 7-step window is valid.
+  // 4 outliers in last 6
+  // In:  [. A O O O O A]
+  //           ↓ ↓ ↓ ↓
+  // Out: [. A R R R R A]
+  if (
+    isFiniteCents(pos2) &&
+    isFiniteCents(pos3) &&
+    isFiniteCents(pos4) &&
+    isFiniteCents(pos5) &&
+    isFiniteCents(pos6) &&
+    isFiniteCents(pos7)
+  ) {
+    const anchorSpanCents = Math.abs(pos2 - pos7);
+    const anchorMeanCents = (pos2 + pos7) / 2;
+    if (
+      anchorSpanCents <= MAX_CENTS_PER_STEP * 5 &&
+      Math.abs(pos3 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD &&
+      Math.abs(pos4 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD &&
+      Math.abs(pos5 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD &&
+      Math.abs(pos6 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD
+    ) {
+      setCleanupSample(processingState, cleanupWindow, 2, anchorMeanCents);
+      setCleanupSample(processingState, cleanupWindow, 3, anchorMeanCents);
+      setCleanupSample(processingState, cleanupWindow, 4, anchorMeanCents);
+      setCleanupSample(processingState, cleanupWindow, 5, anchorMeanCents);
+      return;
+    }
+  }
+
+  // 3 outliers in last 5
+  // In:  [. . A O O O A]
+  //             ↓ ↓ ↓
+  // Out: [. . A R R R A]
+  if (
+    isFiniteCents(pos3) &&
+    isFiniteCents(pos4) &&
+    isFiniteCents(pos5) &&
+    isFiniteCents(pos6) &&
+    isFiniteCents(pos7)
+  ) {
+    const anchorSpanCents = Math.abs(pos3 - pos7);
+    const anchorMeanCents = (pos3 + pos7) / 2;
+    if (
+      anchorSpanCents <= MAX_CENTS_PER_STEP * 4 &&
+      Math.abs(pos4 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD &&
+      Math.abs(pos5 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD &&
+      Math.abs(pos6 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD
+    ) {
+      setCleanupSample(processingState, cleanupWindow, 3, anchorMeanCents);
+      setCleanupSample(processingState, cleanupWindow, 4, anchorMeanCents);
+      setCleanupSample(processingState, cleanupWindow, 5, anchorMeanCents);
+      return;
+    }
+  }
+
+  // 2 outliers in last 4
+  // In:  [. . . A O O A]
+  //               ↓ ↓
+  // Out: [. . . A R R A]
+  if (isFiniteCents(pos4) && isFiniteCents(pos5) && isFiniteCents(pos6) && isFiniteCents(pos7)) {
+    const anchorSpanCents = Math.abs(pos4 - pos7);
+    const anchorMeanCents = (pos4 + pos7) / 2;
+    if (
+      anchorSpanCents <= MAX_CENTS_PER_STEP * 3 &&
+      Math.abs(pos5 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD &&
+      Math.abs(pos6 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD
+    ) {
+      setCleanupSample(processingState, cleanupWindow, 4, anchorMeanCents);
+      setCleanupSample(processingState, cleanupWindow, 5, anchorMeanCents);
+      return;
+    }
+  }
+
+  // 1 outlier in midpoint of last 3
+  // In:  [. . . . A O A]
+  //                 ↓
+  // Out: [. . . . A R A]
+  if (isFiniteCents(pos5) && isFiniteCents(pos6) && isFiniteCents(pos7)) {
+    const anchorSpanCents = Math.abs(pos5 - pos7);
+    const anchorMeanCents = (pos5 + pos7) / 2;
+    if (
+      anchorSpanCents <= MAX_CENTS_PER_STEP * 2 &&
+      Math.abs(pos6 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD
+    ) {
+      setCleanupSample(processingState, cleanupWindow, 5, anchorMeanCents);
+      return;
+    }
+  }
+
+  // 3 NaNs in last 7
+  // In:  [A A N N N A A]
+  //           ↓ ↓ ↓
+  // Out: [A A R R R A A]
+  if (
+    isFiniteCents(pos1) &&
+    isFiniteCents(pos2) &&
+    !isFiniteCents(pos3) &&
+    !isFiniteCents(pos4) &&
+    !isFiniteCents(pos5) &&
+    isFiniteCents(pos6) &&
+    isFiniteCents(pos7)
+  ) {
+    const gapStepCents = (pos6 - pos2) / 4;
+    setCleanupSample(processingState, cleanupWindow, 2, pos2 + gapStepCents);
+    setCleanupSample(processingState, cleanupWindow, 3, pos2 + gapStepCents * 2);
+    setCleanupSample(processingState, cleanupWindow, 4, pos2 + gapStepCents * 3);
+    return;
+  }
+
+  // 2 NaNs in last 6
+  // In:  [. A A N N A A]
+  //             ↓ ↓
+  // Out: [. A A R R A A]
+  if (
+    isFiniteCents(pos2) &&
+    isFiniteCents(pos3) &&
+    !isFiniteCents(pos4) &&
+    !isFiniteCents(pos5) &&
+    isFiniteCents(pos6) &&
+    isFiniteCents(pos7)
+  ) {
+    const gapStepCents = (pos6 - pos3) / 3;
+    setCleanupSample(processingState, cleanupWindow, 3, pos3 + gapStepCents);
+    setCleanupSample(processingState, cleanupWindow, 4, pos3 + gapStepCents * 2);
+    return;
+  }
+
+  // 1 NaN in last 5
+  // In:  [. . A A N A A]
+  //               ↓
+  // Out: [. . A A R A A]
+  if (
+    isFiniteCents(pos3) &&
+    isFiniteCents(pos4) &&
+    !isFiniteCents(pos5) &&
+    isFiniteCents(pos6) &&
+    isFiniteCents(pos7)
+  ) {
+    setCleanupSample(processingState, cleanupWindow, 4, (pos4 + pos6) / 2);
+    return;
+  }
+
+  // end-pos 1 outlier
+  // In:  [. . . A A O N]
+  //                 ↓
+  // Out: [. . . A A N N]
+  if (isFiniteCents(pos4) && isFiniteCents(pos5) && isFiniteCents(pos6) && !isFiniteCents(pos7)) {
+    const anchorSpanCents = Math.abs(pos4 - pos5);
+    const anchorMeanCents = (pos4 + pos5) / 2;
+    if (
+      anchorSpanCents <= MAX_CENTS_PER_STEP &&
+      Math.abs(pos6 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD
+    ) {
+      setCleanupSample(processingState, cleanupWindow, 5, Number.NaN);
+      return;
+    }
+  }
+
+  // end-pos 2 outliers
+  // In:  [. . A A O O N]
+  //               ↓ ↓
+  // Out: [. . A A N N N]
+  if (
+    isFiniteCents(pos3) &&
+    isFiniteCents(pos4) &&
+    isFiniteCents(pos5) &&
+    isFiniteCents(pos6) &&
+    !isFiniteCents(pos7)
+  ) {
+    const anchorSpanCents = Math.abs(pos3 - pos4);
+    const anchorMeanCents = (pos3 + pos4) / 2;
+    if (
+      anchorSpanCents <= MAX_CENTS_PER_STEP &&
+      Math.abs(pos5 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD &&
+      Math.abs(pos6 - anchorMeanCents) > OUTLIER_CENTS_THRESHOLD
+    ) {
+      setCleanupSample(processingState, cleanupWindow, 4, Number.NaN);
+      setCleanupSample(processingState, cleanupWindow, 5, Number.NaN);
+    }
+  }
+}
+
+function smooth(processingState) {
+  const rawPitchCentsRing = processingState.rawPitchCentsRing;
+  if (rawPitchCentsRing.sampleCount < CLEANUP_WINDOW_SIZE) return;
+
+  const cleanupWindow = processingState.cleanupWindow;
+  for (let i = 0; i < cleanupWindow.length; i += 1) {
+    cleanupWindow[i] = rawPitchCentsRing.at(i - cleanupWindow.length);
+  }
+
   let smoothed = 0;
   for (let i = 0; i < cleanupWindow.length; i += 1) {
     const sample = cleanupWindow[i];
@@ -141,8 +290,8 @@ function pushPitchValue(processingState, value, lineStrength) {
   processingState.smoothedPitchCentsRing.push(value);
   processingState.lineStrengthRing.push(lineStrength);
   processingState.vibratoRateHzRing.push(Number.NaN);
-  applyAnchorOutlierCorrectionAtWrite(processingState);
-  runDisplayCleanupAtWrite(processingState);
+  adjustOutliers(processingState);
+  smooth(processingState);
   const estimatedRateNow = estimateTimelineVibratoRate({
     ring: processingState.smoothedPitchCentsRing,
     samplesPerSecond: processingState.columnRateHz,

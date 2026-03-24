@@ -25,8 +25,26 @@ function orderedVibratoRates(state) {
   return Array.from(state.vibratoRateHzRing.values());
 }
 
-function hzToCents(hz) {
-  return 1200 * Math.log2(hz);
+function createState(columnRateHz = 20, seconds = 1) {
+  return createPitchProcessingState({
+    columnRateHz,
+    seconds,
+    silencePauseStepThreshold: silencePauseStepThreshold(columnRateHz, 300),
+  });
+}
+
+function writeSeries(state, series) {
+  for (const cents of series) {
+    processPitchSample(state, {
+      cents,
+      lineStrength: 0.5,
+      autoPauseOnSilence: false,
+    });
+  }
+}
+
+function roundSeries(series) {
+  return series.map((value) => (Number.isFinite(value) ? Number(value.toFixed(3)) : value));
 }
 
 test("pitch history keeps SPS * seconds points and 60 points per 5Hz oscillation at 300 SPS", () => {
@@ -172,11 +190,7 @@ test("each write initializes vibrato rate to NaN", () => {
 });
 
 test("display smoothing finalizes index i-3 as new samples arrive", () => {
-  const state = createPitchProcessingState({
-    columnRateHz: 20,
-    seconds: 1,
-    silencePauseStepThreshold: silencePauseStepThreshold(20, 300),
-  });
+  const state = createState();
   const series = [0, 0, 0, 10, 0, 0, 0, 0];
   for (const cents of series) {
     processPitchSample(state, {
@@ -192,11 +206,7 @@ test("display smoothing finalizes index i-3 as new samples arrive", () => {
 });
 
 test("display smoothing keeps raw value when smoothing window has NaN", () => {
-  const state = createPitchProcessingState({
-    columnRateHz: 20,
-    seconds: 1,
-    silencePauseStepThreshold: silencePauseStepThreshold(20, 300),
-  });
+  const state = createState();
   const series = [0, 0, 0, 10, 0, Number.NaN, 0];
   for (const cents of series) {
     processPitchSample(state, {
@@ -210,63 +220,68 @@ test("display smoothing keeps raw value when smoothing window has NaN", () => {
   assert.equal(display[3], 10);
 });
 
-test("isolated five-sample island is removed from raw and display history", () => {
-  const state = createPitchProcessingState({
-    columnRateHz: 20,
-    seconds: 1,
-    silencePauseStepThreshold: silencePauseStepThreshold(20, 300),
-  });
-  const series = [0, 300, 320, 330, 340, 350, 0];
-  for (const cents of series) {
-    processPitchSample(state, {
-      cents,
-      lineStrength: 0.5,
-      autoPauseOnSilence: false,
-    });
-  }
-
-  const raw = orderedValues(state);
-  const display = orderedDisplayValues(state);
-  assert.deepEqual(raw.map(Number.isNaN), [false, true, true, true, true, true, false]);
-  assert.deepEqual(display.map(Number.isNaN), [false, true, true, true, true, true, false]);
+test("1 outlier in last 3 is replaced with the anchor mean", () => {
+  const state = createState();
+  writeSeries(state, [0, 0, 0, 0, 0, 1200, 0]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 0, 0, 0, 0, 0]);
 });
 
-test("connected middle run survives island cleanup when a side stays within jump range", () => {
-  const state = createPitchProcessingState({
-    columnRateHz: 20,
-    seconds: 1,
-    silencePauseStepThreshold: silencePauseStepThreshold(20, 300),
-  });
-  const series = [0, 300, 320, 330, 340, 350, 180];
-  for (const cents of series) {
-    processPitchSample(state, {
-      cents,
-      lineStrength: 0.5,
-      autoPauseOnSilence: false,
-    });
-  }
-
-  const raw = orderedValues(state);
-  assert.deepEqual(raw.map(Number.isNaN), [false, false, false, false, false, false, false]);
+test("2 outliers in last 4 are replaced with the anchor mean", () => {
+  const state = createState();
+  writeSeries(state, [0, 0, 0, 0, 1200, 1200, 0]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 0, 0, 0, 0, 0]);
 });
 
-test("anchor outlier correction rewrites center sample (i-3) in-place", () => {
-  const state = createPitchProcessingState({
-    columnRateHz: 20,
-    seconds: 1,
-    silencePauseStepThreshold: silencePauseStepThreshold(20, 300),
-  });
+test("3 outliers in last 5 are replaced with the anchor mean", () => {
+  const state = createState();
+  writeSeries(state, [0, 0, 0, 1200, 1200, 1200, 0]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 0, 0, 0, 0, 0]);
+});
 
-  const seriesHz = [100, 100, 200, 100, 100];
-  for (const hz of seriesHz) {
-    processPitchSample(state, {
-      cents: hzToCents(hz),
-      lineStrength: 0.5,
-      autoPauseOnSilence: false,
-    });
-  }
+test("4 outliers in last 6 are replaced with the anchor mean", () => {
+  const state = createState();
+  writeSeries(state, [0, 0, 1200, 1200, 1200, 1200, 0]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 0, 0, 0, 0, 0]);
+});
 
-  const raw = orderedValues(state);
-  assert.equal(raw.length, 5);
-  assert.ok(Math.abs(raw[2] - hzToCents(100)) < 0.1);
+test("5 outliers in last 7 are replaced with the anchor mean", () => {
+  const state = createState();
+  writeSeries(state, [0, 1200, 1200, 1200, 1200, 1200, 0]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 0, 0, 0, 0, 0]);
+});
+
+test("1 NaN in last 5 is interpolated from neighboring anchors", () => {
+  const state = createState();
+  writeSeries(state, [0, 0, 0, 20, Number.NaN, 60, 80]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 0, 20, 40, 60, 80]);
+});
+
+test("2 NaNs in last 6 are interpolated from neighboring anchors", () => {
+  const state = createState();
+  writeSeries(state, [0, 0, 20, Number.NaN, Number.NaN, 80, 100]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 20, 40, 60, 80, 100]);
+});
+
+test("3 NaNs in last 7 are interpolated from neighboring anchors", () => {
+  const state = createState();
+  writeSeries(state, [0, 20, Number.NaN, Number.NaN, Number.NaN, 80, 100]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [0, 20, 35, 50, 65, 80, 100]);
+});
+
+test("end-pos 1 outlier is dropped when followed by NaN", () => {
+  const state = createState();
+  writeSeries(state, [0, 0, 0, 0, 0, 1200, Number.NaN]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 0, 0, 0, Number.NaN, Number.NaN]);
+});
+
+test("end-pos 2 outliers are dropped when followed by NaN", () => {
+  const state = createState();
+  writeSeries(state, [0, 0, 0, 0, 1200, 1200, Number.NaN]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 0, 0, Number.NaN, Number.NaN, Number.NaN]);
+});
+
+test("M shape disappears after successive 1-outlier passes", () => {
+  const state = createState();
+  writeSeries(state, [0, 0, 0, 0, 0, 1200, 0, 1200, 0]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 0, 0, 0, 0, 0, 0, 0]);
 });
