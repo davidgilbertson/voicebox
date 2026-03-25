@@ -110,6 +110,9 @@ If recent history is trustworthy, try a carry-forward fast path first by startin
 1. It only starts after several full non-carry predictions in a row, to prevent locking on to the wrong pitch before the signal is strong.
 2. It uses its own minimum correlation threshold.
 3. It is capped to a maximum run length before a fresh search is forced.
+4. If a fresh full-search winner suddenly lands near an octave away from the previous pitch, Voicebox treats that as suspicious and retries from the previous pitch once or twice with a carry-forward walk instead of immediately accepting the jump.
+
+That last rule is specifically there to catch the common "octave up/down for a frame or two" failure mode without letting carry-forward hide a genuine pitch change forever. After a couple of suppressed jumps, full search is allowed to win again.
 
 ## Real Device Examples
 
