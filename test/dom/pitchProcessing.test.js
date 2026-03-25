@@ -277,7 +277,15 @@ test("end-pos 1 outlier is dropped when followed by NaN", () => {
 test("end-pos 2 outliers are dropped when followed by NaN", () => {
   const state = createState();
   writeSeries(state, [0, 0, 0, 0, 1200, 1200, Number.NaN]);
-  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 0, 0, Number.NaN, Number.NaN, Number.NaN]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [
+    0,
+    0,
+    0,
+    0,
+    Number.NaN,
+    Number.NaN,
+    Number.NaN,
+  ]);
 });
 
 test("M shape disappears after successive 1-outlier passes", () => {

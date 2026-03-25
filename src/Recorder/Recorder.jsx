@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Pause } from "lucide-react";
+import { Download, Pause } from "lucide-react";
 import VibratoChart from "./Vibrato/VibratoChart.jsx";
 import PitchChart from "./Pitch/PitchChart.jsx";
 import SpectrogramChart from "./Spectrogram/SpectrogramChart.jsx";
 
-export default function Recorder({ activeView, settingsOpen, engine }) {
+export default function Recorder({ activeView, settingsOpen, engine, developerMode }) {
   const vibratoChartRef = useRef(null);
   const pitchChartRef = useRef(null);
   const spectrogramChartRef = useRef(null);
@@ -42,6 +42,7 @@ export default function Recorder({ activeView, settingsOpen, engine }) {
     (engineUi.error || !engineUi.hasEverRun);
   const showPausedOverlay = !engineUi.isWantedRunning && engineUi.hasEverRun && !engineUi.error;
   const showMicPermissionHint = showStartOverlay && engineUi.hasRejectedMicPermission;
+  const showDownloadButton = developerMode && showPausedOverlay && engine.canDownloadRawAudio();
 
   return (
     <>
@@ -102,6 +103,21 @@ export default function Recorder({ activeView, settingsOpen, engine }) {
         ) : null}
         {showPausedOverlay ? (
           <div className="pointer-events-none absolute inset-0 z-10">
+            {showDownloadButton ? (
+              <button
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  engine.downloadRawAudio();
+                }}
+                className="pointer-events-auto absolute top-3 left-3 inline-flex h-11 w-11 items-center justify-center rounded-full bg-slate-800/80 text-slate-100 shadow-lg transition hover:bg-slate-700/80 active:bg-slate-700"
+                aria-label="Download paused recording"
+                title="Download paused recording"
+              >
+                <Download aria-hidden="true" className="h-5 w-5" />
+              </button>
+            ) : null}
             <div
               role="status"
               className="pause-pill bg-slate-800/80 text-base font-semibold tracking-wide text-slate-100 uppercase shadow-lg"

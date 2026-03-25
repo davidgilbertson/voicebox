@@ -26,3 +26,40 @@ test("shared wav filename uses the actual captured duration", async () => {
     engine.destroy();
   }
 });
+
+test("downloaded wav filename uses the same naming as share and reuses the picker id", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-03-08T12:34:56"));
+
+  const close = vi.fn(async () => {});
+  const write = vi.fn(async () => {});
+  window.showSaveFilePicker = vi.fn(async () => ({
+    createWritable: vi.fn(async () => ({
+      write,
+      close,
+    })),
+  }));
+
+  const engine = new RecordingEngine(createRecordingEngineConfig());
+  try {
+    appendRawAudioSamples(engine.rawAudioState, new Float32Array(48_000 * 3).fill(0.25));
+    engine.rawAudioState.seconds = 22;
+    engine.setUi({ hasEverRun: true, isWantedRunning: false });
+
+    await expect(engine.downloadRawAudio()).resolves.toBe(true);
+
+    expect(window.showSaveFilePicker).toHaveBeenCalledTimes(1);
+    const [pickerOptions] = window.showSaveFilePicker.mock.calls[0];
+    expect(pickerOptions.id).toBe("voicebox-raw-audio");
+    expect(pickerOptions.suggestedName).toMatch(
+      /^voicebox-last-3-seconds-\d{4}-\d{2}-\d{2}-\d{4}\.wav$/,
+    );
+    expect(write).toHaveBeenCalledTimes(1);
+    const [file] = write.mock.calls[0];
+    expect(file.name).toBe(pickerOptions.suggestedName);
+    expect(close).toHaveBeenCalledTimes(1);
+  } finally {
+    delete window.showSaveFilePicker;
+    engine.destroy();
+  }
+});

@@ -315,7 +315,12 @@ export default function AppShell({ downloadingUpdate = false }) {
               engine={scalesPlaybackEngine}
             />
           ) : (
-            <Recorder activeView={activeView} settingsOpen={settingsOpen} engine={recorderEngine} />
+            <Recorder
+              activeView={activeView}
+              settingsOpen={settingsOpen}
+              engine={recorderEngine}
+              developerMode={developerMode}
+            />
           )}
           <footer className="relative flex h-12 items-stretch gap-2 pt-0 pr-2 pb-0 pl-0 text-xs text-slate-300">
             <div className="flex flex-1 items-stretch">

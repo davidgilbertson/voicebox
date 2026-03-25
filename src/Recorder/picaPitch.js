@@ -17,11 +17,12 @@ const PICA_CORRELATION_TO_HZ_WEIGHT_RATIO = 250;
 // Minimum correlation required for a fresh non-carry PICA candidate.
 const PICA_MIN_CORR = 0.5;
 // Minimum correlation required for carry-forward to continue.
-const PICA_MIN_CARRY_CORR = 0.5;
+const PICA_MIN_CARRY_CORR = 0.2;
 // Maximum consecutive carry-forward hops before forcing a fresh search.
 const PICA_MAX_CARRY_RUN = 10;
 // Fresh predictions required after a gap before carry-forward can start.
 const CARRY_FORWARD_WARMUP_STEPS = 5;
+const MAX_SUPPRESSED_OCTAVE_JUMP_RUN = 2;
 
 export function getPicaWindowSampleCount(sampleRate, minHz) {
   return Math.max(1, Math.ceil((PICA_WINDOW_PERIODS * sampleRate) / minHz));
@@ -433,6 +434,14 @@ function getCarryForwardCandidate(samples, sampleRate, minHz, maxHz, priorStep, 
   };
 }
 
+export function isLargePicaPitchJump(priorHz, nextHz) {
+  if (!Number.isFinite(priorHz) || !Number.isFinite(nextHz) || priorHz <= 0 || nextHz <= 0) {
+    return false;
+  }
+
+  return nextHz / priorHz > 1.8 || priorHz / nextHz > 1.8;
+}
+
 function getPriorStep(result, priorStep) {
   if (!Number.isFinite(result?.hz) || !Number.isFinite(result?.correlation)) {
     return {
@@ -440,6 +449,7 @@ function getPriorStep(result, priorStep) {
       correlation: Number.NaN,
       carryForwardRunLength: 0,
       fullPredictionCountSinceLastNaN: 0,
+      suppressedOctaveJumpCount: 0,
     };
   }
   return {
@@ -451,6 +461,7 @@ function getPriorStep(result, priorStep) {
       result.type === "carryForward"
         ? (priorStep?.fullPredictionCountSinceLastNaN ?? 0)
         : (priorStep?.fullPredictionCountSinceLastNaN ?? 0) + 1,
+    suppressedOctaveJumpCount: result.suppressedOctaveJumpCount ?? 0,
   };
 }
 
@@ -468,17 +479,15 @@ function getPicaPitchResultFromSamples(samples, sampleRate, minHz, maxHz, priorS
     maxAmplitudeFromRight: null,
     walkedPeriodByPeriodSize: new Map(),
   };
-  const carryForwardCandidate = getCarryForwardCandidate(
-    samples,
-    sampleRate,
-    minHz,
-    maxHz,
-    priorStep,
-    cache,
-  );
-  const winningCandidate =
-    carryForwardCandidate ??
-    getCandidatesFromExtrema(
+  const priorSuppressedOctaveJumpCount = priorStep?.suppressedOctaveJumpCount ?? 0;
+  // After we suppress an octave slip, force at least one fresh full search before
+  // the cheap carry-forward shortcut can win again.
+  let winningCandidate =
+    priorSuppressedOctaveJumpCount > 0
+      ? null
+      : getCarryForwardCandidate(samples, sampleRate, minHz, maxHz, priorStep, cache);
+  if (!winningCandidate) {
+    winningCandidate = getCandidatesFromExtrema(
       samples,
       sampleRate,
       minHz,
@@ -486,10 +495,51 @@ function getPicaPitchResultFromSamples(samples, sampleRate, minHz, maxHz, priorS
       getFoldExtremaFromWaveform(samples),
       cache,
     );
+  }
+
+  let suppressedOctaveJumpCount = 0;
+  if (
+    !winningCandidate?.type &&
+    Number.isFinite(winningCandidate?.hz) &&
+    Number.isFinite(priorStep?.hz) &&
+    isLargePicaPitchJump(priorStep.hz, winningCandidate.hz)
+  ) {
+    const sourcePeriodSize = Math.round(sampleRate / priorStep.hz);
+    const walkedPeriod = getWalkedPeriod(
+      samples,
+      sourcePeriodSize,
+      sampleRate,
+      minHz,
+      maxHz,
+      "carryForward",
+      cache,
+    );
+
+    // A short-lived fallback catches obvious octave slips without letting carry-forward
+    // mask a real note change for long.
+    if (walkedPeriod && priorSuppressedOctaveJumpCount < MAX_SUPPRESSED_OCTAVE_JUMP_RUN) {
+      winningCandidate = {
+        type: "carryForward",
+        hz: walkedPeriod.hz,
+        correlation: walkedPeriod.correlation,
+      };
+      suppressedOctaveJumpCount = priorSuppressedOctaveJumpCount + 1;
+    }
+  }
+
+  const nextPriorStep = getPriorStep(
+    winningCandidate
+      ? {
+          ...winningCandidate,
+          suppressedOctaveJumpCount,
+        }
+      : winningCandidate,
+    priorStep,
+  );
 
   return {
     cents: winningCandidate ? hzToCents(winningCandidate.hz) : Number.NaN,
-    priorStep: getPriorStep(winningCandidate, priorStep),
+    priorStep: nextPriorStep,
   };
 }
 

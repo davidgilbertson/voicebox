@@ -33,6 +33,7 @@ import { getPicaWindowSampleCount } from "./picaPitch.js";
 
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
 const STARTUP_MAX_VOLUME_DECAY_FACTOR = 0.9;
+const RAW_AUDIO_SAVE_PICKER_ID = "voicebox-raw-audio";
 let recordingEngineSingleton = null;
 
 function createHzBuffer(length) {
@@ -53,6 +54,15 @@ function formatShareTimestamp(date) {
 function getCapturedSeconds(rawAudioState) {
   if (!(rawAudioState.sampleRate > 0)) return 0;
   return rawAudioState.ring.sampleCount / rawAudioState.sampleRate;
+}
+
+function createRawAudioExportFile(rawAudioState, date = new Date()) {
+  const samples = readRawAudioSamples(rawAudioState);
+  const blob = createWavBlob(samples, rawAudioState.sampleRate);
+  const seconds = Math.max(1, Math.ceil(getCapturedSeconds(rawAudioState)));
+  return new File([blob], `voicebox-last-${seconds}-seconds-${formatShareTimestamp(date)}.wav`, {
+    type: blob.type,
+  });
 }
 
 function createPicaWindowSamples(sampleRate, minHz) {
@@ -641,28 +651,20 @@ export class RecordingEngine {
     if (this.rawAudioState.ring.sampleCount <= 0) return false;
     if (typeof navigator.share !== "function" || typeof navigator.canShare !== "function")
       return false;
-    const seconds = Math.max(1, Math.ceil(getCapturedSeconds(this.rawAudioState)));
-    const file = new File(
-      [],
-      `voicebox-last-${seconds}-seconds-${formatShareTimestamp(new Date())}.wav`,
-      {
-        type: "audio/wav",
-      },
-    );
+    const file = createRawAudioExportFile(this.rawAudioState);
     return navigator.canShare({ files: [file] });
+  };
+
+  canDownloadRawAudio = () => {
+    if (this.state.ui.isWantedRunning || !this.state.ui.hasEverRun) return false;
+    if (typeof window.showSaveFilePicker !== "function") return false;
+    return this.rawAudioState.ring.sampleCount > 0;
   };
 
   shareRawAudio = async () => {
     this.setUi({ isSharingRawAudio: true, rawAudioShareError: "" });
     try {
-      const samples = readRawAudioSamples(this.rawAudioState);
-      const blob = createWavBlob(samples, this.rawAudioState.sampleRate);
-      const seconds = Math.max(1, Math.ceil(getCapturedSeconds(this.rawAudioState)));
-      const file = new File(
-        [blob],
-        `voicebox-last-${seconds}-seconds-${formatShareTimestamp(new Date())}.wav`,
-        { type: blob.type },
-      );
+      const file = createRawAudioExportFile(this.rawAudioState);
       await navigator.share({
         files: [file],
         title: "Voicebox capture",
@@ -677,6 +679,34 @@ export class RecordingEngine {
       return false;
     } finally {
       this.setUi({ isSharingRawAudio: false });
+    }
+  };
+
+  downloadRawAudio = async () => {
+    if (!this.canDownloadRawAudio()) return false;
+    const file = createRawAudioExportFile(this.rawAudioState);
+    try {
+      const handle = await window.showSaveFilePicker({
+        id: RAW_AUDIO_SAVE_PICKER_ID,
+        suggestedName: file.name,
+        types: [
+          {
+            description: "WAV audio",
+            accept: {
+              "audio/wav": [".wav"],
+            },
+          },
+        ],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(file);
+      await writable.close();
+      return true;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return false;
+      }
+      throw error;
     }
   };
 

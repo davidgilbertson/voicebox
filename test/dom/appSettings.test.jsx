@@ -280,3 +280,27 @@ test("share button only appears for paused recorder views with captured audio", 
 
   expect(screen.queryByRole("button", { name: /Share paused recording/i })).toBeNull();
 });
+
+test("developer mode shows a paused download button in recorder views", async () => {
+  const user = userEvent.setup();
+  window.showSaveFilePicker = vi.fn();
+  render(<AppShell />);
+
+  const engine = globalThis.__appRecordingEngineForTests;
+  appendRawAudioSamples(engine.rawAudioState, new Float32Array(48_000).fill(0.25));
+  engine.setUi({ hasEverRun: true, isWantedRunning: false });
+
+  await user.click(screen.getByLabelText("Open settings"));
+  const headingButton = screen.getByRole("button", { name: "Settings" });
+  await user.click(headingButton);
+  await user.click(headingButton);
+  await user.click(headingButton);
+  await user.click(headingButton);
+  await user.click(screen.getByLabelText("Close settings"));
+
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: /Download paused recording/i })).toBeInTheDocument();
+  });
+
+  delete window.showSaveFilePicker;
+});
