@@ -10,6 +10,13 @@ let detachWindowKeyHandler = null;
 const CORRELATION_CHART_TICKS_HZ = [
   40, 50, 60, 80, 100, 150, 200, 300, 400, 600, 800, 1000, 1500, 2000,
 ].filter((hz) => hz >= PICA_MIN_HZ && hz <= PICA_MAX_HZ);
+const PITCH_OCTAVE_TICKS = [
+  { hz: 65.406, label: "C2" },
+  { hz: 130.813, label: "C3" },
+  { hz: 261.626, label: "C4" },
+  { hz: 523.251, label: "C5" },
+  { hz: 1046.502, label: "C6" },
+].filter((tick) => tick.hz >= PICA_MIN_HZ && tick.hz <= PICA_MAX_HZ);
 const METHOD_VISIBILITY_STORAGE_KEY = "voicebox.picaPitch.methodVisibility";
 const PITCH_METHODS = [
   { key: "pitchy", label: "Pitchy" },
@@ -99,10 +106,20 @@ function getTraceVisibilityByName(chartId) {
   );
 }
 
-function getHeatmapStyle(value, maxValue = 3) {
-  const intensity = Math.max(0, Math.min(1, value / maxValue));
-  const alpha = 0.15 + intensity * 0.55;
-  return `background: rgba(192, 132, 252, ${alpha.toFixed(3)});`;
+function getPitchOctaveAnnotations() {
+  const minLogHz = Math.log10(PICA_MIN_HZ);
+  const maxLogHz = Math.log10(PICA_MAX_HZ);
+  return PITCH_OCTAVE_TICKS.map((tick) => ({
+    xref: "paper",
+    yref: "paper",
+    x: 0.995,
+    y: 0.24 + (0.76 * (Math.log10(tick.hz) - minLogHz)) / (maxLogHz - minLogHz),
+    text: tick.label,
+    showarrow: false,
+    xanchor: "right",
+    yanchor: "middle",
+    font: { color: "#94a3b8", size: 11 },
+  }));
 }
 
 function getNearestCorrelationY(correlationSeries, hz) {
@@ -236,103 +253,6 @@ function getExtremaMarkers(waveformWindow, analysis) {
     }
   }
   return { x, y, color, symbol };
-}
-
-function renderCandidateTable(panel, analysis, fftPitchHz) {
-  const candidates = analysis.candidates;
-  if (candidates.length === 0) {
-    if (analysis.winningCandidate?.type === "carryForward") {
-      panel.innerHTML = `<div class="candidate-summary">Carry-forward path won at ${analysis.winningCandidate.hz.toFixed(2)} Hz.</div>`;
-      return;
-    }
-    panel.innerHTML = `<div class="candidate-summary">No candidates. ${analysis.rejectionReason ?? ""}</div>`;
-    return;
-  }
-
-  let closestKey = null;
-  let closestDistance = Number.POSITIVE_INFINITY;
-  candidates.forEach((candidate, candidateIndex) => {
-    const distance = Math.abs(1200 * Math.log2(candidate.hz / fftPitchHz));
-    if (distance < closestDistance) {
-      closestDistance = distance;
-      closestKey = candidateIndex;
-    }
-  });
-
-  const renderTypeTable = (type) => {
-    const typedCandidates = candidates
-      .filter((candidate) => candidate.type === type)
-      .sort((left, right) => left.hz - right.hz);
-    if (typedCandidates.length === 0) return "";
-    const closestCandidate = closestKey === null ? null : candidates[closestKey];
-
-    const header = typedCandidates.map((_, index) => `<th>${index + 1}</th>`).join("");
-    const rows = [
-      {
-        label: "Pre-walk",
-        render: (candidate) => `${(48000 / candidate.sourcePeriodSize).toFixed(1)} Hz`,
-      },
-      {
-        label: "Candidate",
-        render: (candidate) => `${candidate.hz.toFixed(1)} Hz`,
-      },
-      {
-        label: "Source gap",
-        render: (candidate) => `${candidate.sourcePeriodSize} smp`,
-      },
-      {
-        label: "corr",
-        render: (candidate) => candidate.correlation.toFixed(3),
-      },
-      {
-        label: "score",
-        render: (candidate) => candidate.weightedScore.toFixed(3),
-      },
-    ]
-      .map((row) => {
-        const cells = typedCandidates
-          .map((candidate) => {
-            const selected = analysis.winningCandidate === candidate;
-            const bold = closestCandidate === candidate ? " font-weight: 700;" : "";
-            const heatmap =
-              row.label === "corr"
-                ? getHeatmapStyle(candidate.correlation)
-                : row.label === "score"
-                  ? getHeatmapStyle(candidate.weightedScore)
-                  : "";
-            return `<td class="candidate-value${selected ? " candidate-selected" : ""}" style="${heatmap}${bold}">${row.render(
-              candidate,
-            )}</td>`;
-          })
-          .join("");
-        return `<tr><th>${row.label}</th>${cells}</tr>`;
-      })
-      .join("");
-
-    return `
-      <table class="candidate-table">
-        <thead>
-          <tr>
-            <th>${type}</th>
-            ${header}
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    `;
-  };
-
-  const winningText = analysis.winningCandidate
-    ? `Winner ${analysis.winningCandidate.hz.toFixed(2)} Hz, corr ${analysis.winningCandidate.correlation.toFixed(3)}`
-    : `Rejected: ${analysis.rejectionReason}`;
-
-  panel.innerHTML = `
-    <div class="candidate-summary">
-      zeroCrossings=${analysis.zeroCrossingCount} | maxAmplitude=${analysis.maxAmplitude.toFixed(3)} | ${winningText}
-    </div>
-    ${renderTypeTable("peak")}
-    ${renderTypeTable("trough")}
-  `;
 }
 
 async function renderHistogram(
@@ -493,8 +413,6 @@ export async function renderPicaPitchCharts(result, options = {}) {
     onWindowSelect,
     onMethodVisibilityChange,
   } = options;
-  const candidatePanel = document.getElementById("candidatePanel");
-  const candidatePanelDetails = document.getElementById("candidatePanelDetails");
   const methodVisibility = readStoredMethodVisibility();
   const priorPitchChartVisibilityByName = getTraceVisibilityByName("pitchChart");
   const actualPitchHz = [];
@@ -622,10 +540,10 @@ export async function renderPicaPitchCharts(result, options = {}) {
       showlegend: true,
       legend: getBottomLegend(),
       uirevision: "pitchChart",
-      margin: { l: 52, r: 24, t: 48, b: 76 },
+      margin: { l: 52, r: 56, t: 48, b: 76 },
       xaxis: {
         title: "Time (s)",
-        gridcolor: "#1f2937",
+        showgrid: false,
         range: [result.timeSec[0] ?? 0, result.timeSec[result.timeSec.length - 1] ?? 1],
       },
       yaxis: {
@@ -634,6 +552,9 @@ export async function renderPicaPitchCharts(result, options = {}) {
         type: "log",
         domain: [0.24, 1],
         range: [Math.log10(PICA_MIN_HZ), Math.log10(PICA_MAX_HZ)],
+        tickmode: "array",
+        tickvals: PITCH_OCTAVE_TICKS.map((tick) => tick.hz),
+        ticktext: PITCH_OCTAVE_TICKS.map((tick) => String(Math.round(tick.hz))),
       },
       yaxis2: {
         title: "Corr",
@@ -641,6 +562,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
         domain: [0, 0.16],
         range: [0, 1],
       },
+      annotations: getPitchOctaveAnnotations(),
     },
     { responsive: true },
   );
@@ -731,27 +653,11 @@ export async function renderPicaPitchCharts(result, options = {}) {
         shapes: [
           ...getWinningPeriodBox(waveformWindow, analysis ?? {}),
           ...(needsPicaAnalysis ? getPeriodMarkers(waveformWindow) : []),
-          {
-            type: "line",
-            xref: "x",
-            yref: "paper",
-            x0: waveformWindow.endTimeSec,
-            x1: waveformWindow.endTimeSec,
-            y0: 0,
-            y1: 1,
-            line: { color: "#f59e0b", width: 1.5, dash: "dot" },
-          },
         ],
       },
       { responsive: true },
     );
 
-    candidatePanelDetails.hidden = !methodVisibility.pica;
-    if (methodVisibility.pica && analysis) {
-      renderCandidateTable(candidatePanel, analysis, waveformWindow.fftPitchHz);
-    } else {
-      candidatePanel.innerHTML = "";
-    }
     if (correlationSeries) {
       await renderHistogram(
         plotly,

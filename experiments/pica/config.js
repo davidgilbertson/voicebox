@@ -8,11 +8,11 @@ export const PICA_ACCURACY_CENTS = 50;
 export const SIMILARITY_FUNC = "cosine";
 export const PICA_SETTINGS_DEFAULTS = {
   minAmp: PICA_MIN_WINDOW_MAX_AMPLITUDE,
-  minCorr: 0.83,
-  minCarryCorr: 0.5,
+  minCorr: 0.5,
+  minCarryCorr: 0.5, // TODO (@davidgilbertson): redundant if minCorr stays at 0.5
   maxCrossingsPerPeriod: 23,
   maxComparisonPatches: 3,
-  corrSamplePoints: 18,
+  corrSamplePoints: 50,
   maxWalkSteps: 60,
   maxCarryRun: 10,
   correlationToHzWeightRatio: 250,
@@ -61,7 +61,7 @@ export const PICA_SETTING_FIELDS = [
     inputLabel: "minCarryCorr",
     min: 0,
     max: 1,
-    step: 0.1,
+    step: 0.01,
     title: "Minimum prior and walked correlation required before the carry-forward path can win.",
   },
   {

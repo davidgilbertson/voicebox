@@ -21,7 +21,6 @@ import {
 const STORAGE_PREFIX = "voicebox.picaPitch.";
 const SELECTED_SOURCE_STORAGE_KEY = `${STORAGE_PREFIX}selectedSourceKey`;
 const SELECTED_WINDOW_STORAGE_KEY = `${STORAGE_PREFIX}selectedWindowIndex`;
-const CANDIDATE_PANEL_OPEN_STORAGE_KEY = `${STORAGE_PREFIX}candidatePanelOpen`;
 
 let currentPreparedSample = null;
 let currentControls = [];
@@ -51,15 +50,6 @@ function readStoredWindowIndex() {
 
 function writeStoredWindowIndex(windowIndex) {
   localStorage.setItem(SELECTED_WINDOW_STORAGE_KEY, String(windowIndex));
-}
-
-function readStoredCandidatePanelOpen() {
-  const stored = localStorage.getItem(CANDIDATE_PANEL_OPEN_STORAGE_KEY);
-  return stored !== "false";
-}
-
-function writeStoredCandidatePanelOpen(isOpen) {
-  localStorage.setItem(CANDIDATE_PANEL_OPEN_STORAGE_KEY, String(isOpen));
 }
 
 function getStoredSettings() {
@@ -278,7 +268,6 @@ function main() {
   const resetStorageButton = document.getElementById("resetStorageButton");
   const sourceSelect = document.getElementById("sourceSelect");
   const recordButton = document.getElementById("recordButton");
-  const candidatePanelDetails = document.getElementById("candidatePanelDetails");
   const settingInputs = Object.fromEntries(
     PICA_SETTING_FIELDS.map((field) => [field.key, document.getElementById(field.key)]),
   );
@@ -299,7 +288,6 @@ function main() {
     DEFAULT_ASSET_URL,
   );
   renderSourceOptions(sourceSelect, selectedSource.key);
-  candidatePanelDetails.open = readStoredCandidatePanelOpen();
 
   resetStorageButton.addEventListener("click", () => {
     resetStoredState();
@@ -316,10 +304,6 @@ function main() {
       return loadPitchSample(capturedAudio);
     }),
   );
-
-  candidatePanelDetails.addEventListener("toggle", () => {
-    writeStoredCandidatePanelOpen(candidatePanelDetails.open);
-  });
 
   sourceSelect.addEventListener("change", () =>
     rerun(controls, sourceSelect, settingInputs, "", async () =>

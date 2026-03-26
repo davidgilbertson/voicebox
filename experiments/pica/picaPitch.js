@@ -151,47 +151,84 @@ function getWalkedPeriod(
   mode = "candidateSearch",
   cache = null,
 ) {
-  const cachedWalkedPeriod = cache?.walkedPeriodByPeriodSize.get(seedPeriodSize);
-  if (cachedWalkedPeriod !== undefined) {
-    return cachedWalkedPeriod;
-  }
-
   let bestPeriodSize = seedPeriodSize;
   let bestCorrelation = getCorrelation(samples, seedPeriodSize, settings, cache);
-  const visitedPeriodSizes = [seedPeriodSize];
+  let currentPeriodSize = bestPeriodSize;
+  let currentCorrelation = bestCorrelation;
+  let phase = "getDirection";
+  let direction = 0;
 
   let step = 0;
   while (step < settings.maxWalkSteps) {
-    const walkStepSize = bestPeriodSize % 2 === 0 ? 2 : 1;
-    let lowerPeriodSize = bestPeriodSize - walkStepSize;
-    let higherPeriodSize = bestPeriodSize + walkStepSize;
-    let lowerCorrelation =
-      lowerPeriodSize > 0 ? getCorrelation(samples, lowerPeriodSize, settings, cache) : -1;
-    let higherCorrelation = getCorrelation(samples, higherPeriodSize, settings, cache);
+    if (phase === "getDirection") {
+      // First find the uphill direction, snapping onto the nearest stride-5 lane.
+      const lowerPeriodSize =
+        bestPeriodSize % 5 === 0 ? bestPeriodSize - 5 : Math.floor(bestPeriodSize / 5) * 5;
+      const higherPeriodSize =
+        bestPeriodSize % 5 === 0 ? bestPeriodSize + 5 : Math.ceil(bestPeriodSize / 5) * 5;
+      const lowerCorrelation = getCorrelation(samples, lowerPeriodSize, settings, cache);
+      const higherCorrelation = getCorrelation(samples, higherPeriodSize, settings, cache);
 
-    if (lowerCorrelation <= bestCorrelation && higherCorrelation <= bestCorrelation) {
-      lowerPeriodSize = bestPeriodSize - 1;
-      higherPeriodSize = bestPeriodSize + 1;
-      lowerCorrelation =
-        lowerPeriodSize > 0 ? getCorrelation(samples, lowerPeriodSize, settings, cache) : -1;
-      higherCorrelation = getCorrelation(samples, higherPeriodSize, settings, cache);
-      if (lowerCorrelation <= bestCorrelation && higherCorrelation <= bestCorrelation) {
-        break;
+      if (higherCorrelation > lowerCorrelation) {
+        if (higherCorrelation > bestCorrelation) {
+          bestPeriodSize = higherPeriodSize;
+          bestCorrelation = higherCorrelation;
+          currentPeriodSize = higherPeriodSize;
+          currentCorrelation = higherCorrelation;
+          direction = 1;
+          phase = "walk";
+          step += 1;
+          continue;
+        }
+      } else if (lowerCorrelation > bestCorrelation) {
+        bestPeriodSize = lowerPeriodSize;
+        bestCorrelation = lowerCorrelation;
+        currentPeriodSize = lowerPeriodSize;
+        currentCorrelation = lowerCorrelation;
+        direction = -1;
+        phase = "walk";
+        step += 1;
+        continue;
       }
+
+      break;
     }
 
-    if (higherCorrelation > lowerCorrelation) {
-      bestPeriodSize = higherPeriodSize;
-      bestCorrelation = higherCorrelation;
-      visitedPeriodSizes.push(bestPeriodSize);
+    if (phase === "walk") {
+      // Once we're on the lane, keep walking in stride-5 steps while correlation improves.
+      const nextPeriodSize = currentPeriodSize + direction * 5;
+      const nextCorrelation = getCorrelation(samples, nextPeriodSize, settings, cache);
+      if (nextCorrelation > currentCorrelation) {
+        currentPeriodSize = nextPeriodSize;
+        currentCorrelation = nextCorrelation;
+        bestPeriodSize = nextPeriodSize;
+        bestCorrelation = nextCorrelation;
+        step += 1;
+        continue;
+      }
+
+      currentPeriodSize = nextPeriodSize;
+      currentCorrelation = nextCorrelation;
+      phase = "walkBack";
       step += 1;
       continue;
     }
 
-    bestPeriodSize = lowerPeriodSize;
-    bestCorrelation = lowerCorrelation;
-    visitedPeriodSizes.push(bestPeriodSize);
-    step += 1;
+    // When the stride-5 walk overshoots, walk back one-by-one to find the exact peak.
+    const nextPeriodSize = currentPeriodSize - direction;
+    const nextCorrelation = getCorrelation(samples, nextPeriodSize, settings, cache);
+    if (nextCorrelation > currentCorrelation) {
+      currentPeriodSize = nextPeriodSize;
+      currentCorrelation = nextCorrelation;
+      if (nextCorrelation > bestCorrelation) {
+        bestPeriodSize = nextPeriodSize;
+        bestCorrelation = nextCorrelation;
+      }
+      step += 1;
+      continue;
+    }
+
+    break;
   }
 
   const refinedHz = getRefinedPitchHz(samples, bestPeriodSize, sampleRate, settings, cache);
@@ -215,10 +252,6 @@ function getWalkedPeriod(
             ),
             hz: refinedHz,
           };
-
-  for (const periodSize of visitedPeriodSizes) {
-    cache?.walkedPeriodByPeriodSize.set(periodSize, walkedPeriod);
-  }
 
   return walkedPeriod;
 }
@@ -397,7 +430,7 @@ function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, ca
   };
 }
 
-function getPicaPitchResultFromAnalysis(analysis) {
+function setRejectionReason(analysis) {
   if (analysis.maxAmplitude < analysis.settings.minAmp) {
     return {
       hz: Number.NaN,
@@ -499,22 +532,25 @@ export function getPicaPitchAnalysisFromWaveform(samples, sampleRate, settings, 
   if (maxAmplitude < settings.minAmp || zeroCrossingCount === 0) {
     return {
       ...analysis,
-      ...getPicaPitchResultFromAnalysis(analysis),
+      ...setRejectionReason(analysis),
     };
   }
 
   const priorSuppressedOctaveJumpCount = priorStep?.suppressedOctaveJumpCount ?? 0;
-  const fastPathCarryForwardCandidate =
+  // If two-steps prior was an octave jump, we use carry forward (again)
+  const carryForwardCandidate =
     priorSuppressedOctaveJumpCount > 0
       ? null
       : getCarryForwardCandidate(samples, sampleRate, settings, priorStep, cache);
-  const extrema = fastPathCarryForwardCandidate
+
+  // If there's no carry forward result, we do a full search
+  const extrema = carryForwardCandidate
     ? { peaks: [], troughs: [] }
     : getFoldExtremaFromWaveform(samples, settings);
-  const { candidates, winningCandidate } = fastPathCarryForwardCandidate
+  const { candidates, winningCandidate } = carryForwardCandidate
     ? {
         candidates: [],
-        winningCandidate: fastPathCarryForwardCandidate,
+        winningCandidate: carryForwardCandidate,
       }
     : getCandidatesFromExtrema(samples, sampleRate, extrema, settings, cache);
   let suppressedOctaveJumpCount = 0;
@@ -523,7 +559,7 @@ export function getPicaPitchAnalysisFromWaveform(samples, sampleRate, settings, 
   // If the pitch jumps a lot from the previous step with a full search,
   //  we force a carryForward pass instead.
   if (
-    !fastPathCarryForwardCandidate &&
+    !carryForwardCandidate &&
     resolvedWinningCandidate?.type !== "carryForward" &&
     Number.isFinite(resolvedWinningCandidate?.hz) &&
     Number.isFinite(priorStep?.hz)
@@ -560,7 +596,7 @@ export function getPicaPitchAnalysisFromWaveform(samples, sampleRate, settings, 
     winningCandidate: resolvedWinningCandidate,
     suppressedOctaveJumpCount,
   };
-  const picaPitchResult = getPicaPitchResultFromAnalysis(completedAnalysis);
+  const picaPitchResult = setRejectionReason(completedAnalysis);
 
   return {
     ...completedAnalysis,

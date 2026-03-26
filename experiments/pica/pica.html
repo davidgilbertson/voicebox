@@ -1,375 +1,354 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pica Sample Pitch Experiment</title>
-    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-    <style>
-      :root {
-        color-scheme: dark;
-      }
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Pica Sample Pitch Experiment</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
 
-      * {
-        box-sizing: border-box;
-      }
+    * {
+      box-sizing: border-box;
+    }
 
-      html {
-        height: 100dvh;
-      }
+    html {
+      height: 100dvh;
+    }
 
-      body {
-        margin: 0;
-        height: 100%;
-        background: #050505;
-        color: #e2e8f0;
-        font-family:
-          ui-sans-serif,
-          system-ui,
-          -apple-system,
-          Segoe UI,
-          sans-serif;
-      }
+    body {
+      margin: 0;
+      height: 100%;
+      background: #050505;
+      color: #e2e8f0;
+      font-family: ui-sans-serif,
+      system-ui,
+      -apple-system,
+      Segoe UI,
+      sans-serif;
+    }
 
-      #app {
-        height: 100%;
-        display: grid;
-        grid-template-rows: auto auto auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
-      }
+    #app {
+      height: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+    }
 
-      #toolbar,
-      #subtoolbar,
-      #candidatePanelDetails {
-        padding: 10px 14px;
-        border-bottom: 1px solid #1f2937;
-        background: #0b0b0b;
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 8px;
-        font-size: 12px;
-      }
+    .quadrant {
+      min-width: 0;
+      min-height: 0;
+      padding: 8px;
+      overflow: hidden;
+    }
 
-      #status {
-        color: #a7f3d0;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        min-width: 0;
-        flex: 1;
-      }
+    #controlsPanel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 12px;
+      overflow: auto;
+    }
 
-      #perfInfo,
-      #windowInfo {
-        color: #93c5fd;
-      }
+    #paramsColumn {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
 
-      #perfInfo {
-        min-width: 0;
-      }
+    #metaActions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
 
-      .perf-table {
-        border-collapse: collapse;
-        font-size: 11px;
-      }
+    #status {
+      color: #a7f3d0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
 
-      .perf-table th,
-      .perf-table td {
-        border: 1px solid #1e293b;
-        padding: 3px 6px;
-        text-align: right;
-        white-space: nowrap;
-      }
+    #perfInfo,
+    #windowInfo,
+    #actualPitchInfo {
+      color: #93c5fd;
+    }
 
-      .perf-table th:first-child {
-        text-align: left;
-        color: #cbd5e1;
-      }
+    #perfInfo {
+      min-width: 0;
+      overflow: auto;
+    }
 
-      .perf-table thead th {
-        color: #93c5fd;
-        font-weight: 600;
-      }
+    #windowInfo,
+    #actualPitchInfo {
+      overflow-wrap: anywhere;
+    }
 
-      .perf-table td {
-        color: #e2e8f0;
-      }
+    #paramsSection {
+      margin-top: 20px;
+    }
 
-      .perf-table .perf-accuracy {
-        font-weight: 700;
-      }
+    .perf-table {
+      border-collapse: collapse;
+      font-size: 11px;
+    }
 
-      #candidatePanelDetails {
-        display: block;
-        padding-top: 6px;
-        padding-bottom: 6px;
-      }
+    .perf-table th,
+    .perf-table td {
+      border: 1px solid #1e293b;
+      padding: 3px 6px;
+      text-align: right;
+      white-space: nowrap;
+    }
 
-      #candidatePanelDetails summary {
-        color: #cbd5e1;
-        cursor: pointer;
-        user-select: none;
-        font-size: 12px;
-      }
+    .perf-table th:first-child {
+      text-align: left;
+      color: #cbd5e1;
+    }
 
-      #candidatePanel {
-        overflow-x: auto;
-        padding-top: 8px;
-        padding-bottom: 8px;
-      }
+    .perf-table thead th {
+      color: #93c5fd;
+      font-weight: 600;
+    }
 
-      .candidate-summary {
-        color: #cbd5e1;
-        font-size: 12px;
-        margin-bottom: 8px;
-      }
+    .perf-table td {
+      color: #e2e8f0;
+    }
 
-      .candidate-table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 6px;
-        font-size: 12px;
-        margin-bottom: 10px;
-      }
+    .perf-table .perf-accuracy {
+      font-weight: 700;
+    }
 
-      .candidate-table th {
-        color: #94a3b8;
-        font-weight: 600;
-        text-align: left;
-      }
+    .toolbar-btn {
+      border: 1px solid #334155;
+      background: #111827;
+      color: #e2e8f0;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
 
-      .candidate-table td,
-      .candidate-table th {
-        white-space: nowrap;
-      }
+    .toolbar-btn:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
 
-      .candidate-meta {
-        color: #cbd5e1;
-      }
+    .toolbar-select {
+      border: 1px solid #334155;
+      background: #111827;
+      color: #e2e8f0;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      min-width: 0;
+      flex: 1 1 220px;
+      max-width: 400px;
+    }
 
-      .candidate-value {
-        border: 1px solid #334155;
-        border-radius: 8px;
-        padding: 6px 8px;
-        min-width: 75px;
-        text-align: right;
-        color: #f8fafc;
-      }
+    .toolbar-field {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #94a3b8;
+    }
 
-      .candidate-selected {
-        border-width: 3px;
-        border-color: #f8fafc;
-      }
+    #paramsColumn .toolbar-field {
+      display: grid;
+      grid-template-columns: 180px auto;
+      justify-content: start;
+      width: fit-content;
+    }
 
-      .candidate-empty {
-        color: #64748b;
-        background: rgba(15, 23, 42, 0.4);
-      }
+    .toolbar-checkbox {
+      color: #cbd5e1;
+    }
 
-      .toolbar-btn {
-        border: 1px solid #334155;
-        background: #111827;
-        color: #e2e8f0;
-        border-radius: 6px;
-        padding: 6px 10px;
-        font-size: 12px;
-        cursor: pointer;
-      }
+    #methodToggleControls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
 
-      .toolbar-btn:disabled {
-        opacity: 0.45;
-        cursor: default;
-      }
+    .toolbar-checkbox input {
+      margin: 0;
+    }
 
-      .toolbar-select {
-        border: 1px solid #334155;
-        background: #111827;
-        color: #e2e8f0;
-        border-radius: 6px;
-        padding: 6px 10px;
-        font-size: 12px;
-        min-width: 220px;
-      }
+    .toolbar-number {
+      border: 1px solid #334155;
+      background: #111827;
+      color: #e2e8f0;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 12px;
+      width: 74px;
+    }
 
-      .toolbar-field {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        color: #94a3b8;
-        white-space: nowrap;
-      }
+    #pitchChart,
+    #waveformChart,
+    #harmonicChart {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      transition: opacity 120ms linear;
+    }
 
-      .toolbar-checkbox {
-        color: #cbd5e1;
-      }
-
-      .toolbar-checkbox input {
-        margin: 0;
-      }
-
-      .toolbar-number {
-        border: 1px solid #334155;
-        background: #111827;
-        color: #e2e8f0;
-        border-radius: 6px;
-        padding: 6px 8px;
-        font-size: 12px;
-        width: 74px;
-      }
-
-      #pitchChart,
-      #waveformChart,
-      #harmonicChart {
-        width: 100%;
-        height: 100%;
-        min-height: 0;
-        transition: opacity 120ms linear;
-      }
-
-      body.loading #pitchChart,
-      body.loading #waveformChart,
-      body.loading #harmonicChart {
-        opacity: 0.55;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app">
-      <div id="toolbar">
-        <button id="recordButton" class="toolbar-btn" type="button">Record 5s</button>
-        <select id="sourceSelect" class="toolbar-select" aria-label="Audio source"></select>
-        <label class="toolbar-field"
-          >minAmp
-          <input
-            id="minAmp"
-            class="toolbar-number"
-            type="number"
-            min="0"
-            max="1"
-            step="0.01"
-            value="0.01"
-            title="Minimum window or compared-region peak amplitude required before Pica accepts it."
-        /></label>
-        <label class="toolbar-field"
-          >minCorr
-          <input
-            id="minCorr"
-            class="toolbar-number"
-            type="number"
-            min="0"
-            max="1"
-            step="0.01"
-            value="0.95"
-            title="Minimum winning-candidate correlation required before Pica accepts it."
-        /></label>
-        <label class="toolbar-field"
-          >minCarryCorr
-          <input
-            id="minCarryCorr"
-            class="toolbar-number"
-            type="number"
-            min="0"
-            max="20"
-            step="0.01"
-            value="3"
-            title="Minimum prior and walked correlation required before the carry-forward path can win."
-        /></label>
-        <label class="toolbar-field"
-          >maxCrossingsPerPeriod
-          <input
-            id="maxCrossingsPerPeriod"
-            class="toolbar-number"
-            type="number"
-            min="2"
-            max="64"
-            step="2"
-            value="20"
-            title="Maximum zero crossings to allow in one period when collecting recent folds."
-        /></label>
-        <label class="toolbar-field"
-          >maxPatches
-          <input
-            id="maxComparisonPatches"
-            class="toolbar-number"
-            type="number"
-            min="2"
-            max="16"
-            step="1"
-            value="7"
-            title="Maximum number of trailing period-sized patches to compare when scoring a candidate period."
-        /></label>
-        <label class="toolbar-field"
-          >corrPts
-          <input
-            id="corrSamplePoints"
-            class="toolbar-number"
-            type="number"
-            min="1"
-            max="128"
-            step="1"
-            value="30"
-            title="Approximate number of sampled points per compared patch when computing correlation."
-        /></label>
-        <label class="toolbar-field"
-          >maxWalk
-          <input
-            id="maxWalkSteps"
-            class="toolbar-number"
-            type="number"
-            min="0"
-            max="64"
-            step="2"
-            value="10"
-            title="Maximum number of one-sample period adjustments to try when hill-climbing a candidate period."
-        /></label>
-        <label class="toolbar-field"
-          >maxCarryRun
-          <input
-            id="maxCarryRun"
-            class="toolbar-number"
-            type="number"
-            min="1"
-            max="200"
-            step="1"
-            value="50"
-            title="Maximum number of consecutive carry-forward windows before Pica forces a fresh extrema search."
-        /></label>
-        <label class="toolbar-field"
-          >corrHzRatio
-          <input
-            id="correlationToHzWeightRatio"
-            class="toolbar-number"
-            type="number"
-            min="0"
-            max="100"
-            step="0.5"
-            value="0.5"
-            title="Correlation feature weight relative to the Hz feature weight of 1."
-        /></label>
-        <button id="resetStorageButton" class="toolbar-btn" type="button">
-          Reset stored params
-        </button>
-        <div id="perfInfo"></div>
-        <div id="status">Ready to record.</div>
-      </div>
-      <div id="subtoolbar">
-        <div id="windowInfo">
-          Sample window uses 2 cycles at E1, which is 2330 samples at 48 kHz (~48.5 ms).
-        </div>
-        <div id="methodToggleControls"></div>
-        <div id="actualPitchInfo">
-          Actual labels 0. Shortcuts: A/D move always. Q/E copy, W null + next, S forget + next in
-          labeling mode.
-        </div>
-      </div>
-      <details id="candidatePanelDetails" open>
-        <summary>Candidate Table</summary>
-        <div id="candidatePanel"></div>
-      </details>
-      <div id="pitchChart"></div>
-      <div id="waveformChart"></div>
-      <div id="harmonicChart"></div>
+    body.loading #pitchChart,
+    body.loading #waveformChart,
+    body.loading #harmonicChart {
+      opacity: 0.55;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="controlsPanel" class="quadrant">
+    <div id="metaActions">
+      <button id="recordButton" class="toolbar-btn" type="button">Record 5s</button>
+      <select id="sourceSelect" class="toolbar-select" aria-label="Audio source"></select>
     </div>
-    <script type="module" src="main.js"></script>
-  </body>
+    <div id="methodToggleControls"></div>
+    <div id="perfInfo"></div>
+    <div id="status">Ready to record.</div>
+    <div id="windowInfo">
+      Sample window uses 2 cycles at E1, which is 2330 samples at 48 kHz (~48.5 ms).
+    </div>
+    <div id="actualPitchInfo">
+      Actual labels 0. Shortcuts: A/D move always. Q/E copy, W null + next, S forget + next in
+      labeling mode.
+    </div>
+    <div id="paramsSection">
+      <div id="paramsColumn">
+        <label class="toolbar-field"
+        >minAmp
+          <input
+                  id="minAmp"
+                  class="toolbar-number"
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value="0.01"
+                  title="Minimum window or compared-region peak amplitude required before Pica accepts it."
+          /></label>
+        <label class="toolbar-field"
+        >minCorr
+          <input
+                  id="minCorr"
+                  class="toolbar-number"
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value="0.95"
+                  title="Minimum winning-candidate correlation required before Pica accepts it."
+          /></label>
+        <label class="toolbar-field"
+        >minCarryCorr
+          <input
+                  id="minCarryCorr"
+                  class="toolbar-number"
+                  type="number"
+                  min="0"
+                  max="20"
+                  step="0.01"
+                  value="3"
+                  title="Minimum prior and walked correlation required before the carry-forward path can win."
+          /></label>
+        <label class="toolbar-field"
+        >maxCrossingsPerPeriod
+          <input
+                  id="maxCrossingsPerPeriod"
+                  class="toolbar-number"
+                  type="number"
+                  min="2"
+                  max="64"
+                  step="2"
+                  value="20"
+                  title="Maximum zero crossings to allow in one period when collecting recent folds."
+          /></label>
+        <label class="toolbar-field"
+        >maxPatches
+          <input
+                  id="maxComparisonPatches"
+                  class="toolbar-number"
+                  type="number"
+                  min="2"
+                  max="16"
+                  step="1"
+                  value="7"
+                  title="Maximum number of trailing period-sized patches to compare when scoring a candidate period."
+          /></label>
+        <label class="toolbar-field"
+        >corrPts
+          <input
+                  id="corrSamplePoints"
+                  class="toolbar-number"
+                  type="number"
+                  min="1"
+                  max="128"
+                  step="1"
+                  value="30"
+                  title="Approximate number of sampled points per compared patch when computing correlation."
+          /></label>
+        <label class="toolbar-field"
+        >maxWalk
+          <input
+                  id="maxWalkSteps"
+                  class="toolbar-number"
+                  type="number"
+                  min="0"
+                  max="64"
+                  step="2"
+                  value="10"
+                  title="Maximum number of one-sample period adjustments to try when hill-climbing a candidate period."
+          /></label>
+        <label class="toolbar-field"
+        >maxCarryRun
+          <input
+                  id="maxCarryRun"
+                  class="toolbar-number"
+                  type="number"
+                  min="1"
+                  max="200"
+                  step="1"
+                  value="50"
+                  title="Maximum number of consecutive carry-forward windows before Pica forces a fresh extrema search."
+          /></label>
+        <label class="toolbar-field"
+        >corrHzRatio
+          <input
+                  id="correlationToHzWeightRatio"
+                  class="toolbar-number"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value="0.5"
+                  title="Correlation feature weight relative to the Hz feature weight of 1."
+          /></label>
+      </div>
+    </div>
+    <div>
+      <button id="resetStorageButton" class="toolbar-btn" type="button">
+        Reset stored params
+      </button>
+    </div>
+  </div>
+  <div class="quadrant">
+    <div id="pitchChart"></div>
+  </div>
+  <div class="quadrant">
+    <div id="waveformChart"></div>
+  </div>
+  <div class="quadrant">
+    <div id="harmonicChart"></div>
+  </div>
+</div>
+<script type="module" src="main.js"></script>
+</body>
 </html>

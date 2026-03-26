@@ -85,6 +85,11 @@ function isValueWithinSensibleRange(field, value) {
   return true;
 }
 
+function roundPointValue(field, value) {
+  if (isIntegerField(field)) return Math.round(value);
+  return Number(value.toFixed(3));
+}
+
 function getStepCount(field) {
   const steps = Math.trunc(Number(settingStepCountInputs.get(field.key).value));
   return Number.isFinite(steps) ? Math.max(1, steps) : DEFAULT_STEP_COUNT;
@@ -142,9 +147,7 @@ function buildPointValues(field) {
   const { midpoint, step, steps } = getFieldInputValues(field);
   const offsetRadius = Math.floor(steps / 2);
   const values = Array.from({ length: steps }, (_, index) =>
-    isIntegerField(field)
-      ? Math.round(midpoint + (index - offsetRadius) * step)
-      : midpoint + (index - offsetRadius) * step,
+    roundPointValue(field, midpoint + (index - offsetRadius) * step),
   ).filter((value) => isValueWithinSensibleRange(field, value));
   return [...new Set(values)];
 }
@@ -373,7 +376,7 @@ function createSettingInput(field) {
   const midpointInput = document.createElement("input");
   midpointInput.className = "toolbar-number";
   midpointInput.type = "number";
-  midpointInput.step = "any";
+  midpointInput.step = String(field.step);
   midpointInput.title = `${field.title} Midpoint value`;
   midpointInput.value = String(readStoredNumber(getStorageKey(field.key), currentValue));
   midpointInput.addEventListener("input", () => {
@@ -388,7 +391,7 @@ function createSettingInput(field) {
   const stepInput = document.createElement("input");
   stepInput.className = "toolbar-number";
   stepInput.type = "number";
-  stepInput.step = "any";
+  stepInput.step = String(field.step);
   stepInput.title = `${field.title} Step size`;
   stepInput.value = String(readStoredNumber(getStepStorageKey(field.key), field.step));
   stepInput.addEventListener("input", () => {
