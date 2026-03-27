@@ -4,10 +4,9 @@ import { getCentsDifference } from "./utils.js";
 import { getPicaWindowSamples } from "./windowing.js";
 import { getPicaPitchAnalysisFromWaveform } from "./picaPitch.js";
 import { analyzePitchyTrack } from "./pitchyPitch.js";
+import { getActualPitchHz } from "./actualLabels.js";
 
 const TIMESTEPS_PER_SECOND = 80;
-const VOCAL_SAMPLER_FILE_NAME = "vocal_sampler.wav";
-const VOCAL_SAMPLER_ACTUAL_FILE_NAME = "vocal_sampler_actual.json";
 
 function createResolvedPitchMethod(label, key, pitchHz, msPerSecondAudio) {
   return {
@@ -50,40 +49,12 @@ async function loadWavSamples(url) {
   }
 }
 
-function getActualPitchUrl(audioInput) {
-  if (typeof audioInput !== "string" || !audioInput.endsWith(VOCAL_SAMPLER_FILE_NAME)) {
-    return null;
-  }
-  return audioInput.slice(0, -VOCAL_SAMPLER_FILE_NAME.length) + VOCAL_SAMPLER_ACTUAL_FILE_NAME;
-}
-
-async function loadActualPitchHz(audioInput) {
-  const actualPitchUrl = getActualPitchUrl(audioInput);
-  if (!actualPitchUrl) return null;
-
-  const response = await fetch(actualPitchUrl);
-  return await response.json();
-}
-
-function normalizeActualPitchHzLength(actualPitchHz, targetLength) {
-  if (!Array.isArray(actualPitchHz) || actualPitchHz.length === targetLength) {
-    return actualPitchHz;
-  }
-  if (actualPitchHz.length > targetLength) {
-    return actualPitchHz.slice(0, targetLength);
-  }
-  return actualPitchHz.concat(new Array(targetLength - actualPitchHz.length).fill(null));
-}
-
 export async function loadPitchSample(audioInput) {
   const { analyzeDecodedPitchSample, loadAudioSample } =
     await import("../pitchDetection/analysis.js");
   const loaded = await loadAudioSample(audioInput);
   const fftAnalysis = await analyzeDecodedPitchSample(loaded);
-  const actualPitchHz = normalizeActualPitchHzLength(
-    await loadActualPitchHz(audioInput),
-    fftAnalysis.timeSec.length,
-  );
+  const actualPitchHz = await getActualPitchHz(audioInput, fftAnalysis.timeSec.length);
   return {
     sampleRate: loaded.sampleRate,
     samples: loaded.samples,
@@ -94,7 +65,7 @@ export async function loadPitchSample(audioInput) {
 
 export async function loadActualPitchSample(audioInput) {
   const loaded = await loadWavSamples(audioInput);
-  const actualPitchHz = await loadActualPitchHz(audioInput);
+  const actualPitchHz = await getActualPitchHz(audioInput);
   return {
     sampleRate: loaded.sampleRate,
     samples: loaded.samples,
@@ -182,9 +153,13 @@ function getMsPerSecondAudio(elapsedMs, timestepsPerSecond, sampleCount) {
   return sampleCount > 0 ? elapsedMs / (sampleCount / timestepsPerSecond) : Number.NaN;
 }
 
-function timePostProcessPitchTrack(pitchHz, timestepsPerSecond) {
+function maybePostProcessPitchTrack(pitchHz, postProcessingEnabled) {
+  return postProcessingEnabled ? postProcessPitchTrack(pitchHz) : pitchHz;
+}
+
+function timePostProcessPitchTrack(pitchHz, timestepsPerSecond, postProcessingEnabled) {
   const startMs = performance.now();
-  const processedPitchHz = postProcessPitchTrack(pitchHz);
+  const processedPitchHz = maybePostProcessPitchTrack(pitchHz, postProcessingEnabled);
   const elapsedMs = performance.now() - startMs;
   return {
     pitchHz: processedPitchHz,
@@ -192,9 +167,18 @@ function timePostProcessPitchTrack(pitchHz, timestepsPerSecond) {
   };
 }
 
-function analyzePitchTrack(timeSec, samples, sampleRate, settings, mode, timestepsPerSecond) {
+function analyzePitchTrack(
+  timeSec,
+  samples,
+  sampleRate,
+  settings,
+  mode,
+  timestepsPerSecond,
+  postProcessingEnabled,
+) {
   const pitchHz = new Array(timeSec.length);
   const correlation = new Array(timeSec.length);
+  const zeroCrossingDensity = new Array(timeSec.length);
   const priorStepByWindow = new Array(timeSec.length);
   let priorStep = null;
 
@@ -210,14 +194,16 @@ function analyzePitchTrack(timeSec, samples, sampleRate, settings, mode, timeste
     );
     pitchHz[windowIndex] = analysis.hz;
     correlation[windowIndex] = analysis.winningCandidate?.correlation ?? Number.NaN;
+    zeroCrossingDensity[windowIndex] = analysis.foldExtrema.zeroCrossingDensity;
     priorStep = getPriorStep(analysis, priorStep);
   }
 
-  const processedTrack = postProcessPitchTrack(pitchHz);
+  const processedTrack = maybePostProcessPitchTrack(pitchHz, postProcessingEnabled);
   const elapsedMs = performance.now() - startMs;
   return {
     pitchHz: processedTrack,
     correlation,
+    zeroCrossingDensity,
     priorStepByWindow,
     msPerSecondAudio: getMsPerSecondAudio(elapsedMs, timestepsPerSecond, timeSec.length),
   };
@@ -229,6 +215,7 @@ export async function analyzePreparedPitchSample(preparedSample, settings, metho
   const processedFftTrack = timePostProcessPitchTrack(
     fftAnalysis.pitchHz,
     fftAnalysis.samplesPerSecond,
+    settings.postProcessingEnabled !== false,
   );
   console.assert(
     actualPitchHz === null || actualPitchHz.length === fftAnalysis.timeSec.length,
@@ -241,6 +228,7 @@ export async function analyzePreparedPitchSample(preparedSample, settings, metho
   const emptyTrack = {
     pitchHz: new Array(fftAnalysis.timeSec.length).fill(Number.NaN),
     correlation: new Array(fftAnalysis.timeSec.length).fill(Number.NaN),
+    zeroCrossingDensity: new Array(fftAnalysis.timeSec.length).fill(Number.NaN),
     priorStepByWindow: new Array(fftAnalysis.timeSec.length).fill(null),
     msPerSecondAudio: Number.NaN,
   };
@@ -252,6 +240,7 @@ export async function analyzePreparedPitchSample(preparedSample, settings, metho
         settings,
         "pica",
         fftAnalysis.samplesPerSecond,
+        settings.postProcessingEnabled !== false,
       )
     : emptyTrack;
   const carryForwardTrack = visibleMethods.carryForward
@@ -262,6 +251,7 @@ export async function analyzePreparedPitchSample(preparedSample, settings, metho
         settings,
         "carryForward",
         fftAnalysis.samplesPerSecond,
+        settings.postProcessingEnabled !== false,
       )
     : emptyTrack;
   const rawPitchyTrack = visibleMethods.pitchy
@@ -289,9 +279,11 @@ export async function analyzePreparedPitchSample(preparedSample, settings, metho
     pitchHz: processedFftTrack.pitchHz,
     picaPitchHz: picaTrack.pitchHz,
     picaCorrelation: picaTrack.correlation,
+    picaZeroCrossingDensity: picaTrack.zeroCrossingDensity,
     pitchyPitchHz: pitchyTrack.pitchHz,
     carryForwardPitchHz: carryForwardTrack.pitchHz,
     carryForwardCorrelation: carryForwardTrack.correlation,
+    carryForwardZeroCrossingDensity: carryForwardTrack.zeroCrossingDensity,
     carryForwardPriorStepByWindow: carryForwardTrack.priorStepByWindow,
     settings,
     metrics: {
@@ -344,11 +336,20 @@ export async function analyzePreparedActualPitchSample(
   const emptyTrack = {
     pitchHz: new Array(timeSec.length).fill(Number.NaN),
     correlation: new Array(timeSec.length).fill(Number.NaN),
+    zeroCrossingDensity: new Array(timeSec.length).fill(Number.NaN),
     priorStepByWindow: new Array(timeSec.length).fill(null),
     msPerSecondAudio: Number.NaN,
   };
   const picaTrack = visibleMethods.pica
-    ? analyzePitchTrack(timeSec, samples, sampleRate, settings, "pica", TIMESTEPS_PER_SECOND)
+    ? analyzePitchTrack(
+        timeSec,
+        samples,
+        sampleRate,
+        settings,
+        "pica",
+        TIMESTEPS_PER_SECOND,
+        settings.postProcessingEnabled !== false,
+      )
     : emptyTrack;
   const carryForwardTrack = visibleMethods.carryForward
     ? analyzePitchTrack(
@@ -358,6 +359,7 @@ export async function analyzePreparedActualPitchSample(
         settings,
         "carryForward",
         TIMESTEPS_PER_SECOND,
+        settings.postProcessingEnabled !== false,
       )
     : emptyTrack;
   const rawPitchyTrack = visibleMethods.pitchy
@@ -379,9 +381,11 @@ export async function analyzePreparedActualPitchSample(
     pitchHz: new Array(timeSec.length).fill(Number.NaN),
     picaPitchHz: picaTrack.pitchHz,
     picaCorrelation: picaTrack.correlation,
+    picaZeroCrossingDensity: picaTrack.zeroCrossingDensity,
     pitchyPitchHz: pitchyTrack.pitchHz,
     carryForwardPitchHz: carryForwardTrack.pitchHz,
     carryForwardCorrelation: carryForwardTrack.correlation,
+    carryForwardZeroCrossingDensity: carryForwardTrack.zeroCrossingDensity,
     carryForwardPriorStepByWindow: carryForwardTrack.priorStepByWindow,
     settings,
     metrics: {

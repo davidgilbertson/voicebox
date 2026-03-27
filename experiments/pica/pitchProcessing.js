@@ -148,39 +148,41 @@ function applyCleanup(processedPitchCents, endIndex) {
   // In:  [A A N N N A A]
   //           ↓ ↓ ↓
   // Out: [A A R R R A A]
-  if (
-    isFiniteCents(pos1) &&
-    isFiniteCents(pos2) &&
-    !isFiniteCents(pos3) &&
-    !isFiniteCents(pos4) &&
-    !isFiniteCents(pos5) &&
-    isFiniteCents(pos6) &&
-    isFiniteCents(pos7)
-  ) {
-    const gapStepCents = (pos6 - pos2) / 4;
-    processedPitchCents[endIndex - 4] = pos2 + gapStepCents;
-    processedPitchCents[endIndex - 3] = pos2 + gapStepCents * 2;
-    processedPitchCents[endIndex - 2] = pos2 + gapStepCents * 3;
-    return;
-  }
+  // TODO (@davidgilbertson): this can cause problems if it spans the gap to an outlier
+  // if (
+  //   isFiniteCents(pos1) &&
+  //   isFiniteCents(pos2) &&
+  //   !isFiniteCents(pos3) &&
+  //   !isFiniteCents(pos4) &&
+  //   !isFiniteCents(pos5) &&
+  //   isFiniteCents(pos6) &&
+  //   isFiniteCents(pos7)
+  // ) {
+  //   const gapStepCents = (pos6 - pos2) / 4;
+  //   processedPitchCents[endIndex - 4] = pos2 + gapStepCents;
+  //   processedPitchCents[endIndex - 3] = pos2 + gapStepCents * 2;
+  //   processedPitchCents[endIndex - 2] = pos2 + gapStepCents * 3;
+  //   return;
+  // }
 
   // 2 NaNs in last 6
   // In:  [. A A N N A A]
   //             ↓ ↓
   // Out: [. A A R R A A]
-  if (
-    isFiniteCents(pos2) &&
-    isFiniteCents(pos3) &&
-    !isFiniteCents(pos4) &&
-    !isFiniteCents(pos5) &&
-    isFiniteCents(pos6) &&
-    isFiniteCents(pos7)
-  ) {
-    const gapStepCents = (pos6 - pos3) / 3;
-    processedPitchCents[endIndex - 3] = pos3 + gapStepCents;
-    processedPitchCents[endIndex - 2] = pos3 + gapStepCents * 2;
-    return;
-  }
+  // TODO (@davidgilbertson): this can cause problems if it spans the gap to an outlier
+  // if (
+  //   isFiniteCents(pos2) &&
+  //   isFiniteCents(pos3) &&
+  //   !isFiniteCents(pos4) &&
+  //   !isFiniteCents(pos5) &&
+  //   isFiniteCents(pos6) &&
+  //   isFiniteCents(pos7)
+  // ) {
+  //   const gapStepCents = (pos6 - pos3) / 3;
+  //   processedPitchCents[endIndex - 3] = pos3 + gapStepCents;
+  //   processedPitchCents[endIndex - 2] = pos3 + gapStepCents * 2;
+  //   return;
+  // }
 
   // 1 NaN in last 5
   // In:  [. . A A N A A]
@@ -235,6 +237,26 @@ function applyCleanup(processedPitchCents, endIndex) {
       processedPitchCents[endIndex - 1] = Number.NaN;
     }
   }
+
+  //  --  ISLANDS -- //
+
+  // 3 in last 7
+  // In:  [N N O O O N N]
+  //           ↓ ↓ ↓
+  // Out: [N N N N N N N]
+  // TODO (@davidgilbertson): implement this
+
+  // 2 in last 6
+  // In:  [. N N O O N N]
+  //             ↓ ↓
+  // Out: [. N N N N N N]
+  // TODO (@davidgilbertson): implement this
+
+  // 1 in last 5
+  // In:  [. . N N O N N]
+  //               ↓
+  // Out: [. . N N N N N]
+  // TODO (@davidgilbertson): implement this
 }
 
 export function postProcessPitchTrack(pitchHz) {

@@ -109,7 +109,7 @@ function getWindowStats(samples) {
 
   return {
     zeroCrossingCount,
-    maxAmplitude,
+    maxAmplitude, // TODO (@davidgilbertson): might be unused
   };
 }
 
@@ -151,6 +151,8 @@ function getWalkedPeriod(
   mode = "candidateSearch",
   cache = null,
 ) {
+  const directionProbeStride = 2;
+  const walkStride = 4;
   let bestPeriodSize = seedPeriodSize;
   let bestCorrelation = getCorrelation(samples, seedPeriodSize, settings, cache);
   let currentPeriodSize = bestPeriodSize;
@@ -161,42 +163,40 @@ function getWalkedPeriod(
   let step = 0;
   while (step < settings.maxWalkSteps) {
     if (phase === "getDirection") {
-      // First find the uphill direction, snapping onto the nearest stride-5 lane.
-      const lowerPeriodSize =
-        bestPeriodSize % 5 === 0 ? bestPeriodSize - 5 : Math.floor(bestPeriodSize / 5) * 5;
-      const higherPeriodSize =
-        bestPeriodSize % 5 === 0 ? bestPeriodSize + 5 : Math.ceil(bestPeriodSize / 5) * 5;
+      // First find the local uphill direction, then snap onto the nearest stride lane.
+      const lowerPeriodSize = bestPeriodSize - directionProbeStride;
+      const higherPeriodSize = bestPeriodSize + directionProbeStride;
       const lowerCorrelation = getCorrelation(samples, lowerPeriodSize, settings, cache);
       const higherCorrelation = getCorrelation(samples, higherPeriodSize, settings, cache);
 
-      if (higherCorrelation > lowerCorrelation) {
-        if (higherCorrelation > bestCorrelation) {
-          bestPeriodSize = higherPeriodSize;
-          bestCorrelation = higherCorrelation;
-          currentPeriodSize = higherPeriodSize;
-          currentCorrelation = higherCorrelation;
-          direction = 1;
-          phase = "walk";
-          step += 1;
-          continue;
-        }
-      } else if (lowerCorrelation > bestCorrelation) {
-        bestPeriodSize = lowerPeriodSize;
-        bestCorrelation = lowerCorrelation;
-        currentPeriodSize = lowerPeriodSize;
-        currentCorrelation = lowerCorrelation;
-        direction = -1;
-        phase = "walk";
-        step += 1;
-        continue;
+      if (higherCorrelation <= bestCorrelation && lowerCorrelation <= bestCorrelation) {
+        break;
       }
 
-      break;
+      direction = higherCorrelation > lowerCorrelation ? 1 : -1;
+      currentPeriodSize =
+        direction > 0
+          ? bestPeriodSize % walkStride === 0
+            ? bestPeriodSize + walkStride
+            : Math.ceil(bestPeriodSize / walkStride) * walkStride
+          : bestPeriodSize % walkStride === 0
+            ? bestPeriodSize - walkStride
+            : Math.floor(bestPeriodSize / walkStride) * walkStride;
+      currentCorrelation = getCorrelation(samples, currentPeriodSize, settings, cache);
+
+      if (currentCorrelation > bestCorrelation) {
+        bestPeriodSize = currentPeriodSize;
+        bestCorrelation = currentCorrelation;
+      }
+
+      phase = "walk";
+      step += 1;
+      continue;
     }
 
     if (phase === "walk") {
-      // Once we're on the lane, keep walking in stride-5 steps while correlation improves.
-      const nextPeriodSize = currentPeriodSize + direction * 5;
+      // Once we're on the lane, keep walking in stride steps while correlation improves.
+      const nextPeriodSize = currentPeriodSize + direction * walkStride;
       const nextCorrelation = getCorrelation(samples, nextPeriodSize, settings, cache);
       if (nextCorrelation > currentCorrelation) {
         currentPeriodSize = nextPeriodSize;
@@ -214,7 +214,7 @@ function getWalkedPeriod(
       continue;
     }
 
-    // When the stride-5 walk overshoots, walk back one-by-one to find the exact peak.
+    // When the stride walk overshoots, walk back one-by-one to find the exact peak.
     const nextPeriodSize = currentPeriodSize - direction;
     const nextCorrelation = getCorrelation(samples, nextPeriodSize, settings, cache);
     if (nextCorrelation > currentCorrelation) {
@@ -288,6 +288,7 @@ function getFoldExtremaFromWaveform(samples, settings) {
   const peaks = [];
   const troughs = [];
   let foldIndex = 0;
+  let leftmostVisitedSampleIndex = samples.length - 2;
   const maxFoldCount = settings.maxCrossingsPerPeriod * 2;
   // We tried keeping multiple extrema per fold, but one worked just as well and was ~30% faster.
   let rightSample = samples[samples.length - 1];
@@ -302,6 +303,7 @@ function getFoldExtremaFromWaveform(samples, settings) {
     sampleIndex -= 1
   ) {
     const leftSample = samples[sampleIndex - 1];
+    leftmostVisitedSampleIndex = sampleIndex - 1;
     if (currentSample < 0 !== rightSample < 0) {
       if (bestIndex !== -1 && !(foldIndex === 0 && bestIndex === samples.length - 1)) {
         const extremum = {
@@ -357,9 +359,14 @@ function getFoldExtremaFromWaveform(samples, settings) {
     }
   }
 
+  const coveredSampleCount = samples.length - leftmostVisitedSampleIndex;
+  const zeroCrossingDensity = coveredSampleCount > 0 ? foldIndex / coveredSampleCount : 0;
+
   return {
     peaks,
     troughs,
+    coveredSampleCount,
+    zeroCrossingDensity,
   };
 }
 
@@ -392,7 +399,8 @@ function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, ca
         cache,
       );
       if (!walkedPeriod || walkedPeriod.correlation < settings.minCorr) continue;
-      const hzFeature = Math.log2(walkedPeriod.hz / PICA_MIN_HZ);
+      // const hzFeature = Math.log2(walkedPeriod.hz / PICA_MIN_HZ);
+      const hzFeature = (walkedPeriod.hz - PICA_MIN_HZ) / PICA_MAX_HZ;
       const correlationFeature = walkedPeriod.correlation;
 
       candidates.push({
@@ -431,13 +439,6 @@ function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, ca
 }
 
 function setRejectionReason(analysis) {
-  if (analysis.maxAmplitude < analysis.settings.minAmp) {
-    return {
-      hz: Number.NaN,
-      rejectionReason: "low_amplitude",
-    };
-  }
-
   if (analysis.zeroCrossingCount === 0) {
     return {
       hz: Number.NaN,
@@ -524,12 +525,12 @@ export function getPicaPitchAnalysisFromWaveform(samples, sampleRate, settings, 
     settings,
     zeroCrossingCount,
     maxAmplitude,
-    foldExtrema: { peaks: [], troughs: [] },
+    foldExtrema: { peaks: [], troughs: [], coveredSampleCount: 0, zeroCrossingDensity: 0 },
     candidates: [],
     winningCandidate: null,
   };
 
-  if (maxAmplitude < settings.minAmp || zeroCrossingCount === 0) {
+  if (zeroCrossingCount === 0) {
     return {
       ...analysis,
       ...setRejectionReason(analysis),
@@ -545,7 +546,7 @@ export function getPicaPitchAnalysisFromWaveform(samples, sampleRate, settings, 
 
   // If there's no carry forward result, we do a full search
   const extrema = carryForwardCandidate
-    ? { peaks: [], troughs: [] }
+    ? { peaks: [], troughs: [], coveredSampleCount: 0, zeroCrossingDensity: 0 }
     : getFoldExtremaFromWaveform(samples, settings);
   const { candidates, winningCandidate } = carryForwardCandidate
     ? {

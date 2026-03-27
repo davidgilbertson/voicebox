@@ -112,7 +112,7 @@ export const PICA_SETTING_FIELDS = [
     label: "corr/hz ratio",
     inputLabel: "corrHzRatio",
     min: 0,
-    step: 0.2,
+    step: 0.1,
     title: "Correlation feature weight relative to the Hz feature weight of 1.",
   },
 ];

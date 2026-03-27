@@ -517,7 +517,6 @@ function getPicaPitchResultFromSamples(samples, sampleRate, minHz, maxHz, priorS
     //   "carryForward",
     //   cache,
     // );
-
     // A short-lived fallback catches obvious octave slips without letting carry-forward
     // mask a real note change for long.
     // if (walkedPeriod && priorSuppressedOctaveJumpCount < MAX_SUPPRESSED_OCTAVE_JUMP_RUN) {

@@ -1,5 +1,6 @@
-import { PICA_MAX_HZ, PICA_MIN_HZ } from "./config.js";
+import { PICA_ACCURACY_CENTS, PICA_MAX_HZ, PICA_MIN_HZ } from "./config.js";
 import { getCorrelation, getPicaPitchAnalysisFromWaveform } from "./picaPitch.js";
+import { getCentsDifference } from "./utils.js";
 import {
   PICA_WINDOW_CYCLES,
   PICA_WINDOW_DURATION_SEC,
@@ -112,11 +113,11 @@ function getPitchOctaveAnnotations() {
   return PITCH_OCTAVE_TICKS.map((tick) => ({
     xref: "paper",
     yref: "paper",
-    x: 0.995,
+    x: 1.02,
     y: 0.24 + (0.76 * (Math.log10(tick.hz) - minLogHz)) / (maxLogHz - minLogHz),
     text: tick.label,
     showarrow: false,
-    xanchor: "right",
+    xanchor: "left",
     yanchor: "middle",
     font: { color: "#94a3b8", size: 11 },
   }));
@@ -259,6 +260,7 @@ async function renderHistogram(
   plotly,
   waveformWindow,
   correlationSeries,
+  analysis,
   actualPitchHz,
   onActualPitchSelect,
   methodVisibility,
@@ -277,6 +279,23 @@ async function renderHistogram(
   const carryForwardMarkerY = getNearestCorrelationY(correlationSeries, carryForwardPitchHz);
   const actualMarkerX = Number.isFinite(actualPitchHz) ? [actualPitchHz] : [];
   const actualMarkerY = getNearestCorrelationY(correlationSeries, actualPitchHz);
+  const candidateShapes = (analysis?.candidates ?? [])
+    .filter((candidate) => Number.isFinite(candidate?.hz))
+    .map((candidate) => ({
+      type: "line",
+      xref: "x",
+      yref: "paper",
+      x0: candidate.hz,
+      x1: candidate.hz,
+      y0: 0,
+      y1: 1,
+      line: {
+        color: "rgba(255, 255, 255, 0.5)",
+        width: 1,
+        dash: "dot",
+      },
+      layer: "below",
+    }));
 
   await plotly.newPlot(
     "harmonicChart",
@@ -334,15 +353,16 @@ async function renderHistogram(
       margin: { l: 52, r: 52, t: 54, b: 76 },
       xaxis: {
         title: "Hz",
-        gridcolor: "#1f2937",
+        showgrid: false,
         type: "log",
         range: [Math.log10(correlationSeries.minHz), Math.log10(correlationSeries.maxHz)],
         tickmode: "array",
         tickvals: CORRELATION_CHART_TICKS_HZ,
         ticktext: CORRELATION_CHART_TICKS_HZ.map(String),
       },
-      yaxis: { title: "corr", gridcolor: "#1f2937", range: [-1, 1] },
+      yaxis: { title: "corr", gridcolor: "#1f2937", range: [-1, 1.05] },
       annotations: [],
+      shapes: candidateShapes,
     },
     { responsive: true },
   );
@@ -486,17 +506,6 @@ export async function renderPicaPitchCharts(result, options = {}) {
       hovertemplate: "t=%{x:.3f}s<br>Carry=%{y:.2f} Hz<extra></extra>",
       name: "Carry",
     });
-    pitchChartSeries.push({
-      x: result.timeSec,
-      y: result.carryForwardCorrelation,
-      mode: "lines",
-      customdata: pitchChartWindowIndex,
-      line: { width: 1.25, color: "rgba(251, 146, 60, 0.5)" },
-      connectgaps: false,
-      hovertemplate: "t=%{x:.3f}s<br>Carry corr=%{y:.3f}<extra></extra>",
-      name: "Carry corr",
-      yaxis: "y2",
-    });
   }
   if (methodVisibility.pica) {
     pitchChartSeries.push({
@@ -511,16 +520,23 @@ export async function renderPicaPitchCharts(result, options = {}) {
     });
     pitchChartSeries.push({
       x: result.timeSec,
-      y: result.picaCorrelation,
+      y: result.picaZeroCrossingDensity,
       mode: "lines",
       customdata: pitchChartWindowIndex,
       line: { width: 1.25, color: "rgba(96, 165, 250, 0.45)" },
       connectgaps: false,
-      hovertemplate: "t=%{x:.3f}s<br>Pica corr=%{y:.3f}<extra></extra>",
-      name: "Pica corr",
+      hovertemplate: "t=%{x:.3f}s<br>Pica crossing density=%{y:.4f}<extra></extra>",
+      name: "Pica crossing density",
       yaxis: "y2",
     });
   }
+
+  const zeroCrossingDensityMax = Math.max(
+    0.01,
+    ...(result.picaZeroCrossingDensity ?? [])
+      .filter((value) => Number.isFinite(value))
+      .map((value) => Number(value.toFixed(4))),
+  );
 
   for (const trace of pitchChartSeries) {
     const priorVisibility = priorPitchChartVisibilityByName.get(trace.name);
@@ -540,7 +556,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
       showlegend: true,
       legend: getBottomLegend(),
       uirevision: "pitchChart",
-      margin: { l: 52, r: 56, t: 48, b: 76 },
+      margin: { l: 52, r: 80, t: 48, b: 76 },
       xaxis: {
         title: "Time (s)",
         showgrid: false,
@@ -557,10 +573,10 @@ export async function renderPicaPitchCharts(result, options = {}) {
         ticktext: PITCH_OCTAVE_TICKS.map((tick) => String(Math.round(tick.hz))),
       },
       yaxis2: {
-        title: "Corr",
+        title: "Crossing density",
         gridcolor: "#1f2937",
         domain: [0, 0.16],
-        range: [0, 1],
+        range: [0, zeroCrossingDensityMax],
       },
       annotations: getPitchOctaveAnnotations(),
     },
@@ -663,6 +679,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
         plotly,
         waveformWindow,
         correlationSeries,
+        analysis,
         getResolvedActualPitchHz(activeWindowIndex),
         hasActuals
           ? (pitchHz) => {
@@ -692,9 +709,32 @@ export async function renderPicaPitchCharts(result, options = {}) {
 
   await selectWindow(activeWindowIndex);
 
-  document.getElementById("pitchChart").on("plotly_click", async (event) => {
+  const pitchChartElement = document.getElementById("pitchChart");
+  function getNearestWindowIndexForTime(clickedTimeSec) {
+    let nearestWindowIndex = 0;
+    let nearestDistance = Math.abs(result.timeSec[0] - clickedTimeSec);
+    for (let windowIndex = 1; windowIndex < result.timeSec.length; windowIndex += 1) {
+      const distance = Math.abs(result.timeSec[windowIndex] - clickedTimeSec);
+      if (distance < nearestDistance) {
+        nearestWindowIndex = windowIndex;
+        nearestDistance = distance;
+      }
+    }
+    return nearestWindowIndex;
+  }
+
+  function getWindowIndexFromPoint(point) {
+    if (Number.isInteger(point?.customdata)) {
+      return point.customdata;
+    }
+    return Number.isFinite(point?.x) ? getNearestWindowIndexForTime(point.x) : null;
+  }
+
+  pitchChartElement.removeAllListeners?.("plotly_click");
+
+  pitchChartElement.on("plotly_click", async (event) => {
     const point = event.points?.[0];
-    const windowIndex = point?.customdata;
+    const windowIndex = getWindowIndexFromPoint(point);
     if (!Number.isInteger(windowIndex)) return;
     await selectWindow(windowIndex);
   });
@@ -704,12 +744,33 @@ export async function renderPicaPitchCharts(result, options = {}) {
     detachWindowKeyHandler = null;
   }
 
+  function findNextPicaErrorWindowIndex(startWindowIndex, direction) {
+    for (
+      let windowIndex = startWindowIndex + direction;
+      windowIndex >= 0 && windowIndex <= maxWindowIndex;
+      windowIndex += direction
+    ) {
+      const actualHz = getResolvedActualPitchHz(windowIndex);
+      if (!Number.isFinite(actualHz)) continue;
+
+      const picaHz = result.picaPitchHz[windowIndex];
+      if (getCentsDifference(picaHz, actualHz) > PICA_ACCURACY_CENTS) {
+        return windowIndex;
+      }
+    }
+    return startWindowIndex;
+  }
+
   const keydownHandler = (event) => {
     if (event.defaultPrevented) return;
     const key = event.key.toLowerCase();
     const isMoveKey = key === "a" || key === "d";
     const isLabelKey = key === "q" || key === "w" || key === "e" || key === "s";
-    if (!isMoveKey && !(hasActuals && isLabelKey)) return;
+    const isErrorJumpKey = key === "z" || key === "c";
+    const canJumpToErrors = hasActuals && methodVisibility.pica;
+    if (!isMoveKey && !(hasActuals && isLabelKey) && !(canJumpToErrors && isErrorJumpKey)) {
+      return;
+    }
     const target = event.target;
     if (
       target instanceof HTMLInputElement ||
@@ -723,7 +784,9 @@ export async function renderPicaPitchCharts(result, options = {}) {
       ? key === "a"
         ? Math.max(0, activeWindowIndex - 1)
         : Math.min(maxWindowIndex, activeWindowIndex + 1)
-      : actualLabelEditor.handleKey(event.key, activeWindowIndex, maxWindowIndex);
+      : isErrorJumpKey
+        ? findNextPicaErrorWindowIndex(activeWindowIndex, key === "z" ? -1 : 1)
+        : actualLabelEditor.handleKey(event.key, activeWindowIndex, maxWindowIndex);
     if (hasActuals && isLabelKey) {
       refreshActualSeries();
       onLabelChange?.();

@@ -4,8 +4,8 @@ import { analyzePreparedActualPitchSample, loadActualPitchSample } from "./picaE
 const STORAGE_PREFIX = "voicebox.picaPitch.";
 const VOCAL_SAMPLER_URL = "../../.private/assets/vocal_sampler.wav";
 const VOCAL_SAMPLER_LABEL = "vocal_sampler.wav";
-const METHOD_KEY = "carryForward";
-const METHOD_LABEL = "Carry-forward";
+const METHOD_KEY = "pica";
+const METHOD_LABEL = "PICA";
 const DEFAULT_STEP_COUNT = 5;
 
 let preparedSamplePromise = null;
@@ -75,8 +75,8 @@ function writeStoredBoolean(key, value) {
   localStorage.setItem(key, String(value));
 }
 
-function isIntegerField(field) {
-  return Number.isInteger(field.step);
+function isIntegerStep(step) {
+  return Number.isInteger(step);
 }
 
 function isValueWithinSensibleRange(field, value) {
@@ -85,8 +85,8 @@ function isValueWithinSensibleRange(field, value) {
   return true;
 }
 
-function roundPointValue(field, value) {
-  if (isIntegerField(field)) return Math.round(value);
+function roundPointValue(step, value) {
+  if (isIntegerStep(step)) return Math.round(value);
   return Number(value.toFixed(3));
 }
 
@@ -100,6 +100,10 @@ function getFieldInputValues(field) {
   const step = Number(settingStepInputs.get(field.key).value);
   const steps = getStepCount(field);
   return { midpoint, step, steps };
+}
+
+function syncMidpointStep(field) {
+  settingMidpointInputs.get(field.key).step = settingStepInputs.get(field.key).value;
 }
 
 function getSettings() {
@@ -147,7 +151,7 @@ function buildPointValues(field) {
   const { midpoint, step, steps } = getFieldInputValues(field);
   const offsetRadius = Math.floor(steps / 2);
   const values = Array.from({ length: steps }, (_, index) =>
-    roundPointValue(field, midpoint + (index - offsetRadius) * step),
+    roundPointValue(step, midpoint + (index - offsetRadius) * step),
   ).filter((value) => isValueWithinSensibleRange(field, value));
   return [...new Set(values)];
 }
@@ -167,7 +171,7 @@ async function getPreparedSample() {
 function getMethodSummary(result) {
   return {
     accuracy: result.metrics.accuracyByMethodKey?.[METHOD_KEY]?.accuracy ?? Number.NaN,
-    msPerSecondAudio: result.perf?.carryForwardPipelineMsPerSecondAudio ?? Number.NaN,
+    msPerSecondAudio: result.perf?.picaPipelineMsPerSecondAudio ?? Number.NaN,
   };
 }
 
@@ -376,7 +380,6 @@ function createSettingInput(field) {
   const midpointInput = document.createElement("input");
   midpointInput.className = "toolbar-number";
   midpointInput.type = "number";
-  midpointInput.step = String(field.step);
   midpointInput.title = `${field.title} Midpoint value`;
   midpointInput.value = String(readStoredNumber(getStorageKey(field.key), currentValue));
   midpointInput.addEventListener("input", () => {
@@ -397,6 +400,7 @@ function createSettingInput(field) {
   stepInput.addEventListener("input", () => {
     const value = Number(stepInput.value);
     if (Number.isNaN(value)) return;
+    syncMidpointStep(field);
     writeStoredNumber(getStepStorageKey(field.key), value);
     currentFingerprint = getSettingsFingerprint(getSettings());
     updateValuePreview(field);
@@ -438,6 +442,7 @@ function createSettingInput(field) {
   settingStepCountInputs.set(field.key, stepsInput);
   settingEnabledInputs.set(field.key, enabledInput);
   settingValuePreviews.set(field.key, valuesPreview);
+  syncMidpointStep(field);
   updateValuePreview(field);
   return row;
 }
