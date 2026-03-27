@@ -480,12 +480,14 @@ function getPicaPitchResultFromSamples(samples, sampleRate, minHz, maxHz, priorS
     walkedPeriodByPeriodSize: new Map(),
   };
   const priorSuppressedOctaveJumpCount = priorStep?.suppressedOctaveJumpCount ?? 0;
+  // Carry-forward is temporarily disabled while we refine the base algorithm.
   // After we suppress an octave slip, force at least one fresh full search before
   // the cheap carry-forward shortcut can win again.
-  let winningCandidate =
-    priorSuppressedOctaveJumpCount > 0
-      ? null
-      : getCarryForwardCandidate(samples, sampleRate, minHz, maxHz, priorStep, cache);
+  let winningCandidate = null;
+  // let winningCandidate =
+  //   priorSuppressedOctaveJumpCount > 0
+  //     ? null
+  //     : getCarryForwardCandidate(samples, sampleRate, minHz, maxHz, priorStep, cache);
   if (!winningCandidate) {
     winningCandidate = getCandidatesFromExtrema(
       samples,
@@ -504,27 +506,28 @@ function getPicaPitchResultFromSamples(samples, sampleRate, minHz, maxHz, priorS
     Number.isFinite(priorStep?.hz) &&
     isLargePicaPitchJump(priorStep.hz, winningCandidate.hz)
   ) {
-    const sourcePeriodSize = Math.round(sampleRate / priorStep.hz);
-    const walkedPeriod = getWalkedPeriod(
-      samples,
-      sourcePeriodSize,
-      sampleRate,
-      minHz,
-      maxHz,
-      "carryForward",
-      cache,
-    );
+    // Carry-forward is temporarily disabled while we refine the base algorithm.
+    // const sourcePeriodSize = Math.round(sampleRate / priorStep.hz);
+    // const walkedPeriod = getWalkedPeriod(
+    //   samples,
+    //   sourcePeriodSize,
+    //   sampleRate,
+    //   minHz,
+    //   maxHz,
+    //   "carryForward",
+    //   cache,
+    // );
 
     // A short-lived fallback catches obvious octave slips without letting carry-forward
     // mask a real note change for long.
-    if (walkedPeriod && priorSuppressedOctaveJumpCount < MAX_SUPPRESSED_OCTAVE_JUMP_RUN) {
-      winningCandidate = {
-        type: "carryForward",
-        hz: walkedPeriod.hz,
-        correlation: walkedPeriod.correlation,
-      };
-      suppressedOctaveJumpCount = priorSuppressedOctaveJumpCount + 1;
-    }
+    // if (walkedPeriod && priorSuppressedOctaveJumpCount < MAX_SUPPRESSED_OCTAVE_JUMP_RUN) {
+    //   winningCandidate = {
+    //     type: "carryForward",
+    //     hz: walkedPeriod.hz,
+    //     correlation: walkedPeriod.correlation,
+    //   };
+    //   suppressedOctaveJumpCount = priorSuppressedOctaveJumpCount + 1;
+    // }
   }
 
   const nextPriorStep = getPriorStep(
