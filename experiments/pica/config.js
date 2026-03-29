@@ -15,7 +15,7 @@ export const PICA_SETTINGS_DEFAULTS = {
   corrSamplePoints: 50,
   maxWalkSteps: 60,
   maxCarryRun: 10,
-  correlationToHzWeightRatio: 250,
+  corrHzRatio: 250,
 };
 
 // export const SIMILARITY_FUNC = "scaledDot";
@@ -24,7 +24,7 @@ export const PICA_SETTINGS_DEFAULTS = {
 //   maxComparisonPatches: 3,
 //   maxWalkSteps: 10,
 //   minCarryCorr: 3,
-//   correlationToHzWeightRatio: 2.5,
+//   corrHzRatio: 2.5,
 // };
 
 // export const SIMILARITY_FUNC = "mae";
@@ -33,7 +33,7 @@ export const PICA_SETTINGS_DEFAULTS = {
 //   maxComparisonPatches: 3,
 //   maxWalkSteps: 10,
 //   minCarryCorr: 3,
-//   correlationToHzWeightRatio: 2.5,
+//   corrHzRatio: 2.5,
 // };
 
 export const PICA_SETTING_FIELDS = [
@@ -108,7 +108,7 @@ export const PICA_SETTING_FIELDS = [
       "Maximum number of consecutive carry-forward windows before Pica forces a fresh extrema search.",
   },
   {
-    key: "correlationToHzWeightRatio",
+    key: "corrHzRatio",
     label: "corr/hz ratio",
     inputLabel: "corrHzRatio",
     min: 0,

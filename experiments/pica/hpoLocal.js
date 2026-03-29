@@ -7,6 +7,7 @@ const VOCAL_SAMPLER_LABEL = "vocal_sampler.wav";
 const METHOD_KEY = "pica";
 const METHOD_LABEL = "PICA";
 const DEFAULT_STEP_COUNT = 5;
+const POST_PROCESSING_STORAGE_KEY = `${STORAGE_PREFIX}postProcessingEnabled`;
 
 let preparedSamplePromise = null;
 let isRunningAll = false;
@@ -75,6 +76,15 @@ function writeStoredBoolean(key, value) {
   localStorage.setItem(key, String(value));
 }
 
+function readStoredPostProcessingEnabled() {
+  const value = localStorage.getItem(POST_PROCESSING_STORAGE_KEY);
+  return value === null ? true : value === "true";
+}
+
+function writeStoredPostProcessingEnabled(enabled) {
+  localStorage.setItem(POST_PROCESSING_STORAGE_KEY, String(enabled));
+}
+
 function isIntegerStep(step) {
   return Number.isInteger(step);
 }
@@ -107,18 +117,20 @@ function syncMidpointStep(field) {
 }
 
 function getSettings() {
-  return Object.fromEntries(
-    PICA_SETTING_FIELDS.map((field) => [field.key, getFieldInputValues(field).midpoint]),
-  );
+  return Object.fromEntries([
+    ...PICA_SETTING_FIELDS.map((field) => [field.key, getFieldInputValues(field).midpoint]),
+    ["postProcessingEnabled", readStoredPostProcessingEnabled()],
+  ]);
 }
 
 function getSettingsFingerprint(settings) {
-  return JSON.stringify(
-    PICA_SETTING_FIELDS.map((field) => {
+  return JSON.stringify({
+    postProcessingEnabled: settings.postProcessingEnabled,
+    fields: PICA_SETTING_FIELDS.map((field) => {
       const { midpoint, step, steps } = getFieldInputValues(field);
       return [field.key, settings[field.key], midpoint, step, steps];
     }),
-  );
+  });
 }
 
 function getSelectedFields() {
@@ -448,6 +460,7 @@ function createSettingInput(field) {
 }
 
 function main() {
+  const postProcessingEnabledInput = document.getElementById("postProcessingEnabled");
   const inputsContainer = document.getElementById("settingInputs");
   const rows = document.createElement("div");
   rows.className = "settings-body";
@@ -471,7 +484,16 @@ function main() {
 
   updateChartVisibility();
 
+  postProcessingEnabledInput.checked = readStoredPostProcessingEnabled();
+
   document.getElementById("rerunAllButton").addEventListener("click", () => {
+    void rerunAllCharts();
+  });
+
+  postProcessingEnabledInput.addEventListener("change", () => {
+    writeStoredPostProcessingEnabled(postProcessingEnabledInput.checked);
+    currentFingerprint = getSettingsFingerprint(getSettings());
+    updateDirtyState();
     void rerunAllCharts();
   });
 }

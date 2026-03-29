@@ -52,12 +52,12 @@ async function runSweepForSample(preparedSample) {
   ) {
     const minCarryCorr = CARRY_THRESHOLD_VALUES[thresholdIndex];
     for (let ratioIndex = 0; ratioIndex < CORRELATION_TO_HZ_RATIO_VALUES.length; ratioIndex += 1) {
-      const correlationToHzWeightRatio = CORRELATION_TO_HZ_RATIO_VALUES[ratioIndex];
+      const corrHzRatio = CORRELATION_TO_HZ_RATIO_VALUES[ratioIndex];
       runNumber += 1;
       const message =
         `Run ${runNumber}/${TOTAL_RUNS}: ${VOCAL_SAMPLER_LABEL} | ` +
         `minCarryCorr=${minCarryCorr} | ` +
-        `corrHzRatio=${correlationToHzWeightRatio}`;
+        `corrHzRatio=${corrHzRatio}`;
       setStatus(message);
 
       const startMs = performance.now();
@@ -66,7 +66,7 @@ async function runSweepForSample(preparedSample) {
         {
           ...FIXED_SETTINGS,
           minCarryCorr,
-          correlationToHzWeightRatio,
+          corrHzRatio,
         },
         false,
       );
@@ -160,10 +160,10 @@ async function renderHeatmap(elementId, title, accuracy, bounds) {
 function getBestCell(sweepResult) {
   let bestPicaAccuracy = Number.NEGATIVE_INFINITY;
   let bestPicaCarryThreshold = CARRY_THRESHOLD_VALUES[0];
-  let bestPicaCorrelationToHzWeightRatio = CORRELATION_TO_HZ_RATIO_VALUES[0];
+  let bestPicaCorrHzRatio = CORRELATION_TO_HZ_RATIO_VALUES[0];
   let bestCarryForwardAccuracy = Number.NEGATIVE_INFINITY;
   let bestCarryForwardThreshold = CARRY_THRESHOLD_VALUES[0];
-  let bestCarryForwardCorrelationToHzWeightRatio = CORRELATION_TO_HZ_RATIO_VALUES[0];
+  let bestCarryForwardCorrHzRatio = CORRELATION_TO_HZ_RATIO_VALUES[0];
 
   for (
     let thresholdIndex = 0;
@@ -175,7 +175,7 @@ function getBestCell(sweepResult) {
       if (Number.isFinite(picaAccuracy) && picaAccuracy > bestPicaAccuracy) {
         bestPicaAccuracy = picaAccuracy;
         bestPicaCarryThreshold = CARRY_THRESHOLD_VALUES[thresholdIndex];
-        bestPicaCorrelationToHzWeightRatio = CORRELATION_TO_HZ_RATIO_VALUES[ratioIndex];
+        bestPicaCorrHzRatio = CORRELATION_TO_HZ_RATIO_VALUES[ratioIndex];
       }
 
       const carryForwardAccuracy = sweepResult.carryForwardAccuracy[thresholdIndex][ratioIndex];
@@ -185,7 +185,7 @@ function getBestCell(sweepResult) {
       ) {
         bestCarryForwardAccuracy = carryForwardAccuracy;
         bestCarryForwardThreshold = CARRY_THRESHOLD_VALUES[thresholdIndex];
-        bestCarryForwardCorrelationToHzWeightRatio = CORRELATION_TO_HZ_RATIO_VALUES[ratioIndex];
+        bestCarryForwardCorrHzRatio = CORRELATION_TO_HZ_RATIO_VALUES[ratioIndex];
       }
     }
   }
@@ -193,10 +193,10 @@ function getBestCell(sweepResult) {
   return {
     bestPicaAccuracy,
     bestPicaCarryThreshold,
-    bestPicaCorrelationToHzWeightRatio,
+    bestPicaCorrHzRatio,
     bestCarryForwardAccuracy,
     bestCarryForwardThreshold,
-    bestCarryForwardCorrelationToHzWeightRatio,
+    bestCarryForwardCorrHzRatio,
   };
 }
 
@@ -219,15 +219,15 @@ async function renderResults(sweepResult) {
   const {
     bestPicaAccuracy,
     bestPicaCarryThreshold,
-    bestPicaCorrelationToHzWeightRatio,
+    bestPicaCorrHzRatio,
     bestCarryForwardAccuracy,
     bestCarryForwardThreshold,
-    bestCarryForwardCorrelationToHzWeightRatio,
+    bestCarryForwardCorrHzRatio,
   } = getBestCell(sweepResult);
 
   setSummary(
     Number.isFinite(bestPicaAccuracy) || Number.isFinite(bestCarryForwardAccuracy)
-      ? `Best PICA: minCarryCorr=${bestPicaCarryThreshold}, corrHzRatio=${bestPicaCorrelationToHzWeightRatio}, accuracy=${(bestPicaAccuracy * 100).toFixed(1)}% | Best carry-forward: minCarryCorr=${bestCarryForwardThreshold}, corrHzRatio=${bestCarryForwardCorrelationToHzWeightRatio}, accuracy=${(bestCarryForwardAccuracy * 100).toFixed(1)}%`
+      ? `Best PICA: minCarryCorr=${bestPicaCarryThreshold}, corrHzRatio=${bestPicaCorrHzRatio}, accuracy=${(bestPicaAccuracy * 100).toFixed(1)}% | Best carry-forward: minCarryCorr=${bestCarryForwardThreshold}, corrHzRatio=${bestCarryForwardCorrHzRatio}, accuracy=${(bestCarryForwardAccuracy * 100).toFixed(1)}%`
       : "No valid results.",
   );
 }

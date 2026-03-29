@@ -1,5 +1,4 @@
 import { PICA_MAX_HZ, PICA_MIN_HZ } from "./config.js";
-import { hasZeroCrossing } from "./utils.js";
 
 const CARRY_FORWARD_WARMUP_FULL_PREDICTIONS = 5;
 
@@ -285,86 +284,118 @@ function getMaxAmplitudeFromRight(samples, cache = null) {
 }
 
 function getFoldExtremaFromWaveform(samples, settings) {
-  const peaks = [];
-  const troughs = [];
-  let foldIndex = 0;
-  let leftmostVisitedSampleIndex = samples.length - 2;
+  // In this function we have a special treatment for the last (right-most) fold.
+  // This fold is usually incomplete, and may or may not contain a 'feature' that matches the same
+  //  feature on an earlier fold. So we check that final fold and don't add it if the extreme is right at the end.
+  // Note: we tried keeping multiple extrema per fold, but one worked just as well and was ~30% faster.
   const maxFoldCount = settings.maxCrossingsPerPeriod * 2;
-  // We tried keeping multiple extrema per fold, but one worked just as well and was ~30% faster.
-  let rightSample = samples[samples.length - 1];
-  let currentSample = samples[samples.length - 2];
-  let type = currentSample > 0 ? "peak" : currentSample < 0 ? "trough" : null;
-  let bestIndex = type ? samples.length - 2 : -1;
-  let bestValue = currentSample;
+  const maxExtremaPerType = Math.ceil(maxFoldCount / 2);
+  const allPeaks = [];
+  const allFolds = [];
+  const allTroughs = [];
+  let coveredStartIndex = samples.length;
+  let includedFoldCount = 0;
+  let zeroCrossingCount = 0;
+  let sawFirstCrossing = false;
+  let foldStartIndex = -1;
+  let bestIndex = -1;
+  let bestValue = 0;
+  let lastSample = samples[0];
+  let lastType = samples[0] < 0 ? "trough" : "peak";
 
-  for (
-    let sampleIndex = samples.length - 2;
-    sampleIndex > 0 && foldIndex < maxFoldCount;
-    sampleIndex -= 1
-  ) {
-    const leftSample = samples[sampleIndex - 1];
-    leftmostVisitedSampleIndex = sampleIndex - 1;
-    if (currentSample < 0 !== rightSample < 0) {
-      if (bestIndex !== -1 && !(foldIndex === 0 && bestIndex === samples.length - 1)) {
-        const extremum = {
-          index: bestIndex,
-          value: bestValue,
-          type,
-          foldIndex,
-        };
-        if (type === "peak") {
-          peaks.push(extremum);
-        } else {
-          troughs.push(extremum);
-        }
+  // Note, we do wasted work by looping right from the start then only taking the latter folds later
+  // But empirically it barely makes a difference.
+  for (let sampleIndex = 1; sampleIndex < samples.length; sampleIndex += 1) {
+    const sample = samples[sampleIndex];
+    const type = sample < 0 ? "trough" : "peak";
+
+    // If we just cross a fold
+    if (lastSample < 0 !== sample < 0) {
+      if (!sawFirstCrossing) {
+        sawFirstCrossing = true;
+        coveredStartIndex = sampleIndex;
+        foldStartIndex = sampleIndex;
+        lastSample = sample;
+        lastType = type;
+        bestIndex = sampleIndex;
+        bestValue = sample;
+        continue;
       }
-      foldIndex += 1;
-      if (foldIndex >= maxFoldCount) {
-        break;
+
+      const extremum = {
+        index: bestIndex,
+        value: bestValue,
+        type: lastType,
+        foldIndex: includedFoldCount,
+      };
+      allFolds.push({
+        width: sampleIndex - foldStartIndex,
+        extremaAmplitude: bestValue,
+        extremaPosition: bestIndex - foldStartIndex,
+        extremaIndex: bestIndex,
+        type: lastType,
+        foldIndex: includedFoldCount,
+      });
+      if (lastType === "peak") {
+        allPeaks.push(extremum);
+      } else {
+        allTroughs.push(extremum);
       }
-
-      type = currentSample > 0 ? "peak" : currentSample < 0 ? "trough" : null;
-      bestIndex = type ? sampleIndex : -1;
-      bestValue = currentSample;
-    }
-
-    if (
-      type !== null &&
-      (bestIndex === -1 ||
-        (type === "peak" ? currentSample >= bestValue : currentSample <= bestValue))
-    ) {
+      includedFoldCount += 1;
+      zeroCrossingCount += 1;
+      foldStartIndex = sampleIndex;
+      lastType = type;
       bestIndex = sampleIndex;
-      bestValue = currentSample;
+      bestValue = sample;
+    } else if (
+      sawFirstCrossing &&
+      (lastType === "peak" ? sample >= bestValue : sample <= bestValue)
+    ) {
+      // else we're continuing in a fold, and have a more extreme value
+      bestIndex = sampleIndex;
+      bestValue = sample;
     }
-
-    rightSample = currentSample;
-    currentSample = leftSample;
+    lastSample = sample;
   }
 
-  if (
-    foldIndex < maxFoldCount &&
-    bestIndex !== -1 &&
-    !(foldIndex === 0 && bestIndex === samples.length - 1)
-  ) {
+  const isLastFoldUseful = sawFirstCrossing && bestIndex !== samples.length - 1;
+
+  if (isLastFoldUseful) {
     const extremum = {
       index: bestIndex,
       value: bestValue,
-      type,
-      foldIndex,
+      type: lastType,
+      foldIndex: includedFoldCount,
     };
-    if (type === "peak") {
-      peaks.push(extremum);
+    allFolds.push({
+      width: samples.length - foldStartIndex,
+      extremaAmplitude: bestValue,
+      extremaPosition: bestIndex - foldStartIndex,
+      extremaIndex: bestIndex,
+      type: lastType,
+      foldIndex: includedFoldCount,
+    });
+    if (lastType === "peak") {
+      allPeaks.push(extremum);
     } else {
-      troughs.push(extremum);
+      allTroughs.push(extremum);
     }
   }
 
-  const coveredSampleCount = samples.length - leftmostVisitedSampleIndex;
-  const zeroCrossingDensity = coveredSampleCount > 0 ? foldIndex / coveredSampleCount : 0;
+  const coveredSampleCount = sawFirstCrossing ? samples.length - coveredStartIndex : 0;
+  const zeroCrossingDensity = coveredSampleCount > 0 ? zeroCrossingCount / coveredSampleCount : 0;
+  if (window.picaDebug.recordFoldDebug) {
+    const debugFullFolds = (isLastFoldUseful ? allFolds.slice(0, -1) : allFolds).slice(
+      -maxFoldCount,
+    );
+    window.picaDebug.foldAnalyses[window.picaDebug.activeWindowIndex] = {
+      fullFolds: debugFullFolds,
+    };
+  }
 
   return {
-    peaks,
-    troughs,
+    peaks: allPeaks.slice(-maxExtremaPerType),
+    troughs: allTroughs.slice(-maxExtremaPerType),
     coveredSampleCount,
     zeroCrossingDensity,
   };
@@ -377,7 +408,7 @@ function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, ca
     ["peak", foldExtrema.peaks],
     ["trough", foldExtrema.troughs],
   ]) {
-    const anchor = typedExtrema[0];
+    const anchor = typedExtrema[typedExtrema.length - 1];
     if (!anchor) continue;
 
     for (let extremumIndex = 0; extremumIndex < typedExtrema.length; extremumIndex += 1) {
@@ -399,9 +430,12 @@ function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, ca
         cache,
       );
       if (!walkedPeriod || walkedPeriod.correlation < settings.minCorr) continue;
-      // const hzFeature = Math.log2(walkedPeriod.hz / PICA_MIN_HZ);
-      const hzFeature = (walkedPeriod.hz - PICA_MIN_HZ) / PICA_MAX_HZ;
+      const hzFeature = Math.log2(walkedPeriod.hz / PICA_MIN_HZ);
       const correlationFeature = walkedPeriod.correlation;
+      // const hzFeature = (walkedPeriod.hz - PICA_MIN_HZ) / PICA_MAX_HZ;
+      // const correlationFeature = Math.exp(walkedPeriod.correlation);
+      // const correlationFeature = walkedPeriod.correlation ** 2;
+      // const correlationFeature = (walkedPeriod.correlation - 0.5) / 0.5;
 
       candidates.push({
         type,
@@ -425,9 +459,10 @@ function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, ca
   }
 
   let winningCandidate = null;
+  // TODO (@davidgilbertson): I don't know why we loop a second time here
   for (const candidate of candidates) {
     candidate.weightedScore =
-      candidate.hzFeature + settings.correlationToHzWeightRatio * candidate.correlationFeature;
+      settings.corrHzRatio * candidate.correlationFeature + candidate.hzFeature;
     if (!winningCandidate || candidate.weightedScore > winningCandidate.weightedScore) {
       winningCandidate = candidate;
     }
@@ -525,7 +560,12 @@ export function getPicaPitchAnalysisFromWaveform(samples, sampleRate, settings, 
     settings,
     zeroCrossingCount,
     maxAmplitude,
-    foldExtrema: { peaks: [], troughs: [], coveredSampleCount: 0, zeroCrossingDensity: 0 },
+    foldExtrema: {
+      peaks: [],
+      troughs: [],
+      coveredSampleCount: 0,
+      zeroCrossingDensity: 0,
+    },
     candidates: [],
     winningCandidate: null,
   };

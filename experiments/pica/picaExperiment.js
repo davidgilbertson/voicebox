@@ -181,9 +181,16 @@ function analyzePitchTrack(
   const zeroCrossingDensity = new Array(timeSec.length);
   const priorStepByWindow = new Array(timeSec.length);
   let priorStep = null;
+  if (mode === "pica") {
+    window.picaDebug.foldAnalyses = new Array(timeSec.length);
+    window.picaDebug.foldPeriodWindows = [];
+    window.picaDebug.foldCountBins = {};
+  }
+  window.picaDebug.recordFoldDebug = mode === "pica";
 
   const startMs = performance.now();
   for (let windowIndex = 0; windowIndex < timeSec.length; windowIndex += 1) {
+    window.picaDebug.activeWindowIndex = mode === "pica" ? windowIndex : null;
     priorStepByWindow[windowIndex] = priorStep ? { ...priorStep } : null;
     const picaWindow = getPicaWindowSamples(samples, sampleRate, timeSec[windowIndex]);
     const analysis = getPicaPitchAnalysisFromWaveform(
@@ -197,6 +204,9 @@ function analyzePitchTrack(
     zeroCrossingDensity[windowIndex] = analysis.foldExtrema.zeroCrossingDensity;
     priorStep = getPriorStep(analysis, priorStep);
   }
+
+  window.picaDebug.activeWindowIndex = null;
+  window.picaDebug.recordFoldDebug = false;
 
   const processedTrack = maybePostProcessPitchTrack(pitchHz, postProcessingEnabled);
   const elapsedMs = performance.now() - startMs;
@@ -270,7 +280,6 @@ export async function analyzePreparedPitchSample(preparedSample, settings, metho
     pitchy: pitchyTrack.pitchHz,
     carryForward: carryForwardTrack.pitchHz,
   });
-
   return {
     sampleRate,
     samples,
@@ -280,6 +289,7 @@ export async function analyzePreparedPitchSample(preparedSample, settings, metho
     picaPitchHz: picaTrack.pitchHz,
     picaCorrelation: picaTrack.correlation,
     picaZeroCrossingDensity: picaTrack.zeroCrossingDensity,
+    picaFoldCount: new Array(fftAnalysis.timeSec.length).fill(Number.NaN),
     pitchyPitchHz: pitchyTrack.pitchHz,
     carryForwardPitchHz: carryForwardTrack.pitchHz,
     carryForwardCorrelation: carryForwardTrack.correlation,
@@ -372,7 +382,6 @@ export async function analyzePreparedActualPitchSample(
     pitchy: pitchyTrack.pitchHz,
     carryForward: carryForwardTrack.pitchHz,
   });
-
   return {
     sampleRate,
     samples,
@@ -382,6 +391,7 @@ export async function analyzePreparedActualPitchSample(
     picaPitchHz: picaTrack.pitchHz,
     picaCorrelation: picaTrack.correlation,
     picaZeroCrossingDensity: picaTrack.zeroCrossingDensity,
+    picaFoldCount: new Array(timeSec.length).fill(Number.NaN),
     pitchyPitchHz: pitchyTrack.pitchHz,
     carryForwardPitchHz: carryForwardTrack.pitchHz,
     carryForwardCorrelation: carryForwardTrack.correlation,

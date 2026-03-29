@@ -8,11 +8,7 @@ import {
   PICA_SETTINGS_DEFAULTS,
   RECORD_DURATION_MS,
 } from "./config.js";
-import {
-  getPicaWaveformWindow,
-  getPicaWindowSamples,
-  PICA_WINDOW_SAMPLES_AT_48K,
-} from "./windowing.js";
+import { getPicaWaveformWindow, getPicaWindowSamples } from "./windowing.js";
 import { getPicaPitchAnalysisFromWaveform } from "./picaPitch.js";
 import { getCentsDifference } from "./utils.js";
 import { recordMicrophoneAudio } from "../micCapture.js";
@@ -36,6 +32,14 @@ let currentSourceSelect = null;
 let currentSettingInputs = null;
 let pendingChartResizeToken = 0;
 let hasLoggedVocalSamplerErrorSummary = false;
+
+window.picaDebug = {
+  foldAnalyses: [],
+  foldCountBins: {},
+  foldPeriodWindows: [],
+  activeWindowIndex: null,
+  recordFoldDebug: false,
+};
 
 function getStorageKey(settingKey) {
   return `${STORAGE_PREFIX}${settingKey}`;
@@ -97,7 +101,29 @@ function getSettingsFromInputs(settingInputs) {
 function writeSettingsToInputs(settingInputs, settings) {
   PICA_SETTING_FIELDS.forEach((field) => {
     settingInputs[field.key].value = String(settings[field.key]);
+    settingInputs[field.key].dataset.appliedValue = String(settings[field.key]);
   });
+}
+
+function hasPendingSettingChange(input) {
+  return input.value !== input.dataset.appliedValue;
+}
+
+async function applySettingsFromInputs(
+  controls,
+  sourceSelect,
+  settingInputs,
+  statusText,
+  focusTarget = null,
+) {
+  const settings = getSettingsFromInputs(settingInputs);
+  const wasApplied = await rerun(controls, sourceSelect, settingInputs, statusText);
+  if (wasApplied) {
+    PICA_SETTING_FIELDS.forEach((field) => {
+      settingInputs[field.key].dataset.appliedValue = String(settings[field.key]);
+    });
+  }
+  focusTarget?.focus({ preventScroll: true });
 }
 
 function setStatus(text, isError = false) {
@@ -113,7 +139,7 @@ function scheduleChartResize() {
       if (resizeToken !== pendingChartResizeToken) return;
       const plotly = globalThis.Plotly;
       if (!plotly?.Plots?.resize) return;
-      ["pitchChart", "waveformChart", "harmonicChart"].forEach((chartId) => {
+      ["pitchChart", "waveformChart", "harmonicChart", "foldChart"].forEach((chartId) => {
         const chart = document.getElementById(chartId);
         if (chart) {
           plotly.Plots.resize(chart);
@@ -322,6 +348,117 @@ function logVocalSamplerPicaErrorSummary(preparedSample, settings) {
   }
 }
 
+function logPicaDebugFoldCountBins(result) {
+  if (!Array.isArray(result.actualPitchHz)) return;
+
+  const foldAnalyses = window.picaDebug.foldAnalyses;
+  if (!Array.isArray(foldAnalyses) || foldAnalyses.length === 0) return;
+
+  const foldCountBins = new Map();
+  const foldPeriodWindows = [];
+
+  for (
+    let windowIndex = 0;
+    windowIndex < Math.min(result.actualPitchHz.length, foldAnalyses.length);
+    windowIndex += 1
+  ) {
+    const actualHz = result.actualPitchHz[windowIndex];
+    if (!Number.isFinite(actualHz) || !(actualHz > 0)) continue;
+
+    const folds = foldAnalyses[windowIndex]?.fullFolds;
+    if (!Array.isArray(folds) || folds.length === 0) continue;
+    const foldWidths = folds.map((fold) => fold.width);
+
+    const actualPeriodSize = Math.round(result.sampleRate / actualHz);
+    let priorDistance = 0;
+    let priorFoldCount = 0;
+    let cumulativeDistance = 0;
+    let snappedDistance = Number.NaN;
+    let snappedFoldCount = 0;
+    let boundaryFoldWidth = Number.NaN;
+
+    for (let foldIndex = foldWidths.length - 1; foldIndex >= 0; foldIndex -= 1) {
+      cumulativeDistance += foldWidths[foldIndex];
+
+      const cumulativeFoldCount = foldWidths.length - foldIndex;
+      if (cumulativeDistance < actualPeriodSize) {
+        priorDistance = cumulativeDistance;
+        priorFoldCount = cumulativeFoldCount;
+        continue;
+      }
+
+      boundaryFoldWidth = foldWidths[foldIndex];
+      const canSnapLeft = priorFoldCount > 0;
+      const leftIsEven = canSnapLeft && priorFoldCount % 2 === 0;
+      const rightIsEven = cumulativeFoldCount % 2 === 0;
+      if (leftIsEven !== rightIsEven) {
+        snappedDistance = leftIsEven ? priorDistance : cumulativeDistance;
+        snappedFoldCount = leftIsEven ? priorFoldCount : cumulativeFoldCount;
+      } else if (
+        canSnapLeft &&
+        Math.abs(actualPeriodSize - priorDistance) <=
+          Math.abs(cumulativeDistance - actualPeriodSize)
+      ) {
+        snappedDistance = priorDistance;
+        snappedFoldCount = priorFoldCount;
+      } else {
+        snappedDistance = cumulativeDistance;
+        snappedFoldCount = cumulativeFoldCount;
+      }
+      break;
+    }
+
+    if (!(snappedFoldCount > 0)) continue;
+
+    const deltaToNearestZeroCrossing = actualPeriodSize - snappedDistance;
+    foldCountBins.set(snappedFoldCount, (foldCountBins.get(snappedFoldCount) ?? 0) + 1);
+    foldPeriodWindows.push({
+      windowIndex,
+      actualPeriodSize,
+      snappedDistance,
+      deltaToNearestZeroCrossing,
+      boundaryFoldWidth,
+      foldCount: snappedFoldCount,
+    });
+  }
+
+  window.picaDebug.foldPeriodWindows = foldPeriodWindows;
+  window.picaDebug.foldCountBins = Object.fromEntries(
+    Array.from(foldCountBins.entries()).sort((a, b) => a[0] - b[0]),
+  );
+
+  let cumulativeCount = 0;
+  const totalCount = foldPeriodWindows.length;
+  console.table(
+    Array.from(foldCountBins.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([foldCount, count]) => {
+        cumulativeCount += count;
+        return {
+          foldCount,
+          count,
+          cumulativePercent:
+            totalCount > 0 ? ((cumulativeCount / totalCount) * 100).toFixed(1) : "n/a",
+        };
+      }),
+  );
+  console.log(
+    "window indices with >33 folds",
+    foldPeriodWindows.filter((row) => row.foldCount > 33).map((row) => row.windowIndex),
+  );
+}
+
+function applyPicaDebugFoldCountSeries(result) {
+  result.picaFoldCount = new Array(result.timeSec.length).fill(Number.NaN);
+  const foldPeriodWindows = window.picaDebug.foldPeriodWindows;
+  if (!Array.isArray(foldPeriodWindows)) return;
+
+  for (const row of foldPeriodWindows) {
+    if (!Number.isInteger(row?.windowIndex)) continue;
+    result.picaFoldCount[row.windowIndex] = row.foldCount;
+  }
+}
+
 async function renderResult(result) {
   const actualLabelEditor = hasActuals(result)
     ? createActualLabelEditor(
@@ -373,8 +510,10 @@ async function analyzePreparedSample(preparedSample, source, settingInputs) {
     source.url?.endsWith("vocal_sampler.wav")
   ) {
     hasLoggedVocalSamplerErrorSummary = true;
-    logVocalSamplerPicaErrorSummary(preparedSample, settings);
+    // logVocalSamplerPicaErrorSummary(preparedSample, settings);
   }
+  logPicaDebugFoldCountBins(result);
+  applyPicaDebugFoldCountSeries(result);
   await renderResult(result);
   updatePerformanceInfo(result, readStoredMethodVisibility());
   setStatus("Done.");
@@ -391,9 +530,11 @@ async function rerun(controls, sourceSelect, settingInputs, statusText, getPrepa
       : (currentPreparedSample ?? (await loadPitchSample(loadAudioInputForSource(selectedSource))));
     const resolvedSource = getSelectedSource(sourceSelect);
     await analyzePreparedSample(currentPreparedSample, resolvedSource, settingInputs);
+    return true;
   } catch (error) {
     console.error(error);
     setStatus(error instanceof Error ? error.message : String(error), true);
+    return false;
   } finally {
     setControlsDisabled(controls, false);
   }
@@ -462,9 +603,40 @@ function main() {
   });
 
   PICA_SETTING_FIELDS.forEach((field) => {
-    settingInputs[field.key].addEventListener("input", () =>
-      rerun(controls, sourceSelect, settingInputs, `Applying ${field.label}...`),
-    );
+    const input = settingInputs[field.key];
+    let isApplying = false;
+
+    input.addEventListener("blur", async () => {
+      if (isApplying || !hasPendingSettingChange(input)) return;
+      isApplying = true;
+      try {
+        await applySettingsFromInputs(
+          controls,
+          sourceSelect,
+          settingInputs,
+          `Applying ${field.label}...`,
+        );
+      } finally {
+        isApplying = false;
+      }
+    });
+
+    input.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter" || isApplying || !hasPendingSettingChange(input)) return;
+      event.preventDefault();
+      isApplying = true;
+      try {
+        await applySettingsFromInputs(
+          controls,
+          sourceSelect,
+          settingInputs,
+          `Applying ${field.label}...`,
+          input,
+        );
+      } finally {
+        isApplying = false;
+      }
+    });
   });
 
   void rerun(controls, sourceSelect, settingInputs, "", async () =>

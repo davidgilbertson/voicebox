@@ -1,11 +1,6 @@
 import { PICA_ACCURACY_CENTS, PICA_MAX_HZ, PICA_MIN_HZ } from "./config.js";
 import { getCorrelation, getPicaPitchAnalysisFromWaveform } from "./picaPitch.js";
 import { getCentsDifference } from "./utils.js";
-import {
-  PICA_WINDOW_CYCLES,
-  PICA_WINDOW_DURATION_SEC,
-  PICA_WINDOW_SAMPLES_AT_48K,
-} from "./windowing.js";
 
 let detachWindowKeyHandler = null;
 const CORRELATION_CHART_TICKS_HZ = [
@@ -25,6 +20,15 @@ const PITCH_METHODS = [
   { key: "pica", label: "Pica" },
   { key: "carryForward", label: "Pica + Carry" },
 ];
+const DEFAULT_FOLD_PERIOD = 100;
+const TERRAIN_STOPS = [
+  [0.2, 0.2, 0.6],
+  [0.0, 0.6, 1.0],
+  [0.2, 0.8, 0.4],
+  [0.8, 0.8, 0.3],
+  [0.6, 0.45, 0.3],
+  [0.95, 0.95, 0.95],
+];
 
 function getDefaultMethodVisibility() {
   return {
@@ -33,6 +37,24 @@ function getDefaultMethodVisibility() {
     pica: true,
     carryForward: true,
   };
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getTerrainColorAt(fraction) {
+  const clampedFraction = clamp(fraction, 0, 1);
+  const scaled = clampedFraction * (TERRAIN_STOPS.length - 1);
+  const leftIndex = Math.floor(scaled);
+  const rightIndex = Math.min(TERRAIN_STOPS.length - 1, leftIndex + 1);
+  const mix = scaled - leftIndex;
+  const left = TERRAIN_STOPS[leftIndex];
+  const right = TERRAIN_STOPS[rightIndex];
+  const red = Math.round((left[0] + (right[0] - left[0]) * mix) * 255);
+  const green = Math.round((left[1] + (right[1] - left[1]) * mix) * 255);
+  const blue = Math.round((left[2] + (right[2] - left[2]) * mix) * 255);
+  return `rgb(${red}, ${green}, ${blue})`;
 }
 
 function getMethodVisibility(methodVisibility) {
@@ -171,9 +193,7 @@ function getActualPitchLabel(label) {
 }
 
 function getWaveformTitle(waveformWindow) {
-  const durationMs =
-    waveformWindow.durationMs > 0 ? waveformWindow.durationMs : PICA_WINDOW_DURATION_SEC * 1000;
-  return `Waveform ending at t=${waveformWindow.endTimeSec.toFixed(3)}s, I=${waveformWindow.windowIndex} (${durationMs.toFixed(1)} ms window)`;
+  return `Waveform ending at sample=${waveformWindow.endSample}, I=${waveformWindow.windowIndex} (${waveformWindow.durationMs.toFixed(1)} ms window)`;
 }
 
 function getAmplitudeRange(samples) {
@@ -193,25 +213,27 @@ function getAmplitudeRange(samples) {
   return [min - padding, max + padding];
 }
 
-function getPeriodMarkers(waveformWindow) {
-  const selectedPitchHz =
-    waveformWindow.carryForwardPitchHz > 0
-      ? waveformWindow.carryForwardPitchHz
-      : waveformWindow.picaPitchHz;
-  if (!(selectedPitchHz > 0)) return [];
-  const periodSec = 1 / selectedPitchHz;
+function getPeriodMarkers(waveformWindow, analysis) {
+  const selectedPeriodSize =
+    analysis?.winningCandidate?.periodSize ??
+    (waveformWindow.carryForwardPitchHz > 0
+      ? Math.round(waveformWindow.sampleRate / waveformWindow.carryForwardPitchHz)
+      : waveformWindow.picaPitchHz > 0
+        ? Math.round(waveformWindow.sampleRate / waveformWindow.picaPitchHz)
+        : 0);
+  if (!(selectedPeriodSize > 0)) return [];
   const markers = [];
   for (
-    let timeSec = waveformWindow.endTimeSec;
-    timeSec >= waveformWindow.timeSec[0];
-    timeSec -= periodSec
+    let sampleIndex = waveformWindow.samples.length;
+    sampleIndex >= 0;
+    sampleIndex -= selectedPeriodSize
   ) {
     markers.push({
       type: "line",
       xref: "x",
       yref: "paper",
-      x0: timeSec,
-      x1: timeSec,
+      x0: sampleIndex,
+      x1: sampleIndex,
       y0: 0,
       y1: 1,
       line: { color: "rgba(255, 255, 255, 0.225)", width: 1, dash: "dot" },
@@ -222,14 +244,13 @@ function getPeriodMarkers(waveformWindow) {
 
 function getWinningPeriodBox(waveformWindow, analysis) {
   if (!(analysis.winningCandidate?.periodSize > 0)) return [];
-  const widthSec = analysis.winningCandidate.periodSize / waveformWindow.sampleRate;
   return [
     {
       type: "rect",
       xref: "x",
       yref: "paper",
-      x0: waveformWindow.endTimeSec - widthSec,
-      x1: waveformWindow.endTimeSec,
+      x0: waveformWindow.samples.length - analysis.winningCandidate.periodSize,
+      x1: waveformWindow.samples.length,
       y0: 0,
       y1: 1,
       fillcolor: "rgba(255, 255, 255, 0.2)",
@@ -247,13 +268,101 @@ function getExtremaMarkers(waveformWindow, analysis) {
   const winningPointPair = analysis.winningCandidate?.pointPair ?? [];
   for (const extrema of [analysis.foldExtrema.peaks, analysis.foldExtrema.troughs]) {
     for (const extremum of extrema) {
-      x.push((waveformWindow.startSample + extremum.index) / waveformWindow.sampleRate);
+      x.push(extremum.index);
       y.push(waveformWindow.samples[extremum.index]);
       color.push(winningPointPair.includes(extremum.index) ? "#f87171" : "#f59e0b");
       symbol.push(extremum.type === "trough" ? "triangle-down" : "circle");
     }
   }
   return { x, y, color, symbol };
+}
+
+function getDefaultFoldColorPeriod(sampleRate, actualPitchHz) {
+  if (!Number.isFinite(actualPitchHz) || !(actualPitchHz > 0)) {
+    return DEFAULT_FOLD_PERIOD;
+  }
+  return Math.max(1, Math.round(sampleRate / actualPitchHz));
+}
+
+function getTerrainColorForPeriodPosition(position, periodSize) {
+  if (!(periodSize > 0)) {
+    return "rgba(74, 222, 128, 0.5)";
+  }
+  return getTerrainColorAt(position / periodSize);
+}
+
+function getFoldMarkerColors(fullFolds, colorPeriod) {
+  return fullFolds.map((fold) =>
+    getTerrainColorForPeriodPosition(fold.extremaIndex % colorPeriod, colorPeriod),
+  );
+}
+
+async function renderFoldChart(plotly, analysis, colorPeriod) {
+  const fullFolds = window.picaDebug.foldAnalyses[window.windowIndex]?.fullFolds ?? [];
+
+  await plotly.newPlot(
+    "foldChart",
+    [
+      {
+        x: fullFolds.map((fold) => fold.width),
+        y: fullFolds.map((fold) => fold.extremaAmplitude),
+        type: "scatter",
+        mode: "lines",
+        line: { color: "rgba(255, 255, 255, 0.28)", width: 1.5 },
+        hoverinfo: "skip",
+        showlegend: false,
+      },
+      {
+        x: fullFolds.map((fold) => fold.width),
+        y: fullFolds.map((fold) => fold.extremaAmplitude),
+        customdata: fullFolds.map((fold) => [
+          fold.extremaPosition,
+          fold.type,
+          fold.foldIndex,
+          fold.extremaIndex,
+          fold.extremaIndex % colorPeriod,
+        ]),
+        type: "scatter",
+        mode: "markers",
+        marker: { color: getFoldMarkerColors(fullFolds, colorPeriod), size: 16, opacity: 0.8 },
+        hovertemplate:
+          "Width=%{x}<br>Extremum=%{y:.4f}<br>Offset=%{customdata[0]}<br>Type=%{customdata[1]}<br>Index=%{customdata[3]}<br>mod=%{customdata[4]}<extra></extra>",
+        showlegend: false,
+      },
+    ],
+    {
+      title: "Fold width vs extremum",
+      paper_bgcolor: "#050505",
+      plot_bgcolor: "#050505",
+      font: { color: "#e2e8f0" },
+      margin: { l: 52, r: 24, t: 54, b: 76 },
+      xaxis: {
+        title: "Fold width (samples)",
+        gridcolor: "#1f2937",
+        rangemode: "tozero",
+        range: [0, null],
+      },
+      yaxis: {
+        title: "Extremum value",
+        gridcolor: "#1f2937",
+      },
+      annotations:
+        fullFolds.length === 0
+          ? [
+              {
+                x: 0.5,
+                y: 0.5,
+                xref: "paper",
+                yref: "paper",
+                text: "No fold extrema for this window.",
+                showarrow: false,
+                font: { color: "#94a3b8", size: 14 },
+              },
+            ]
+          : [],
+    },
+    { responsive: true },
+  );
 }
 
 async function renderHistogram(
@@ -458,84 +567,85 @@ export async function renderPicaPitchCharts(result, options = {}) {
 
   const pitchChartSeries = [];
   const pitchChartWindowIndex = result.timeSec.map((_, index) => index);
+  const pitchChartTimeData = result.timeSec.map((timeSec) => [timeSec]);
   const actualTraceIndex = 0;
 
   pitchChartSeries.push({
-    x: result.timeSec,
+    x: pitchChartWindowIndex,
     y: actualPitchHz,
     mode: "lines+markers",
-    customdata: pitchChartWindowIndex,
+    customdata: pitchChartTimeData,
     line: { width: 1.5, color: "rgba(74, 222, 128, 0.8)" },
     marker: { size: 6, color: "rgba(74, 222, 128, 0.5)" },
-    hovertemplate: "t=%{x:.3f}s<br>Actual=%{y:.2f} Hz<extra></extra>",
+    hovertemplate: "I=%{x}<br>t=%{customdata[0]:.3f}s<br>Actual=%{y:.2f} Hz<extra></extra>",
     name: "Actual",
   });
 
   if (methodVisibility.pitchy) {
     pitchChartSeries.push({
-      x: result.timeSec,
+      x: pitchChartWindowIndex,
       y: result.pitchyPitchHz,
       mode: "lines",
-      customdata: pitchChartWindowIndex,
+      customdata: pitchChartTimeData,
       line: { width: 1.5, color: "rgba(255, 255, 255, 0.95)" },
       connectgaps: false,
-      hovertemplate: "t=%{x:.3f}s<br>Pitchy=%{y:.2f} Hz<extra></extra>",
+      hovertemplate: "I=%{x}<br>t=%{customdata[0]:.3f}s<br>Pitchy=%{y:.2f} Hz<extra></extra>",
       name: "Pitchy",
     });
   }
   if (methodVisibility.fft) {
     pitchChartSeries.push({
-      x: result.timeSec,
+      x: pitchChartWindowIndex,
       y: result.pitchHz,
       mode: "lines",
-      customdata: pitchChartWindowIndex,
+      customdata: pitchChartTimeData,
       line: { width: 3, color: "rgba(74, 222, 128, 0.6)", dash: "dash" },
       connectgaps: false,
-      hovertemplate: "t=%{x:.3f}s<br>FFT=%{y:.2f} Hz<extra></extra>",
+      hovertemplate: "I=%{x}<br>t=%{customdata[0]:.3f}s<br>FFT=%{y:.2f} Hz<extra></extra>",
       name: "Voicebox FFT",
     });
   }
   if (methodVisibility.carryForward) {
     pitchChartSeries.push({
-      x: result.timeSec,
+      x: pitchChartWindowIndex,
       y: result.carryForwardPitchHz,
       mode: "lines",
-      customdata: pitchChartWindowIndex,
+      customdata: pitchChartTimeData,
       line: { width: 1.25, color: "rgba(251, 146, 60, 0.95)" },
       connectgaps: false,
-      hovertemplate: "t=%{x:.3f}s<br>Carry=%{y:.2f} Hz<extra></extra>",
+      hovertemplate: "I=%{x}<br>t=%{customdata[0]:.3f}s<br>Carry=%{y:.2f} Hz<extra></extra>",
       name: "Carry",
     });
   }
   if (methodVisibility.pica) {
     pitchChartSeries.push({
-      x: result.timeSec,
+      x: pitchChartWindowIndex,
       y: result.picaPitchHz,
       mode: "lines",
-      customdata: pitchChartWindowIndex,
+      customdata: pitchChartTimeData,
       line: { width: 1, color: "rgba(96, 165, 250, 0.95)", dash: "dot" },
       connectgaps: false,
-      hovertemplate: "t=%{x:.3f}s<br>Pica=%{y:.2f} Hz<extra></extra>",
+      hovertemplate: "I=%{x}<br>t=%{customdata[0]:.3f}s<br>Pica=%{y:.2f} Hz<extra></extra>",
       name: "PICA",
     });
     pitchChartSeries.push({
-      x: result.timeSec,
-      y: result.picaZeroCrossingDensity,
+      x: pitchChartWindowIndex,
+      y: result.picaFoldCount,
       mode: "lines",
-      customdata: pitchChartWindowIndex,
+      customdata: pitchChartTimeData,
       line: { width: 1.25, color: "rgba(96, 165, 250, 0.45)" },
       connectgaps: false,
-      hovertemplate: "t=%{x:.3f}s<br>Pica crossing density=%{y:.4f}<extra></extra>",
-      name: "Pica crossing density",
+      hovertemplate: "I=%{x}<br>t=%{customdata[0]:.3f}s<br>Pica fold count=%{y}<extra></extra>",
+      name: "Pica fold count",
       yaxis: "y2",
     });
   }
 
-  const zeroCrossingDensityMax = Math.max(
-    0.01,
-    ...(result.picaZeroCrossingDensity ?? [])
+  const foldCountMax = Math.max(
+    2,
+    ...(result.picaFoldCount ?? [])
       .filter((value) => Number.isFinite(value))
-      .map((value) => Number(value.toFixed(4))),
+      .map((value) => Math.ceil(value)),
   );
 
   for (const trace of pitchChartSeries) {
@@ -558,9 +668,9 @@ export async function renderPicaPitchCharts(result, options = {}) {
       uirevision: "pitchChart",
       margin: { l: 52, r: 80, t: 48, b: 76 },
       xaxis: {
-        title: "Time (s)",
+        title: "Window index",
         showgrid: false,
-        range: [result.timeSec[0] ?? 0, result.timeSec[result.timeSec.length - 1] ?? 1],
+        range: [0, Math.max(1, result.timeSec.length - 1)],
       },
       yaxis: {
         title: "Pitch (Hz)",
@@ -573,10 +683,10 @@ export async function renderPicaPitchCharts(result, options = {}) {
         ticktext: PITCH_OCTAVE_TICKS.map((tick) => String(Math.round(tick.hz))),
       },
       yaxis2: {
-        title: "Crossing density",
+        title: "Fold count",
         gridcolor: "#1f2937",
         domain: [0, 0.16],
-        range: [0, zeroCrossingDensityMax],
+        range: [0, foldCountMax],
       },
       annotations: getPitchOctaveAnnotations(),
     },
@@ -585,6 +695,23 @@ export async function renderPicaPitchCharts(result, options = {}) {
 
   const maxWindowIndex = Math.max(0, result.timeSec.length - 1);
   let activeWindowIndex = Math.max(0, Math.min(maxWindowIndex, selectedWindowIndex));
+  const foldPeriodInput = document.getElementById("foldPeriodInput");
+
+  function getResolvedFoldColorPeriod(waveformWindow) {
+    const defaultPeriod = getDefaultFoldColorPeriod(
+      waveformWindow.sampleRate,
+      getResolvedActualPitchHz(activeWindowIndex),
+    );
+    if (foldPeriodInput) {
+      foldPeriodInput.value = String(defaultPeriod);
+    }
+    return defaultPeriod;
+  }
+
+  function getFoldColorPeriodFromInput() {
+    const value = Number(foldPeriodInput?.value);
+    return Number.isInteger(value) && value > 0 ? value : DEFAULT_FOLD_PERIOD;
+  }
 
   async function selectWindow(windowIndex) {
     activeWindowIndex = Math.max(0, Math.min(maxWindowIndex, windowIndex));
@@ -604,6 +731,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
     const extremaMarkers = analysis
       ? getExtremaMarkers(waveformWindow, analysis)
       : { x: [], y: [], color: [], symbol: [] };
+    const defaultFoldColorPeriod = getResolvedFoldColorPeriod(waveformWindow);
 
     await plotly.relayout("pitchChart", {
       title: getPitchTimelineTitle(
@@ -618,8 +746,8 @@ export async function renderPicaPitchCharts(result, options = {}) {
           type: "line",
           xref: "x",
           yref: "paper",
-          x0: result.timeSec[activeWindowIndex],
-          x1: result.timeSec[activeWindowIndex],
+          x0: activeWindowIndex,
+          x1: activeWindowIndex,
           y0: 0,
           y1: 1,
           line: { color: "rgba(255, 255, 255, 0.44)", width: 2 },
@@ -632,11 +760,11 @@ export async function renderPicaPitchCharts(result, options = {}) {
       "waveformChart",
       [
         {
-          x: waveformWindow.timeSec,
+          x: Array.from({ length: waveformWindow.samples.length }, (_, index) => index),
           y: Array.from(waveformWindow.samples),
           mode: "lines",
           line: { width: 1.75, color: "rgba(74, 222, 128, 0.95)" },
-          hovertemplate: "t=%{x:.5f}s<br>Amp=%{y:.4f}<extra></extra>",
+          hovertemplate: "Index=%{x}<br>Amp=%{y:.4f}<extra></extra>",
           name: "Samples",
         },
         {
@@ -644,7 +772,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
           y: extremaMarkers.y,
           mode: "markers",
           marker: { size: 9, color: extremaMarkers.color, symbol: extremaMarkers.symbol },
-          hovertemplate: "Extremum<br>t=%{x:.5f}s<br>Amp=%{y:.4f}<extra></extra>",
+          hovertemplate: "Extremum<br>Index=%{x}<br>Amp=%{y:.4f}<extra></extra>",
           name: "Top extrema",
         },
       ],
@@ -657,22 +785,24 @@ export async function renderPicaPitchCharts(result, options = {}) {
         legend: getBottomLegend(),
         margin: { l: 52, r: 24, t: 54, b: 76 },
         xaxis: {
-          title: "Time (s)",
+          title: "Local sample index",
           showgrid: false,
-          range: [waveformWindow.timeSec[0], waveformWindow.endTimeSec],
+          range: [0, waveformWindow.samples.length],
         },
         yaxis: {
           title: "Amplitude",
           showgrid: false,
-          range: [-1, 1],
+          range: getAmplitudeRange(waveformWindow.samples),
         },
         shapes: [
           ...getWinningPeriodBox(waveformWindow, analysis ?? {}),
-          ...(needsPicaAnalysis ? getPeriodMarkers(waveformWindow) : []),
+          ...(needsPicaAnalysis ? getPeriodMarkers(waveformWindow, analysis) : []),
         ],
       },
       { responsive: true },
     );
+
+    await renderFoldChart(plotly, analysis, defaultFoldColorPeriod);
 
     if (correlationSeries) {
       await renderHistogram(
@@ -690,7 +820,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
                 "pitchChart",
                 {
                   y: [actualPitchHz],
-                  x: [result.timeSec],
+                  x: [pitchChartWindowIndex],
                 },
                 [actualTraceIndex],
               );
@@ -709,25 +839,24 @@ export async function renderPicaPitchCharts(result, options = {}) {
 
   await selectWindow(activeWindowIndex);
 
-  const pitchChartElement = document.getElementById("pitchChart");
-  function getNearestWindowIndexForTime(clickedTimeSec) {
-    let nearestWindowIndex = 0;
-    let nearestDistance = Math.abs(result.timeSec[0] - clickedTimeSec);
-    for (let windowIndex = 1; windowIndex < result.timeSec.length; windowIndex += 1) {
-      const distance = Math.abs(result.timeSec[windowIndex] - clickedTimeSec);
-      if (distance < nearestDistance) {
-        nearestWindowIndex = windowIndex;
-        nearestDistance = distance;
-      }
-    }
-    return nearestWindowIndex;
+  if (foldPeriodInput) {
+    foldPeriodInput.oninput = () => {
+      const waveformWindow = getWaveformWindow(activeWindowIndex);
+      const needsPicaAnalysis = methodVisibility.pica || methodVisibility.carryForward;
+      const analysis = needsPicaAnalysis
+        ? getPicaPitchAnalysisFromWaveform(
+            waveformWindow.samples,
+            waveformWindow.sampleRate,
+            result.settings,
+          )
+        : null;
+      void renderFoldChart(plotly, analysis, getFoldColorPeriodFromInput());
+    };
   }
 
+  const pitchChartElement = document.getElementById("pitchChart");
   function getWindowIndexFromPoint(point) {
-    if (Number.isInteger(point?.customdata)) {
-      return point.customdata;
-    }
-    return Number.isFinite(point?.x) ? getNearestWindowIndexForTime(point.x) : null;
+    return Number.isFinite(point?.x) ? Math.round(point.x) : null;
   }
 
   pitchChartElement.removeAllListeners?.("plotly_click");
@@ -794,7 +923,7 @@ export async function renderPicaPitchCharts(result, options = {}) {
         "pitchChart",
         {
           y: [actualPitchHz],
-          x: [result.timeSec],
+          x: [pitchChartWindowIndex],
         },
         [actualTraceIndex],
       );

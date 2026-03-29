@@ -1,5 +1,7 @@
 # PICA - Pitch Inference by Candidate Analysis
 
+PIZA = Pitch Inference by Zero-crossing Analysis
+
 This experiment compares the existing FFT-based pitch timeline against a newer PICA detector and gives you a quick way to build hand-labeled ground truth.
 
 ## High-level flow

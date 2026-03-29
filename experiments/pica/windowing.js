@@ -1,13 +1,10 @@
 export const E1_HZ = 41.20344461410875;
 export const PICA_WINDOW_CYCLES = 2;
-export const PICA_ASSUMED_SAMPLE_RATE = 48_000;
 export const PICA_WINDOW_DURATION_SEC = PICA_WINDOW_CYCLES / E1_HZ;
-export const PICA_WINDOW_SAMPLES_AT_48K = Math.ceil(
-  PICA_WINDOW_DURATION_SEC * PICA_ASSUMED_SAMPLE_RATE,
-);
 
 export function getPicaWindowSize(sampleRate) {
-  return Math.max(1, Math.ceil(PICA_WINDOW_DURATION_SEC * sampleRate));
+  // The extra margin gives us room to throw away incomplete folds at the window edges.
+  return Math.max(1, Math.ceil(PICA_WINDOW_DURATION_SEC * sampleRate) + 400);
 }
 
 export function getPicaWindowSamples(samples, sampleRate, endTimeSec) {
@@ -28,6 +25,7 @@ export function getPicaWaveformWindow(result, windowIndex) {
   );
   const startSample = Math.max(0, endSample - picaWindowSamples);
   const samples = result.samples.subarray(startSample, endSample);
+  const sampleIndex = Array.from({ length: samples.length }, (_, index) => startSample + index);
   const timeSec = Array.from(
     { length: samples.length },
     (_, index) => (startSample + index) / result.sampleRate,
@@ -41,6 +39,7 @@ export function getPicaWaveformWindow(result, windowIndex) {
     endSample,
     endTimeSec: endSample / result.sampleRate,
     startSample,
+    sampleIndex,
     samples,
     timeSec,
     picaWindowSamples,
