@@ -256,16 +256,24 @@ test("1 NaN in last 5 is interpolated from neighboring anchors", () => {
   assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 0, 20, 40, 60, 80]);
 });
 
-test("2 NaNs in last 6 are interpolated from neighboring anchors", () => {
+test("2 NaNs in last 6 are left as gaps", () => {
   const state = createState();
   writeSeries(state, [0, 0, 20, Number.NaN, Number.NaN, 80, 100]);
-  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 20, 40, 60, 80, 100]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 20, Number.NaN, Number.NaN, 80, 100]);
 });
 
-test("3 NaNs in last 7 are interpolated from neighboring anchors", () => {
+test("3 NaNs in last 7 are left as gaps", () => {
   const state = createState();
   writeSeries(state, [0, 20, Number.NaN, Number.NaN, Number.NaN, 80, 100]);
-  assert.deepEqual(roundSeries(orderedValues(state)), [0, 20, 35, 50, 65, 80, 100]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [
+    0,
+    20,
+    Number.NaN,
+    Number.NaN,
+    Number.NaN,
+    80,
+    100,
+  ]);
 });
 
 test("end-pos 1 outlier is dropped when followed by NaN", () => {
@@ -282,6 +290,48 @@ test("end-pos 2 outliers are dropped when followed by NaN", () => {
     0,
     0,
     0,
+    Number.NaN,
+    Number.NaN,
+    Number.NaN,
+  ]);
+});
+
+test("1-value island surrounded by NaNs is dropped", () => {
+  const state = createState();
+  writeSeries(state, [0, 0, Number.NaN, Number.NaN, 100, Number.NaN, Number.NaN]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [
+    0,
+    0,
+    Number.NaN,
+    Number.NaN,
+    Number.NaN,
+    Number.NaN,
+    Number.NaN,
+  ]);
+});
+
+test("2-value island surrounded by NaNs is dropped", () => {
+  const state = createState();
+  writeSeries(state, [0, Number.NaN, Number.NaN, 100, 110, Number.NaN, Number.NaN]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [
+    0,
+    Number.NaN,
+    Number.NaN,
+    Number.NaN,
+    Number.NaN,
+    Number.NaN,
+    Number.NaN,
+  ]);
+});
+
+test("3-value island surrounded by NaNs is dropped", () => {
+  const state = createState();
+  writeSeries(state, [Number.NaN, Number.NaN, 100, 110, 120, Number.NaN, Number.NaN]);
+  assert.deepEqual(roundSeries(orderedValues(state)), [
+    Number.NaN,
+    Number.NaN,
+    Number.NaN,
+    Number.NaN,
     Number.NaN,
     Number.NaN,
     Number.NaN,

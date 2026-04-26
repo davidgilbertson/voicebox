@@ -214,7 +214,6 @@ test("processOneAudioHop skips the base analyser when PICA uses the high-res spe
     sampleRate: 48000,
     hzBuffer: new Float32Array(16),
     hzIndex: 0,
-    picaPriorStep: null,
   };
 
   const result = processOneAudioHop({

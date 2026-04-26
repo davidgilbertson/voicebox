@@ -1,27 +1,52 @@
 import { getWalkedPitchHz } from "./picaPitch.js";
 
-const STORAGE_KEY = "voicebox.picaPitch.actualPitchVocalSampler";
-const VOCAL_SAMPLER_FILE_NAME = "vocal_sampler.wav";
-const VOCAL_SAMPLER_ACTUAL_FILE_NAME = "vocal_sampler_actual.json";
+const ACTUAL_SOURCE_CONFIGS = [
+  {
+    fileName: "vocal_sampler.wav",
+    actualFileName: "vocal_sampler_actual.json",
+    storageKey: "vb.exp.actualPitchVocalSampler",
+  },
+  {
+    fileName: "vocal_sampler_long.wav",
+    actualFileName: "vocal_sampler_long_actual.json",
+    storageKey: "vb.exp.actualPitchVocalSamplerLong",
+  },
+];
 
-export function readStoredActualLabels() {
+export const ACTUAL_LABEL_STORAGE_KEYS = {
+  vocalSampler: "vb.exp.actualPitchVocalSampler",
+  vocalSamplerLong: "vb.exp.actualPitchVocalSamplerLong",
+};
+
+function getActualSourceConfigByAudioInput(audioInput) {
+  if (typeof audioInput !== "string") return null;
+  return ACTUAL_SOURCE_CONFIGS.find((config) => audioInput.endsWith(config.fileName)) ?? null;
+}
+
+function getActualSourceConfigBySourceKey(sourceKey) {
+  if (typeof sourceKey !== "string") return null;
+  return ACTUAL_SOURCE_CONFIGS.find((config) => sourceKey.endsWith(config.fileName)) ?? null;
+}
+
+export function readStoredActualLabels(storageKey) {
+  if (typeof storageKey !== "string" || storageKey.length === 0) {
+    return {};
+  }
   try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
+    const stored = JSON.parse(localStorage.getItem(storageKey) ?? "{}");
     return stored && typeof stored === "object" ? stored : {};
   } catch {
     return {};
   }
 }
 
-function writeLabels(labels) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(labels));
+function writeLabels(storageKey, labels) {
+  localStorage.setItem(storageKey, JSON.stringify(labels));
 }
 
 function getActualPitchUrl(audioInput) {
-  if (typeof audioInput !== "string" || !audioInput.endsWith(VOCAL_SAMPLER_FILE_NAME)) {
-    return null;
-  }
-  return audioInput.slice(0, -VOCAL_SAMPLER_FILE_NAME.length) + VOCAL_SAMPLER_ACTUAL_FILE_NAME;
+  const config = getActualSourceConfigByAudioInput(audioInput);
+  return config ? audioInput.slice(0, -config.fileName.length) + config.actualFileName : null;
 }
 
 async function loadActualPitchHz(audioInput) {
@@ -42,8 +67,8 @@ function normalizeActualPitchHzLength(actualPitchHz, targetLength) {
   return actualPitchHz.concat(new Array(targetLength - actualPitchHz.length).fill(null));
 }
 
-function applyStoredActualLabels(actualPitchHz, targetLength = null) {
-  const labels = readStoredActualLabels();
+function applyStoredActualLabels(actualPitchHz, storageKey, targetLength = null) {
+  const labels = readStoredActualLabels(storageKey);
   const labelIndexes = Object.keys(labels)
     .map((key) => Number.parseInt(key, 10))
     .filter((index) => Number.isInteger(index) && index >= 0);
@@ -71,21 +96,44 @@ function applyStoredActualLabels(actualPitchHz, targetLength = null) {
   return merged;
 }
 
-export async function getActualPitchHz(audioInput, targetLength = null) {
-  const actualPitchHz = await loadActualPitchHz(audioInput);
-  return applyStoredActualLabels(
+export async function getActualPitchData(audioInput, targetLength = null) {
+  const storageKey = getActualSourceConfigByAudioInput(audioInput)?.storageKey ?? "";
+  const loadedActualPitchHz = await loadActualPitchHz(audioInput);
+  const baseActualPitchHz =
     targetLength === null
-      ? actualPitchHz
-      : normalizeActualPitchHzLength(actualPitchHz, targetLength),
-    targetLength,
-  );
+      ? loadedActualPitchHz
+      : normalizeActualPitchHzLength(loadedActualPitchHz, targetLength);
+  return {
+    baseActualPitchHz: Array.isArray(baseActualPitchHz)
+      ? [...baseActualPitchHz]
+      : baseActualPitchHz,
+    actualPitchHz: applyStoredActualLabels(baseActualPitchHz, storageKey, targetLength),
+  };
 }
 
 export function createActualLabelEditor(sourceKey, result, getWaveformWindow) {
-  const labels = readStoredActualLabels();
+  const storageKey = getActualSourceConfigBySourceKey(sourceKey)?.storageKey ?? "";
+  const labels = readStoredActualLabels(storageKey);
+  const baseActualPitchHz = Array.isArray(result.baseActualPitchHz)
+    ? result.baseActualPitchHz
+    : null;
+
+  function applyLabelToResult(windowIndex) {
+    if (
+      !Array.isArray(result.actualPitchHz) ||
+      windowIndex < 0 ||
+      windowIndex >= result.actualPitchHz.length
+    ) {
+      return;
+    }
+    result.actualPitchHz[windowIndex] = hasLabel(windowIndex)
+      ? labels[windowIndex]
+      : (baseActualPitchHz?.[windowIndex] ?? null);
+  }
 
   function save() {
-    writeLabels(labels);
+    if (!storageKey) return;
+    writeLabels(storageKey, labels);
   }
 
   function hasLabel(windowIndex) {
@@ -102,11 +150,13 @@ export function createActualLabelEditor(sourceKey, result, getWaveformWindow) {
 
   function setLabel(windowIndex, hz) {
     labels[windowIndex] = hz;
+    applyLabelToResult(windowIndex);
     save();
   }
 
   function clearLabel(windowIndex) {
     delete labels[windowIndex];
+    applyLabelToResult(windowIndex);
     save();
   }
 
@@ -137,6 +187,7 @@ export function createActualLabelEditor(sourceKey, result, getWaveformWindow) {
         },
       );
       labels[windowIndex] = walkedPitchHz === walkedPitchHz ? walkedPitchHz : null;
+      applyLabelToResult(windowIndex);
     }
 
     save();

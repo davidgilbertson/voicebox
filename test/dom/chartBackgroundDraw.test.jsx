@@ -81,3 +81,32 @@ test("line renderer uses color mapping callback when color values are provided",
 
   expect(mapColorValueToStroke).toHaveBeenCalled();
 });
+
+test("pitch renderer fades the latest unstable tail samples", () => {
+  const alphaWrites = [];
+  let globalAlpha = 1;
+  const ctx = createCanvasContext();
+  Object.defineProperty(ctx, "globalAlpha", {
+    get: () => globalAlpha,
+    set: (value) => {
+      globalAlpha = value;
+      alphaWrites.push(value);
+    },
+  });
+  const renderer = new PitchChartRenderer({
+    minCents: 0,
+    maxCents: 1200,
+    lineColorMode: "blue",
+    renderScale: 1,
+  });
+  renderer.setCanvas(createCanvas(ctx));
+
+  renderer.draw({
+    smoothedPitchCentsRing: createRing([100, 110, 120, 130, 140, 150, 160]),
+    lineStrengthRing: createRing([1, 1, 1, 1, 1, 1, 1]),
+  });
+
+  expect(
+    alphaWrites.filter((value) => value !== 1).map((value) => Number(value.toFixed(1))),
+  ).toEqual([0.8, 0.7, 0.6, 0.5, 0.4, 0.3]);
+});

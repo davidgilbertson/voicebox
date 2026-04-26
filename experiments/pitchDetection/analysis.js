@@ -81,7 +81,13 @@ async function getPitchyDetector(frameSize) {
   return pitchyModule.PitchDetector.forFloat32Array(frameSize);
 }
 
-async function analyzePitchyComparison({ samples, sampleRate, hopSamples, windowCount }) {
+async function analyzePitchyComparison({
+  samples,
+  sampleRate,
+  hopSamples,
+  windowCount,
+  firstWindowEndSample = 0,
+}) {
   const pitchyHz = new Array(windowCount);
   let pitchyDetector = null;
   try {
@@ -98,7 +104,7 @@ async function analyzePitchyComparison({ samples, sampleRate, hopSamples, window
 
   let pitchyElapsedMs = 0;
   for (let i = 0; i < windowCount; i += 1) {
-    const endSample = i * hopSamples;
+    const endSample = firstWindowEndSample + i * hopSamples;
     if (endSample < FFT_SIZE) {
       pitchyHz[i] = Number.NaN;
       continue;
@@ -145,6 +151,18 @@ export async function loadAudioSample(audioInput = null) {
     : (audioInput ?? (await loadWavSamples(AUDIO_PATH)));
 }
 
+export function buildPitchTimeline(sampleRate, sampleCount) {
+  const hopSamples = Math.max(1, Math.round(sampleRate / DISPLAY_SAMPLES_PER_SECOND));
+  const windowCount = Math.max(0, Math.floor((sampleCount - FFT_SIZE) / hopSamples) + 1);
+  return {
+    samplesPerSecond: DISPLAY_SAMPLES_PER_SECOND,
+    hopSamples,
+    firstWindowEndSample: 0,
+    windowCount,
+    timeSec: Array.from({ length: windowCount }, (_, index) => index / DISPLAY_SAMPLES_PER_SECOND),
+  };
+}
+
 export async function analyzeDecodedPitchSample(loaded, tuning = null, options = null) {
   const peakinessCutoff = Number.isFinite(options?.peakinessCutoff)
     ? Math.max(0, Math.min(1, options.peakinessCutoff))
@@ -152,8 +170,9 @@ export async function analyzeDecodedPitchSample(loaded, tuning = null, options =
   const disablePeakinessGate = options?.disablePeakinessGate === true;
   const disablePeakinessMetrics = options?.disablePeakinessMetrics === true;
   const { sampleRate, samples } = loaded;
-  const hopSamples = Math.max(1, Math.round(sampleRate / DISPLAY_SAMPLES_PER_SECOND));
-  const windowCount = Math.max(0, Math.floor((samples.length - FFT_SIZE) / hopSamples) + 1);
+  const timeline = options?.timeline ?? buildPitchTimeline(sampleRate, samples.length);
+  const { hopSamples, timeSec, windowCount } = timeline;
+  const firstWindowEndSample = timeline.firstWindowEndSample ?? 0;
   const spectrumStartMs = performance.now();
   const getWindowSpectrum = await createWindowSpectrumComputer({
     samples,
@@ -162,10 +181,10 @@ export async function analyzeDecodedPitchSample(loaded, tuning = null, options =
     windowSize: FFT_SIZE,
     hopSamples,
     windowCount,
+    firstWindowEndSample,
   });
   const spectrumElapsedMs = performance.now() - spectrumStartMs;
 
-  const timeSec = new Array(windowCount);
   const pitchHz = new Array(windowCount);
   const spectralFlatness = new Array(windowCount);
   const peakiness = new Array(windowCount);
@@ -183,8 +202,7 @@ export async function analyzeDecodedPitchSample(loaded, tuning = null, options =
     const peakinessMetrics = disablePeakinessMetrics
       ? { flatness: Number.NaN, peakiness: Number.NaN, peakMagnitude: Number.NaN }
       : detectPeakiness(magnitudes);
-    timeSec[i] = i / DISPLAY_SAMPLES_PER_SECOND;
-    const hasEnoughHistory = i * hopSamples >= FFT_SIZE;
+    const hasEnoughHistory = firstWindowEndSample + i * hopSamples >= FFT_SIZE;
     pitchHz[i] =
       hasEnoughHistory &&
       result.hz > 0 &&
@@ -207,6 +225,7 @@ export async function analyzeDecodedPitchSample(loaded, tuning = null, options =
     samples,
     samplesPerSecond: DISPLAY_SAMPLES_PER_SECOND,
     hopSamples,
+    firstWindowEndSample,
     windowSize: FFT_SIZE,
     binSizeHz: sampleRate / 2 / FFT_BIN_COUNT,
     timeSec,
@@ -241,13 +260,14 @@ export async function analyzeDecodedPitchSampleWithComparison(
   options = null,
 ) {
   const voiceboxResult = await analyzeDecodedPitchSample(loaded, tuning, options);
-  const { samples, sampleRate, hopSamples } = voiceboxResult;
+  const { samples, sampleRate, hopSamples, firstWindowEndSample } = voiceboxResult;
   const windowCount = voiceboxResult.timeSec.length;
   const { pitchyHz, pitchyElapsedMs } = await analyzePitchyComparison({
     samples,
     sampleRate,
     hopSamples,
     windowCount,
+    firstWindowEndSample,
   });
 
   return {

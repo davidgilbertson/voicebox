@@ -1,74 +1,6 @@
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
-function parseWav(buffer) {
-  if (buffer.toString("ascii", 0, 4) !== "RIFF" || buffer.toString("ascii", 8, 12) !== "WAVE") {
-    throw new Error("Not a RIFF/WAVE file");
-  }
-
-  let offset = 12;
-  let formatTag = null;
-  let channels = null;
-  let sampleRate = null;
-  let bitsPerSample = null;
-  let dataOffset = null;
-  let dataSize = null;
-
-  while (offset + 8 <= buffer.length) {
-    const chunkId = buffer.toString("ascii", offset, offset + 4);
-    const chunkSize = buffer.readUInt32LE(offset + 4);
-    const chunkDataStart = offset + 8;
-    const nextOffset = chunkDataStart + chunkSize + (chunkSize % 2);
-
-    if (chunkId === "fmt ") {
-      formatTag = buffer.readUInt16LE(chunkDataStart + 0);
-      channels = buffer.readUInt16LE(chunkDataStart + 2);
-      sampleRate = buffer.readUInt32LE(chunkDataStart + 4);
-      bitsPerSample = buffer.readUInt16LE(chunkDataStart + 14);
-    } else if (chunkId === "data") {
-      dataOffset = chunkDataStart;
-      dataSize = chunkSize;
-    }
-
-    offset = nextOffset;
-  }
-
-  if (
-    formatTag === null ||
-    channels === null ||
-    sampleRate === null ||
-    bitsPerSample === null ||
-    dataOffset === null ||
-    dataSize === null
-  ) {
-    throw new Error("Missing required WAV chunks");
-  }
-
-  const bytesPerSample = bitsPerSample / 8;
-  const frameSize = bytesPerSample * channels;
-  const frameCount = Math.floor(dataSize / frameSize);
-  const samples = new Float32Array(frameCount);
-
-  if (formatTag === 1 && bitsPerSample === 16) {
-    for (let i = 0; i < frameCount; i += 1) {
-      const frameStart = dataOffset + i * frameSize;
-      const sampleInt16 = buffer.readInt16LE(frameStart);
-      samples[i] = sampleInt16 / 32768;
-    }
-  } else if (formatTag === 3 && bitsPerSample === 32) {
-    for (let i = 0; i < frameCount; i += 1) {
-      const frameStart = dataOffset + i * frameSize;
-      samples[i] = buffer.readFloatLE(frameStart);
-    }
-  } else {
-    throw new Error(
-      `Unsupported WAV format. formatTag=${formatTag}, bitsPerSample=${bitsPerSample}`,
-    );
-  }
-
-  return { sampleRate, channels, bitsPerSample, frameCount, samples };
-}
+import { loadWavFile } from "./wavFileUtils.js";
 
 function maxSignalLevelWithWorkletMath(samples, batchSize) {
   let pendingSampleCount = 0;
@@ -101,6 +33,10 @@ function percentile(values, p) {
   const sorted = [...values].sort((a, b) => a - b);
   const index = Math.max(0, Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1));
   return sorted[index];
+}
+
+function formatNumber(value, digits = 3) {
+  return Number.isFinite(value) ? value.toFixed(digits) : "n/a";
 }
 
 function generateVoiceLikeSignal({ sampleRate, durationSeconds, fundamentalHz, harmonics }) {
@@ -142,8 +78,7 @@ function main() {
   const thisFile = fileURLToPath(import.meta.url);
   const thisDir = path.dirname(thisFile);
   const wavPath = path.resolve(thisDir, "assets", "High ah gaps.wav");
-  const buffer = fs.readFileSync(wavPath);
-  const wav = parseWav(buffer);
+  const wav = loadWavFile(wavPath);
   const batchSize = Math.round(wav.sampleRate / 80);
   const { maxSignalLevel, batchCount, batchSignalLevels } = maxSignalLevelWithWorkletMath(
     wav.samples,
@@ -166,29 +101,13 @@ function main() {
   });
   const syntheticResult = maxSignalLevelWithWorkletMath(syntheticSamples, batchSize);
 
-  console.log({
-    wavPath,
-    sampleRate: wav.sampleRate,
-    channels: wav.channels,
-    bitsPerSample: wav.bitsPerSample,
-    frameCount: wav.frameCount,
-    batchSize,
-    batchCount,
-    maxSignalLevel,
-    nearMaxThreshold,
-    nearMaxCount,
-    nearMaxPct,
-    thresholdForTop10Pct,
-    syntheticVoiceLike: {
-      sampleRate: wav.sampleRate,
-      durationSeconds: 8,
-      fundamentalHz: 220,
-      harmonics: 20,
-      maxSignalLevel: syntheticResult.maxSignalLevel,
-      nearMaxThreshold95PctOfMax: syntheticResult.maxSignalLevel * 0.95,
-      thresholdForTop10Pct: percentile(syntheticResult.batchSignalLevels, 90),
-    },
-  });
+  console.log(path.basename(wavPath));
+  console.log(
+    `max=${formatNumber(maxSignalLevel)}  p90=${formatNumber(thresholdForTop10Pct)}  near-max=${nearMaxCount}/${batchCount} (${formatNumber(nearMaxPct, 1)}%)`,
+  );
+  console.log(
+    `synthetic: max=${formatNumber(syntheticResult.maxSignalLevel)}  p90=${formatNumber(percentile(syntheticResult.batchSignalLevels, 90))}`,
+  );
 }
 
 main();

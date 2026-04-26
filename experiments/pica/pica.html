@@ -46,7 +46,7 @@
       #bottomRow {
         min-height: 0;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .quadrant {
@@ -71,9 +71,32 @@
 
       #paramsColumn {
         min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
+      }
+
+      .params-table {
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      .params-table th,
+      .params-table td {
+        padding: 4px 8px 4px 0;
+        text-align: left;
+        vertical-align: middle;
+        white-space: nowrap;
+      }
+
+      .params-table th {
+        color: #93c5fd;
+        font-weight: 600;
+      }
+
+      .params-table td {
+        color: #e2e8f0;
+      }
+
+      .params-used-with {
+        color: #94a3b8;
       }
 
       #metaActions {
@@ -89,20 +112,13 @@
         overflow-wrap: anywhere;
       }
 
-      #perfInfo,
-      #windowInfo,
-      #actualPitchInfo {
+      #perfInfo {
         color: #93c5fd;
       }
 
       #perfInfo {
         min-width: 0;
         overflow: auto;
-      }
-
-      #windowInfo,
-      #actualPitchInfo {
-        overflow-wrap: anywhere;
       }
 
       #paramsSection {
@@ -174,13 +190,6 @@
         color: #94a3b8;
       }
 
-      #paramsColumn .toolbar-field {
-        display: grid;
-        grid-template-columns: 180px auto;
-        justify-content: start;
-        width: fit-content;
-      }
-
       .toolbar-checkbox {
         color: #cbd5e1;
       }
@@ -207,8 +216,7 @@
 
       #pitchChart,
       #waveformChart,
-      #harmonicChart,
-      #foldChart {
+      #harmonicChart {
         width: 100%;
         height: 100%;
         min-height: 0;
@@ -216,27 +224,12 @@
       }
 
       #foldPanel {
-        display: grid;
-        grid-template-rows: minmax(0, 1fr) auto;
-        gap: 8px;
-        height: 100%;
-        min-height: 0;
-      }
-
-      #foldChartControls {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      #foldPeriodInput {
-        width: 84px;
+        display: none;
       }
 
       body.loading #pitchChart,
       body.loading #waveformChart,
-      body.loading #harmonicChart,
-      body.loading #foldChart {
+      body.loading #harmonicChart {
         opacity: 0.55;
       }
     </style>
@@ -258,124 +251,8 @@
           </div>
           <div id="perfInfo"></div>
           <div id="status">Ready to record.</div>
-          <div id="windowInfo">
-            Sample window uses 2 cycles at E1, which is 2330 samples at 48 kHz (~48.5 ms).
-          </div>
-          <div id="actualPitchInfo">
-            Actual labels 0. Shortcuts: A/D move always. Q/E copy, W null + next, S forget + next in
-            labeling mode.
-          </div>
           <div id="paramsSection">
-            <div id="paramsColumn">
-              <label class="toolbar-field"
-                >minAmp
-                <input
-                  id="minAmp"
-                  class="toolbar-number"
-                  type="number"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value="0.01"
-                  title="Minimum window or compared-region peak amplitude required before Pica accepts it."
-              /></label>
-              <label class="toolbar-field"
-                >minCorr
-                <input
-                  id="minCorr"
-                  class="toolbar-number"
-                  type="number"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value="0.95"
-                  title="Minimum winning-candidate correlation required before Pica accepts it."
-              /></label>
-              <label class="toolbar-field"
-                >minCarryCorr
-                <input
-                  id="minCarryCorr"
-                  class="toolbar-number"
-                  type="number"
-                  min="0"
-                  max="20"
-                  step="0.01"
-                  value="3"
-                  title="Minimum prior and walked correlation required before the carry-forward path can win."
-              /></label>
-              <label class="toolbar-field"
-                >maxCrossingsPerPeriod
-                <input
-                  id="maxCrossingsPerPeriod"
-                  class="toolbar-number"
-                  type="number"
-                  min="2"
-                  max="64"
-                  step="2"
-                  value="20"
-                  title="Maximum zero crossings to allow in one period when collecting recent folds."
-              /></label>
-              <label class="toolbar-field"
-                >maxPatches
-                <input
-                  id="maxComparisonPatches"
-                  class="toolbar-number"
-                  type="number"
-                  min="2"
-                  max="16"
-                  step="1"
-                  value="7"
-                  title="Maximum number of trailing period-sized patches to compare when scoring a candidate period."
-              /></label>
-              <label class="toolbar-field"
-                >corrPts
-                <input
-                  id="corrSamplePoints"
-                  class="toolbar-number"
-                  type="number"
-                  min="1"
-                  max="128"
-                  step="1"
-                  value="30"
-                  title="Approximate number of sampled points per compared patch when computing correlation."
-              /></label>
-              <label class="toolbar-field"
-                >maxWalk
-                <input
-                  id="maxWalkSteps"
-                  class="toolbar-number"
-                  type="number"
-                  min="0"
-                  max="64"
-                  step="2"
-                  value="10"
-                  title="Maximum number of one-sample period adjustments to try when hill-climbing a candidate period."
-              /></label>
-              <label class="toolbar-field"
-                >maxCarryRun
-                <input
-                  id="maxCarryRun"
-                  class="toolbar-number"
-                  type="number"
-                  min="1"
-                  max="200"
-                  step="1"
-                  value="50"
-                  title="Maximum number of consecutive carry-forward windows before Pica forces a fresh extrema search."
-              /></label>
-              <label class="toolbar-field"
-                >corrHzRatio
-                <input
-                  id="corrHzRatio"
-                  class="toolbar-number"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.5"
-                  value="0.5"
-                  title="Correlation feature weight relative to the Hz feature weight of 1."
-              /></label>
-            </div>
+            <div id="paramsColumn"></div>
           </div>
           <div>
             <button id="resetStorageButton" class="toolbar-btn" type="button">
@@ -390,24 +267,6 @@
       <div id="bottomRow">
         <div class="quadrant">
           <div id="waveformChart"></div>
-        </div>
-        <div class="quadrant">
-          <div id="foldPanel">
-            <div id="foldChart"></div>
-            <div id="foldChartControls">
-              <label class="toolbar-field" for="foldPeriodInput">
-                Period
-                <input
-                  id="foldPeriodInput"
-                  class="toolbar-number"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value="100"
-                />
-              </label>
-            </div>
-          </div>
         </div>
         <div class="quadrant">
           <div id="harmonicChart"></div>

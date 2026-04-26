@@ -1,15 +1,169 @@
+import { PICA_SETTING_FIELDS, PICA_SETTINGS_DEFAULTS } from "./config.js";
 import { analyzePreparedActualPitchSample, loadActualPitchSample } from "./picaExperiment.js";
-import { PICA_SETTINGS_DEFAULTS, SIMILARITY_FUNC } from "./config.js";
+import { ensureExperimentDebugGlobals } from "./debugGlobals.js";
+import {
+  getMethodDefinition,
+  HPO_METHOD_KEYS,
+  normalizeSelectedMethods,
+} from "./methodRegistry.js";
 
+const STORAGE_PREFIX = "vb.exp.";
 const VOCAL_SAMPLER_URL = "../../.private/assets/vocal_sampler.wav";
 const VOCAL_SAMPLER_LABEL = "vocal_sampler.wav";
-const FIXED_SETTINGS = {
-  ...PICA_SETTINGS_DEFAULTS,
-};
+const DEFAULT_STEP_COUNT = 11;
+const POST_PROCESSING_STORAGE_KEY = `${STORAGE_PREFIX}postProcessingEnabled`;
+const SELECTED_METHOD_STORAGE_KEY = `${STORAGE_PREFIX}hpoMethod`;
+let preparedSamplePromise = null;
+let isRunningAll = false;
+let currentFingerprint = "";
+const chartFingerprintByKey = new Map();
+const settingMidpointInputs = new Map();
+const settingStepInputs = new Map();
+const settingStepCountInputs = new Map();
+const settingEnabledInputs = new Map();
+const settingValuePreviews = new Map();
+const chartCards = new Map();
+let sharedAccuracyRange = [0, 100];
 
-const CARRY_THRESHOLD_VALUES = [0.4, 0.5, 0.6, 0.7, 0.8];
-const CORRELATION_TO_HZ_RATIO_VALUES = [4, 4.75, 5.5, 6.25, 7];
-const TOTAL_RUNS = CARRY_THRESHOLD_VALUES.length * CORRELATION_TO_HZ_RATIO_VALUES.length;
+ensureExperimentDebugGlobals();
+
+function appendRunLog(text) {
+  const runLog = document.getElementById("runLog");
+  runLog.textContent += `${text}\n`;
+  runLog.scrollTop = runLog.scrollHeight;
+}
+
+function clearRunLog() {
+  document.getElementById("runLog").textContent = "";
+}
+
+function getStorageKey(settingKey) {
+  return `${STORAGE_PREFIX}${settingKey}`;
+}
+
+function getEnabledStorageKey(settingKey) {
+  return `${getStorageKey(settingKey)}.enabled`;
+}
+
+function getStepStorageKey(settingKey) {
+  return `${getStorageKey(settingKey)}.step`;
+}
+
+function getStepsStorageKey(settingKey) {
+  return `${getStorageKey(settingKey)}.steps`;
+}
+
+function readStoredNumber(key, fallback) {
+  const stored = localStorage.getItem(key);
+  if (stored === null) return fallback;
+  const value = Number(stored);
+  return Number.isNaN(value) ? fallback : value;
+}
+
+function writeStoredNumber(key, value) {
+  localStorage.setItem(key, String(value));
+}
+
+function readStoredBoolean(key, fallback) {
+  const stored = localStorage.getItem(key);
+  if (stored === null) return fallback;
+  if (stored === "true") return true;
+  if (stored === "false") return false;
+  return fallback;
+}
+
+function writeStoredBoolean(key, value) {
+  localStorage.setItem(key, String(value));
+}
+
+function readStoredPostProcessingEnabled() {
+  const value = localStorage.getItem(POST_PROCESSING_STORAGE_KEY);
+  return value === null ? true : value === "true";
+}
+
+function writeStoredPostProcessingEnabled(enabled) {
+  localStorage.setItem(POST_PROCESSING_STORAGE_KEY, String(enabled));
+}
+
+function readStoredMethod() {
+  const storedMethod = localStorage.getItem(SELECTED_METHOD_STORAGE_KEY);
+  return HPO_METHOD_KEYS.includes(storedMethod) ? storedMethod : "PICA";
+}
+
+function writeStoredMethod(methodType) {
+  localStorage.setItem(SELECTED_METHOD_STORAGE_KEY, methodType);
+}
+
+function getSelectedMethod() {
+  return document.getElementById("methodSelect").value;
+}
+
+function getMethodConfig() {
+  const method = getMethodDefinition(getSelectedMethod());
+  return {
+    label: method.key,
+    methodKey: method.key,
+    perfKey: method.perfKey,
+    selectedMethods: normalizeSelectedMethods({ [method.key]: true }),
+  };
+}
+
+function getVisibleFields() {
+  return PICA_SETTING_FIELDS.filter((field) => field.usedWith.includes(getSelectedMethod()));
+}
+
+function isIntegerStep(step) {
+  return Number.isInteger(step);
+}
+
+function isValueWithinSensibleRange(field, value) {
+  if (field.min !== undefined && value < field.min) return false;
+  if (field.max !== undefined && value > field.max) return false;
+  return true;
+}
+
+function roundPointValue(step, value) {
+  if (isIntegerStep(step)) return Math.round(value);
+  return Number(value.toFixed(3));
+}
+
+function getStepCount(field) {
+  const steps = Math.trunc(Number(settingStepCountInputs.get(field.key).value));
+  return Number.isFinite(steps) ? Math.max(1, steps) : DEFAULT_STEP_COUNT;
+}
+
+function getFieldInputValues(field) {
+  const midpoint = Number(settingMidpointInputs.get(field.key).value);
+  const step = Number(settingStepInputs.get(field.key).value);
+  const steps = getStepCount(field);
+  return { midpoint, step, steps };
+}
+
+function syncMidpointStep(field) {
+  settingMidpointInputs.get(field.key).step = settingStepInputs.get(field.key).value;
+}
+
+function getSettings() {
+  return Object.fromEntries([
+    ...PICA_SETTING_FIELDS.map((field) => [field.key, getFieldInputValues(field).midpoint]),
+    ["postProcessingEnabled", readStoredPostProcessingEnabled()],
+  ]);
+}
+
+function getSettingsFingerprint(settings) {
+  return JSON.stringify({
+    methodType: getSelectedMethod(),
+    postProcessingEnabled: settings.postProcessingEnabled,
+    fields: PICA_SETTING_FIELDS.map((field) => {
+      const { midpoint, step, steps } = getFieldInputValues(field);
+      return [field.key, settings[field.key], midpoint, step, steps];
+    }),
+  });
+}
+
+function getSelectedFields() {
+  return getVisibleFields().filter((field) => settingEnabledInputs.get(field.key)?.checked);
+}
 
 function setStatus(text, isError = false) {
   const status = document.getElementById("status");
@@ -17,245 +171,424 @@ function setStatus(text, isError = false) {
   status.style.color = isError ? "#fca5a5" : "#a7f3d0";
 }
 
-function setSummary(text) {
-  document.getElementById("summary").textContent = text;
+async function waitForProgressRender() {
+  if (document.hidden) return;
+
+  await new Promise((resolve) => {
+    let hasResolved = false;
+    const resolveOnce = () => {
+      if (hasResolved) return;
+      hasResolved = true;
+      resolve();
+    };
+
+    // rAF gives visible tabs a paint; the timeout avoids stalling if visibility changes.
+    requestAnimationFrame(() => {
+      setTimeout(resolveOnce, 0);
+    });
+    setTimeout(resolveOnce, 100);
+  });
 }
 
-function setSweepInfo() {
-  document.getElementById("sweepInfo").textContent =
-    `Sweep against actuals for ${VOCAL_SAMPLER_LABEL}: mode=${SIMILARITY_FUNC}, minCarryCorr=${CARRY_THRESHOLD_VALUES.join(", ")}, corrHzRatio=${CORRELATION_TO_HZ_RATIO_VALUES.join(", ")} | fixed: maxCrossingsPerPeriod=${FIXED_SETTINGS.maxCrossingsPerPeriod}, maxPatches=${FIXED_SETTINGS.maxComparisonPatches}, maxWalk=${FIXED_SETTINGS.maxWalkSteps}`;
-}
-
-function createGrid(fill = Number.NaN) {
-  return CARRY_THRESHOLD_VALUES.map(() => CORRELATION_TO_HZ_RATIO_VALUES.map(() => fill));
-}
-
-function getMethodAccuracy(metrics, methodKey) {
-  return (
-    metrics.accuracyByMethodKey?.[methodKey] ?? {
-      accuracy: Number.NaN,
-      correctCount: 0,
-      comparedCount: 0,
-    }
+function updateDirtyState() {
+  const rerunAllButton = document.getElementById("rerunAllButton");
+  const isDirty = getSelectedFields().some(
+    (field) => chartFingerprintByKey.get(field.key) !== currentFingerprint,
   );
+  rerunAllButton.classList.toggle("dirty", isDirty);
 }
 
-async function runSweepForSample(preparedSample) {
-  const picaAccuracy = createGrid();
-  const carryForwardAccuracy = createGrid();
-  let runNumber = 0;
+function updateChartVisibility() {
+  PICA_SETTING_FIELDS.forEach((field) => {
+    const card = chartCards.get(field.key);
+    if (!card) return;
+    const isVisible =
+      field.usedWith.includes(getSelectedMethod()) && settingEnabledInputs.get(field.key)?.checked;
+    card.hidden = !isVisible;
+    card.style.display = isVisible ? "" : "none";
+  });
+}
 
-  for (
-    let thresholdIndex = 0;
-    thresholdIndex < CARRY_THRESHOLD_VALUES.length;
-    thresholdIndex += 1
-  ) {
-    const minCarryCorr = CARRY_THRESHOLD_VALUES[thresholdIndex];
-    for (let ratioIndex = 0; ratioIndex < CORRELATION_TO_HZ_RATIO_VALUES.length; ratioIndex += 1) {
-      const corrHzRatio = CORRELATION_TO_HZ_RATIO_VALUES[ratioIndex];
-      runNumber += 1;
-      const message =
-        `Run ${runNumber}/${TOTAL_RUNS}: ${VOCAL_SAMPLER_LABEL} | ` +
-        `minCarryCorr=${minCarryCorr} | ` +
-        `corrHzRatio=${corrHzRatio}`;
-      setStatus(message);
+function updateSettingVisibility() {
+  PICA_SETTING_FIELDS.forEach((field) => {
+    const input = settingEnabledInputs.get(field.key);
+    if (!input) return;
+    const row = input.closest(".settings-row");
+    if (!row) return;
+    const isVisible = field.usedWith.includes(getSelectedMethod());
+    row.hidden = !isVisible;
+    row.style.display = isVisible ? "" : "none";
+  });
+}
 
-      const startMs = performance.now();
-      const result = await analyzePreparedActualPitchSample(
-        preparedSample,
-        {
-          ...FIXED_SETTINGS,
-          minCarryCorr,
-          corrHzRatio,
-        },
-        false,
-      );
-      const elapsedMs = performance.now() - startMs;
-      const picaMetrics = getMethodAccuracy(result.metrics, "pica");
-      const carryMetrics = getMethodAccuracy(result.metrics, "carryForward");
+function buildPointValues(field) {
+  const { midpoint, step, steps } = getFieldInputValues(field);
+  const offsetRadius = Math.floor(steps / 2);
+  const values = Array.from({ length: steps }, (_, index) =>
+    roundPointValue(step, midpoint + (index - offsetRadius) * step),
+  ).filter((value) => isValueWithinSensibleRange(field, value));
+  return [...new Set(values)];
+}
 
-      console.log(
-        `${message} -> pica ${(picaMetrics.accuracy * 100).toFixed(1)}% (${picaMetrics.correctCount}/${picaMetrics.comparedCount}), carry ${(carryMetrics.accuracy * 100).toFixed(1)}% (${carryMetrics.correctCount}/${carryMetrics.comparedCount}), ${elapsedMs.toFixed(1)}ms`,
-      );
+function updateValuePreview(field) {
+  const preview = settingValuePreviews.get(field.key);
+  if (!preview) return;
+  const values = buildPointValues(field);
+  preview.textContent = values.length === 0 ? "No in-range values" : values.join(", ");
+}
 
-      picaAccuracy[thresholdIndex][ratioIndex] = picaMetrics.accuracy;
-      carryForwardAccuracy[thresholdIndex][ratioIndex] = carryMetrics.accuracy;
-    }
-  }
+function updateSummary() {
+  document.getElementById("summary").textContent =
+    `${getMethodConfig().label} accuracy vs ${getMethodConfig().label} speed. Accuracies on this page are scored using the selected algorithm.`;
+}
 
+async function getPreparedSample() {
+  preparedSamplePromise ??= loadActualPitchSample(VOCAL_SAMPLER_URL);
+  return preparedSamplePromise;
+}
+
+function getMethodSummary(result) {
+  const methodConfig = getMethodConfig();
   return {
-    picaAccuracy,
-    carryForwardAccuracy,
+    accuracy: result.metrics.accuracyByMethodKey?.[methodConfig.methodKey]?.accuracy ?? Number.NaN,
+    msPerSecondAudio: result.perf?.[methodConfig.perfKey] ?? Number.NaN,
   };
 }
 
-function getHeatmapAnnotations(accuracy) {
-  return accuracy.flatMap((row, rowIndex) =>
-    row.map((value, columnIndex) => ({
-      x: CORRELATION_TO_HZ_RATIO_VALUES[columnIndex],
-      y: CARRY_THRESHOLD_VALUES[rowIndex],
-      text: Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : "n/a",
-      showarrow: false,
-      font: { color: "#ffffff", size: 12 },
-      bgcolor: "rgba(0, 0, 0, 0.72)",
-      bordercolor: "rgba(255, 255, 255, 0.22)",
-      borderpad: 1,
-    })),
+async function getPointResult(settings) {
+  const preparedSample = await getPreparedSample();
+  const result = await analyzePreparedActualPitchSample(
+    preparedSample,
+    settings,
+    getMethodConfig().selectedMethods,
   );
+  return getMethodSummary(result);
 }
 
-function getHeatmapBounds(sweepResult) {
-  const values = [sweepResult.picaAccuracy, sweepResult.carryForwardAccuracy]
+function getAccuracyRangeFromCharts(chartPointsByKey) {
+  const accuracyValues = Array.from(chartPointsByKey.values())
     .flat()
-    .flat()
-    .filter(Number.isFinite)
-    .map((value) => value * 100);
-  if (values.length === 0) {
-    return { zmin: 0, zmax: 100 };
+    .map((point) => point.accuracy * 100)
+    .filter((value) => Number.isFinite(value));
+  if (accuracyValues.length === 0) {
+    return [0, 100];
   }
-  const zmin = Math.min(...values);
-  const zmax = Math.max(...values);
-  return zmin === zmax ? { zmin: zmin - 1, zmax: zmax + 1 } : { zmin, zmax };
+  const accuracyMin = Math.min(...accuracyValues);
+  const accuracyMax = Math.max(...accuracyValues);
+  const accuracyPadding = Math.max(0.2, (accuracyMax - accuracyMin) * 0.15);
+  return [accuracyMin - accuracyPadding, accuracyMax + accuracyPadding];
 }
 
-async function renderHeatmap(elementId, title, accuracy, bounds) {
+async function getChartPoints(field, settings) {
+  const values = buildPointValues(field);
+  if (values.length === 0) {
+    setStatus(`No in-range values for ${field.inputLabel}.`, true);
+    return [];
+  }
+  setStatus(`Running ${field.inputLabel} from ${values[0]} to ${values.at(-1)}...`);
+
+  const points = [];
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    setStatus(
+      `Running ${field.inputLabel} ${index + 1}/${values.length}: ${value} (${points.length} done)...`,
+    );
+    await waitForProgressRender();
+    const pointSettings = {
+      ...settings,
+      [field.key]: value,
+    };
+    const result = await getPointResult(pointSettings);
+    const point = {
+      value,
+      realtime:
+        Number.isFinite(result.msPerSecondAudio) && result.msPerSecondAudio > 0
+          ? 1000 / result.msPerSecondAudio
+          : Number.NaN,
+      accuracy: result.accuracy,
+    };
+    points.push(point);
+    const logLine =
+      `${field.inputLabel}=${point.value} -> ` +
+      `x realtime ${Number.isFinite(point.realtime) ? point.realtime.toFixed(2) : "n/a"}, ` +
+      `accuracy ${Number.isFinite(point.accuracy) ? (point.accuracy * 100).toFixed(1) : "n/a"}%`;
+    console.log(logLine);
+    appendRunLog(logLine);
+    await waitForProgressRender();
+  }
+
+  return points;
+}
+
+async function renderChart(field, settings, points) {
+  const chartId = `chart-${field.key}`;
   await globalThis.Plotly.newPlot(
-    elementId,
+    chartId,
     [
       {
-        type: "heatmap",
-        x: CORRELATION_TO_HZ_RATIO_VALUES,
-        y: CARRY_THRESHOLD_VALUES,
-        z: accuracy.map((row) =>
-          row.map((value) => (Number.isFinite(value) ? value * 100 : Number.NaN)),
-        ),
-        hovertemplate: "minCarryCorr=%{y}<br>corrHzRatio=%{x}<br>accuracy=%{z:.1f}%<extra></extra>",
-        colorscale: "Viridis",
-        zmin: bounds.zmin,
-        zmax: bounds.zmax,
+        type: "scatter",
+        mode: "lines+markers",
+        cliponaxis: false,
+        x: points.map((point) => point.realtime),
+        y: points.map((point) => point.accuracy * 100),
+        text: points.map((point) => `${field.inputLabel}=${point.value}`),
+        customdata: points.map((point) => point.value),
+        line: { color: "#60a5fa", width: 2 },
+        marker: {
+          size: 18,
+          color: points.map((point, pointIndex) => {
+            if (point.value === settings[field.key]) return "#22c55e";
+            const alpha = points.length <= 1 ? 1 : 0.5 + (pointIndex / (points.length - 1)) * 0.5;
+            return `rgba(96, 165, 250, ${alpha})`;
+          }),
+          line: { color: "#020617", width: 1.5 },
+        },
+        hovertemplate: `${field.inputLabel}=%{customdata}<br>x realtime=%{x:.2f}<br>accuracy=%{y:.1f}%<extra></extra>`,
+        showlegend: false,
       },
     ],
     {
-      title,
       paper_bgcolor: "#050505",
       plot_bgcolor: "#050505",
       font: { color: "#e2e8f0" },
-      margin: { l: 56, r: 24, t: 52, b: 44 },
-      annotations: getHeatmapAnnotations(accuracy),
-      xaxis: {
-        title: "corrHzRatio",
-        tickmode: "array",
-        tickvals: CORRELATION_TO_HZ_RATIO_VALUES,
-      },
+      margin: { l: 64, r: 24, t: 24, b: 58 },
+      xaxis: { title: "x realtime", gridcolor: "#1f2937", layer: "below traces" },
       yaxis: {
-        title: "minCarryCorr",
-        tickmode: "array",
-        tickvals: CARRY_THRESHOLD_VALUES,
+        title: "accuracy",
+        gridcolor: "#1f2937",
+        range: sharedAccuracyRange,
+        layer: "below traces",
       },
     },
     { responsive: true },
   );
-}
 
-function getBestCell(sweepResult) {
-  let bestPicaAccuracy = Number.NEGATIVE_INFINITY;
-  let bestPicaCarryThreshold = CARRY_THRESHOLD_VALUES[0];
-  let bestPicaCorrHzRatio = CORRELATION_TO_HZ_RATIO_VALUES[0];
-  let bestCarryForwardAccuracy = Number.NEGATIVE_INFINITY;
-  let bestCarryForwardThreshold = CARRY_THRESHOLD_VALUES[0];
-  let bestCarryForwardCorrHzRatio = CORRELATION_TO_HZ_RATIO_VALUES[0];
+  const chartElement = document.getElementById(chartId);
+  chartElement.on("plotly_click", (event) => {
+    const value = event.points?.[0]?.customdata;
+    if (value === undefined) return;
+    void setCurrentValueAndRerun(field, value);
+  });
 
-  for (
-    let thresholdIndex = 0;
-    thresholdIndex < CARRY_THRESHOLD_VALUES.length;
-    thresholdIndex += 1
-  ) {
-    for (let ratioIndex = 0; ratioIndex < CORRELATION_TO_HZ_RATIO_VALUES.length; ratioIndex += 1) {
-      const picaAccuracy = sweepResult.picaAccuracy[thresholdIndex][ratioIndex];
-      if (Number.isFinite(picaAccuracy) && picaAccuracy > bestPicaAccuracy) {
-        bestPicaAccuracy = picaAccuracy;
-        bestPicaCarryThreshold = CARRY_THRESHOLD_VALUES[thresholdIndex];
-        bestPicaCorrHzRatio = CORRELATION_TO_HZ_RATIO_VALUES[ratioIndex];
-      }
-
-      const carryForwardAccuracy = sweepResult.carryForwardAccuracy[thresholdIndex][ratioIndex];
-      if (
-        Number.isFinite(carryForwardAccuracy) &&
-        carryForwardAccuracy > bestCarryForwardAccuracy
-      ) {
-        bestCarryForwardAccuracy = carryForwardAccuracy;
-        bestCarryForwardThreshold = CARRY_THRESHOLD_VALUES[thresholdIndex];
-        bestCarryForwardCorrHzRatio = CORRELATION_TO_HZ_RATIO_VALUES[ratioIndex];
-      }
-    }
-  }
-
-  return {
-    bestPicaAccuracy,
-    bestPicaCarryThreshold,
-    bestPicaCorrHzRatio,
-    bestCarryForwardAccuracy,
-    bestCarryForwardThreshold,
-    bestCarryForwardCorrHzRatio,
-  };
-}
-
-async function renderResults(sweepResult) {
-  const heatmaps = document.getElementById("heatmaps");
-  heatmaps.innerHTML = `
-    <div id="heatmap0" class="heatmap-chart"></div>
-    <div id="heatmap1" class="heatmap-chart"></div>
-  `;
-
-  const bounds = getHeatmapBounds(sweepResult);
-  await renderHeatmap("heatmap0", "PICA accuracy", sweepResult.picaAccuracy, bounds);
-  await renderHeatmap(
-    "heatmap1",
-    "Carry-forward accuracy",
-    sweepResult.carryForwardAccuracy,
-    bounds,
-  );
-
-  const {
-    bestPicaAccuracy,
-    bestPicaCarryThreshold,
-    bestPicaCorrHzRatio,
-    bestCarryForwardAccuracy,
-    bestCarryForwardThreshold,
-    bestCarryForwardCorrHzRatio,
-  } = getBestCell(sweepResult);
-
-  setSummary(
-    Number.isFinite(bestPicaAccuracy) || Number.isFinite(bestCarryForwardAccuracy)
-      ? `Best PICA: minCarryCorr=${bestPicaCarryThreshold}, corrHzRatio=${bestPicaCorrHzRatio}, accuracy=${(bestPicaAccuracy * 100).toFixed(1)}% | Best carry-forward: minCarryCorr=${bestCarryForwardThreshold}, corrHzRatio=${bestCarryForwardCorrHzRatio}, accuracy=${(bestCarryForwardAccuracy * 100).toFixed(1)}%`
-      : "No valid results.",
+  chartFingerprintByKey.set(field.key, currentFingerprint);
+  updateDirtyState();
+  setStatus(
+    `Loaded ${VOCAL_SAMPLER_LABEL}. ${getMethodConfig().label} local sensitivity updated for ${field.inputLabel}.`,
   );
 }
 
-async function runSweep() {
-  const runButton = document.getElementById("runButton");
-  runButton.disabled = true;
+async function setCurrentValueAndRerun(field, value) {
+  settingMidpointInputs.get(field.key).value = String(value);
+  writeStoredNumber(getStorageKey(field.key), value);
+  updateValuePreview(field);
+  const settings = getSettings();
+  currentFingerprint = getSettingsFingerprint(settings);
+  updateDirtyState();
+  const points = await getChartPoints(field, settings);
+  const chartPointsByKey = new Map();
+  chartPointsByKey.set(field.key, points);
+  sharedAccuracyRange = getAccuracyRangeFromCharts(chartPointsByKey);
+  await renderChart(field, settings, points);
+}
+
+async function rerunChart(field) {
+  if (isRunningAll) return;
+  const settings = getSettings();
+  currentFingerprint = getSettingsFingerprint(settings);
   try {
-    const loadMessage = `Loading ${VOCAL_SAMPLER_LABEL}...`;
-    console.log(loadMessage);
-    setStatus(loadMessage);
-    const preparedSample = await loadActualPitchSample(VOCAL_SAMPLER_URL);
-    const sweepResult = await runSweepForSample(preparedSample);
-
-    await renderResults(sweepResult);
-    setStatus(`Done. ${TOTAL_RUNS} runs.`);
+    const points = await getChartPoints(field, settings);
+    const chartPointsByKey = new Map();
+    chartPointsByKey.set(field.key, points);
+    sharedAccuracyRange = getAccuracyRangeFromCharts(chartPointsByKey);
+    await renderChart(field, settings, points);
   } catch (error) {
     console.error(error);
-    setSummary("");
     setStatus(error instanceof Error ? error.message : String(error), true);
   } finally {
-    runButton.disabled = false;
+    updateDirtyState();
   }
 }
 
-document.getElementById("runButton").addEventListener("click", () => {
-  void runSweep();
-});
+async function rerunAllCharts() {
+  if (isRunningAll) return;
+  isRunningAll = true;
+  const rerunAllButton = document.getElementById("rerunAllButton");
+  rerunAllButton.disabled = true;
+  const selectedFields = getSelectedFields();
+  const settings = getSettings();
+  currentFingerprint = getSettingsFingerprint(settings);
+  clearRunLog();
+  try {
+    if (selectedFields.length === 0) {
+      setStatus("Select at least one parameter to run.", true);
+      return;
+    }
+    const chartPointsByKey = new Map();
+    for (let index = 0; index < selectedFields.length; index += 1) {
+      const field = selectedFields[index];
+      setStatus(`Running ${index + 1}/${selectedFields.length}: ${field.inputLabel}`);
+      chartPointsByKey.set(field.key, await getChartPoints(field, settings));
+    }
+    sharedAccuracyRange = getAccuracyRangeFromCharts(chartPointsByKey);
+    for (const field of selectedFields) {
+      await renderChart(field, settings, chartPointsByKey.get(field.key));
+    }
+    const totalRuns = selectedFields.reduce(
+      (count, field) => count + buildPointValues(field).length,
+      0,
+    );
+    setStatus(`Done. ${totalRuns} runs.`);
+  } catch (error) {
+    console.error(error);
+    setStatus(error instanceof Error ? error.message : String(error), true);
+  } finally {
+    isRunningAll = false;
+    rerunAllButton.disabled = false;
+    updateDirtyState();
+  }
+}
 
-setSweepInfo();
-void runSweep();
+function createSettingInput(field) {
+  const row = document.createElement("div");
+  row.className = "settings-grid settings-row";
+
+  const enabledInput = document.createElement("input");
+  enabledInput.type = "checkbox";
+  enabledInput.className = "settings-checkbox";
+  enabledInput.checked = readStoredBoolean(getEnabledStorageKey(field.key), true);
+  enabledInput.title = `Include ${field.inputLabel} when running all charts`;
+  enabledInput.addEventListener("input", () => {
+    writeStoredBoolean(getEnabledStorageKey(field.key), enabledInput.checked);
+    updateChartVisibility();
+    updateDirtyState();
+  });
+
+  const currentValue = readStoredNumber(
+    getStorageKey(field.key),
+    PICA_SETTINGS_DEFAULTS[field.key],
+  );
+  const midpointInput = document.createElement("input");
+  midpointInput.className = "toolbar-number";
+  midpointInput.type = "number";
+  midpointInput.title = `${field.title} Midpoint value`;
+  midpointInput.value = String(readStoredNumber(getStorageKey(field.key), currentValue));
+  midpointInput.addEventListener("input", () => {
+    const value = Number(midpointInput.value);
+    if (Number.isNaN(value)) return;
+    writeStoredNumber(getStorageKey(field.key), value);
+    currentFingerprint = getSettingsFingerprint(getSettings());
+    updateValuePreview(field);
+    updateDirtyState();
+  });
+
+  const stepInput = document.createElement("input");
+  stepInput.className = "toolbar-number";
+  stepInput.type = "number";
+  stepInput.step = String(field.step);
+  stepInput.title = `${field.title} Step size`;
+  stepInput.value = String(readStoredNumber(getStepStorageKey(field.key), field.step));
+  stepInput.addEventListener("input", () => {
+    const value = Number(stepInput.value);
+    if (Number.isNaN(value)) return;
+    syncMidpointStep(field);
+    writeStoredNumber(getStepStorageKey(field.key), value);
+    currentFingerprint = getSettingsFingerprint(getSettings());
+    updateValuePreview(field);
+    updateDirtyState();
+  });
+
+  const stepsInput = document.createElement("input");
+  stepsInput.className = "toolbar-number settings-steps";
+  stepsInput.type = "number";
+  stepsInput.min = "1";
+  stepsInput.step = "1";
+  stepsInput.title = `Number of points to sample for ${field.inputLabel}`;
+  stepsInput.value = String(readStoredNumber(getStepsStorageKey(field.key), DEFAULT_STEP_COUNT));
+  stepsInput.addEventListener("input", () => {
+    const value = Number(stepsInput.value);
+    if (Number.isNaN(value)) return;
+    writeStoredNumber(getStepsStorageKey(field.key), value);
+    currentFingerprint = getSettingsFingerprint(getSettings());
+    updateValuePreview(field);
+    updateDirtyState();
+  });
+
+  const rerunButton = document.createElement("button");
+  rerunButton.className = "toolbar-btn";
+  rerunButton.type = "button";
+  rerunButton.textContent = "Re-run";
+  rerunButton.addEventListener("click", () => {
+    void rerunChart(field);
+  });
+
+  const valuesPreview = document.createElement("div");
+  valuesPreview.className = "settings-values";
+
+  row.innerHTML = `<div class="settings-label" title="${field.title}">${field.key}</div>`;
+  row.append(enabledInput, midpointInput, stepInput, stepsInput, rerunButton, valuesPreview);
+
+  settingMidpointInputs.set(field.key, midpointInput);
+  settingStepInputs.set(field.key, stepInput);
+  settingStepCountInputs.set(field.key, stepsInput);
+  settingEnabledInputs.set(field.key, enabledInput);
+  settingValuePreviews.set(field.key, valuesPreview);
+  syncMidpointStep(field);
+  updateValuePreview(field);
+  return row;
+}
+
+function main() {
+  const methodSelect = document.getElementById("methodSelect");
+  const postProcessingEnabledInput = document.getElementById("postProcessingEnabled");
+  const inputsContainer = document.getElementById("settingInputs");
+  methodSelect.innerHTML = HPO_METHOD_KEYS.map((methodKey) => {
+    const method = getMethodDefinition(methodKey);
+    return `<option value="${method.key}">${method.key}</option>`;
+  }).join("");
+  const rows = document.createElement("div");
+  rows.className = "settings-body";
+  rows.setAttribute("role", "rowgroup");
+  PICA_SETTING_FIELDS.forEach((field) => {
+    rows.append(createSettingInput(field));
+  });
+  inputsContainer.append(rows);
+
+  const charts = document.getElementById("charts");
+  PICA_SETTING_FIELDS.forEach((field) => {
+    const card = document.createElement("section");
+    card.className = "chart-card";
+    card.innerHTML = `
+        <div class="chart-title">${field.key}</div>
+      <div id="chart-${field.key}" class="chart-plot"></div>
+    `;
+    charts.append(card);
+    chartCards.set(field.key, card);
+  });
+
+  methodSelect.value = readStoredMethod();
+  postProcessingEnabledInput.checked = readStoredPostProcessingEnabled();
+  updateSettingVisibility();
+  updateChartVisibility();
+  updateSummary();
+
+  document.getElementById("rerunAllButton").addEventListener("click", () => {
+    void rerunAllCharts();
+  });
+
+  methodSelect.addEventListener("change", () => {
+    writeStoredMethod(methodSelect.value);
+    currentFingerprint = getSettingsFingerprint(getSettings());
+    updateSettingVisibility();
+    updateChartVisibility();
+    updateSummary();
+    updateDirtyState();
+  });
+
+  postProcessingEnabledInput.addEventListener("change", () => {
+    writeStoredPostProcessingEnabled(postProcessingEnabledInput.checked);
+    currentFingerprint = getSettingsFingerprint(getSettings());
+    updateDirtyState();
+  });
+}
+
+main();

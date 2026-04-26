@@ -166,7 +166,6 @@ export class RecordingEngine {
       silentOutputGain: null,
       hzBuffer: null,
       hzIndex: 0,
-      picaPriorStep: null,
       picaWindowSamples: createPicaWindowSamples(48_000, noteNameToHz(config.pitchMinNote)),
       sampleRate: 48000,
     };
@@ -359,7 +358,6 @@ export class RecordingEngine {
     this.audioSessionState.analyser = null;
     this.audioSessionState.highResAnalyser = null;
     this.audioSessionState.silentOutputGain = null;
-    this.audioSessionState.picaPriorStep = null;
     this.audioSessionState.picaWindowSamples = createPicaWindowSamples(
       this.audioSessionState.sampleRate,
       this.state.pitchRange.minHz,
@@ -556,7 +554,6 @@ export class RecordingEngine {
     }
     if (typeof usePica === "boolean") {
       this.state.usePica = usePica;
-      this.audioSessionState.picaPriorStep = null;
     }
     if (Number.isFinite(minVolumeThreshold) && minVolumeThreshold > 0) {
       this.state.minVolumeThreshold = minVolumeThreshold;
@@ -582,7 +579,6 @@ export class RecordingEngine {
         this.audioSessionState.sampleRate,
         this.state.pitchRange.minHz,
       );
-      this.audioSessionState.picaPriorStep = null;
     }
     this.chartRenderers.pitch.updateOptions({
       minCents: this.state.pitchRange.minCents,

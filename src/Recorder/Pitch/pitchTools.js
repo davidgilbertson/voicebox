@@ -24,6 +24,7 @@ const WAVEFORM_LINE_COLOR = colors.blue[400];
 const LABEL_X = 4;
 const PLOT_LEFT = 21;
 const PLOT_Y_INSET = 5;
+const UNSTABLE_TAIL_ALPHAS = [0.8, 0.7, 0.6, 0.5, 0.4, 0.3];
 
 export class PitchChartRenderer {
   constructor({ minCents, maxCents, lineColorMode, renderScale }) {
@@ -34,6 +35,7 @@ export class PitchChartRenderer {
     this.lineColorMode = lineColorMode;
     this.viewportState = createCanvasViewportState();
     this.backgroundCache = null;
+    this.tailAlphaValues = new Float32Array(0);
   }
 
   setCanvas(canvas) {
@@ -127,11 +129,22 @@ export class PitchChartRenderer {
     });
     clearCanvasWithViewport(ctx, viewport);
     this.drawBackground(ctx, viewport.cssWidth, viewport.cssHeight, centsSpan);
+    if (this.tailAlphaValues.length < smoothedPitchCentsRing.sampleCount) {
+      this.tailAlphaValues = new Float32Array(smoothedPitchCentsRing.sampleCount);
+    }
+    this.tailAlphaValues.fill(1, 0, smoothedPitchCentsRing.sampleCount);
+    const tailStart = Math.max(0, smoothedPitchCentsRing.sampleCount - UNSTABLE_TAIL_ALPHAS.length);
+    const alphaStart =
+      UNSTABLE_TAIL_ALPHAS.length - (smoothedPitchCentsRing.sampleCount - tailStart);
+    for (let i = tailStart; i < smoothedPitchCentsRing.sampleCount; i += 1) {
+      this.tailAlphaValues[i] = UNSTABLE_TAIL_ALPHAS[alphaStart + i - tailStart];
+    }
 
     drawWaveformTrace({
       ctx,
       valuesRing: smoothedPitchCentsRing,
       colorValuesRing: lineStrengthRing,
+      alphaValues: this.tailAlphaValues,
       xInsetLeft: PLOT_LEFT,
       yInsetTop: PLOT_Y_INSET,
       yInsetBottom: PLOT_Y_INSET,

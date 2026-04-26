@@ -3,8 +3,8 @@ import { loadActualPitchSample } from "./picaExperiment.js";
 const VOCAL_SAMPLER_URL = "../../.private/assets/vocal_sampler.wav";
 const TIMESTEPS_PER_SECOND = 80;
 const TIMESTEP_STRIDE = 5;
-const SELECTED_WINDOW_STORAGE_KEY = "voicebox.picaPitch.selectedWindowIndex";
-const STORED_ACTUALS_KEY = "voicebox.picaPitch.actualPitchVocalSampler";
+const SELECTED_WINDOW_STORAGE_KEY = "vb.exp.selectedWindowIndex";
+const STORED_ACTUALS_KEY = "vb.exp.actualPitchVocalSampler";
 const CATEGORY_CONFIGS = [
   { key: "half", label: "Half", factor: 0.5 },
   { key: "actual", label: "Actual", factor: 1 },

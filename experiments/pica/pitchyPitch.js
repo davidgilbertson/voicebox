@@ -1,5 +1,9 @@
 import { PICA_MAX_HZ, PICA_MIN_HZ } from "./config.js";
-import { getPicaWindowSamples, getPicaWindowSize } from "./windowing.js";
+import {
+  getDetectorWindowSamples,
+  getDetectorWindowSize,
+  getWindowEndSample,
+} from "./windowing.js";
 
 const PITCHY_MIN_CLARITY = 0.6;
 
@@ -13,9 +17,9 @@ async function getPitchyDetector(frameSize) {
   return pitchyModule.PitchDetector.forFloat32Array(frameSize);
 }
 
-export async function analyzePitchyTrack(timeSec, samples, sampleRate, timestepsPerSecond) {
-  const pitchHz = new Array(timeSec.length);
-  const frameSize = getPicaWindowSize(sampleRate);
+export async function analyzePitchyTrack(windowSequence, samples, sampleRate) {
+  const pitchHz = new Array(windowSequence.windowCount);
+  const frameSize = getDetectorWindowSize(sampleRate);
   let pitchyDetector = null;
   try {
     pitchyDetector = await getPitchyDetector(frameSize);
@@ -31,14 +35,19 @@ export async function analyzePitchyTrack(timeSec, samples, sampleRate, timesteps
   }
 
   const startMs = performance.now();
-  for (let windowIndex = 0; windowIndex < timeSec.length; windowIndex += 1) {
-    const picaWindow = getPicaWindowSamples(samples, sampleRate, timeSec[windowIndex]);
-    if (picaWindow.length !== frameSize) {
+  for (let windowIndex = 0; windowIndex < windowSequence.windowCount; windowIndex += 1) {
+    const endSample = getWindowEndSample(windowSequence, windowIndex);
+    if (endSample <= 0) {
+      pitchHz[windowIndex] = Number.NaN;
+      continue;
+    }
+    const detectorWindow = getDetectorWindowSamples(samples, sampleRate, endSample);
+    if (detectorWindow.length !== frameSize) {
       pitchHz[windowIndex] = Number.NaN;
       continue;
     }
 
-    const [detectedHz, clarity] = pitchyDetector.findPitch(picaWindow, sampleRate);
+    const [detectedHz, clarity] = pitchyDetector.findPitch(detectorWindow, sampleRate);
     pitchHz[windowIndex] =
       Number.isFinite(detectedHz) &&
       detectedHz >= PICA_MIN_HZ &&
@@ -52,6 +61,8 @@ export async function analyzePitchyTrack(timeSec, samples, sampleRate, timesteps
   return {
     pitchHz,
     msPerSecondAudio:
-      timeSec.length > 0 ? elapsedMs / (timeSec.length / timestepsPerSecond) : Number.NaN,
+      windowSequence.windowCount > 0
+        ? elapsedMs / (windowSequence.windowCount / windowSequence.windowsPerSecond)
+        : Number.NaN,
   };
 }

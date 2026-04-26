@@ -1,6 +1,10 @@
-import { analyzePreparedPitchSample, loadPitchSample } from "./picaExperiment.js";
+import {
+  analyzePreparedPitchSample,
+  ensurePreparedPitchSampleFftAnalysis,
+  loadPitchSample,
+} from "./picaExperiment.js";
 import { createActualLabelEditor } from "./actualLabels.js";
-import { readStoredMethodVisibility, renderPicaPitchCharts } from "./charts.js";
+import { readStoredSelectedMethods, renderPicaPitchCharts } from "./charts.js";
 import {
   DEFAULT_ASSET_URL,
   PICA_ACCURACY_CENTS,
@@ -8,8 +12,13 @@ import {
   PICA_SETTINGS_DEFAULTS,
   RECORD_DURATION_MS,
 } from "./config.js";
-import { getPicaWaveformWindow, getPicaWindowSamples } from "./windowing.js";
+import { getCurrentMethodDefinition, normalizeSelectedMethods } from "./methodRegistry.js";
+import { getDetectorWindowSamples, getWaveformWindow, getWindowEndSample } from "./windowing.js";
 import { getPicaPitchAnalysisFromWaveform } from "./picaPitch.js";
+import { getPifsPitchHzFromWaveform } from "./pifsPitch.js";
+import { getPipsPointsFromWaveform } from "./pipsPitch.js";
+import { getPiraPitchHzFromWaveform } from "./piraPitch.js";
+import { ensureExperimentDebugGlobals } from "./debugGlobals.js";
 import { getCentsDifference } from "./utils.js";
 import { recordMicrophoneAudio } from "../micCapture.js";
 import {
@@ -21,11 +30,10 @@ import {
   writeSelectedAudioSourceKey,
 } from "../audioSource.js";
 
-const STORAGE_PREFIX = "voicebox.picaPitch.";
+const STORAGE_PREFIX = "vb.exp.";
 const SELECTED_SOURCE_STORAGE_KEY = `${STORAGE_PREFIX}selectedSourceKey`;
 const SELECTED_WINDOW_STORAGE_KEY = `${STORAGE_PREFIX}selectedWindowIndex`;
 const POST_PROCESSING_STORAGE_KEY = `${STORAGE_PREFIX}postProcessingEnabled`;
-
 let currentPreparedSample = null;
 let currentControls = [];
 let currentSourceSelect = null;
@@ -33,13 +41,7 @@ let currentSettingInputs = null;
 let pendingChartResizeToken = 0;
 let hasLoggedVocalSamplerErrorSummary = false;
 
-window.picaDebug = {
-  foldAnalyses: [],
-  foldCountBins: {},
-  foldPeriodWindows: [],
-  activeWindowIndex: null,
-  recordFoldDebug: false,
-};
+ensureExperimentDebugGlobals();
 
 function getStorageKey(settingKey) {
   return `${STORAGE_PREFIX}${settingKey}`;
@@ -86,6 +88,77 @@ function getStoredSettings() {
 function writeStoredSettings(settings) {
   PICA_SETTING_FIELDS.forEach((field) => {
     writeStoredNumber(field.key, settings[field.key]);
+  });
+}
+
+function getMainPageFields() {
+  return [...PICA_SETTING_FIELDS].sort((left, right) => {
+    const leftUsesNewestExperiment =
+      left.usedWith.includes("PIZA") || left.usedWith.includes("PICA2") ? 1 : 0;
+    const rightUsesNewestExperiment =
+      right.usedWith.includes("PIZA") || right.usedWith.includes("PICA2") ? 1 : 0;
+    return leftUsesNewestExperiment - rightUsesNewestExperiment;
+  });
+}
+
+function renderSettingInputs() {
+  const paramsColumn = document.getElementById("paramsColumn");
+  paramsColumn.innerHTML = `
+    <table class="params-table">
+      <thead>
+        <tr>
+          <th>Param</th>
+          <th>Value</th>
+          <th>Used With</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  `;
+  const paramsTableBody = paramsColumn.querySelector("tbody");
+
+  const settingInputs = {};
+  for (const field of getMainPageFields()) {
+    const row = document.createElement("tr");
+
+    const labelCell = document.createElement("td");
+    const label = document.createElement("label");
+    label.htmlFor = field.key;
+    label.textContent = field.key;
+    labelCell.append(label);
+
+    const input = document.createElement("input");
+    input.id = field.key;
+    input.className = "toolbar-number";
+    input.type = "number";
+    input.value = String(PICA_SETTINGS_DEFAULTS[field.key]);
+    input.title = field.title;
+    if (field.min !== undefined) input.min = String(field.min);
+    if (field.max !== undefined) input.max = String(field.max);
+    if (field.step !== undefined) input.step = String(field.step);
+    const inputCell = document.createElement("td");
+    inputCell.append(input);
+
+    const usedWithCell = document.createElement("td");
+    const usedWith = document.createElement("span");
+    usedWith.className = "params-used-with";
+    usedWith.textContent = field.usedWith.join(", ");
+    usedWithCell.append(usedWith);
+
+    row.append(labelCell, inputCell, usedWithCell);
+    paramsTableBody.append(row);
+    settingInputs[field.key] = input;
+  }
+
+  return settingInputs;
+}
+
+function updateSettingVisibility(settingInputs, selectedMethods) {
+  const normalizedSelectedMethods = normalizeSelectedMethods(selectedMethods);
+  PICA_SETTING_FIELDS.forEach((field) => {
+    const row = settingInputs[field.key]?.closest("tr");
+    if (!row) return;
+    row.hidden = !field.usedWith.some((methodKey) => normalizedSelectedMethods[methodKey]);
   });
 }
 
@@ -139,12 +212,14 @@ function scheduleChartResize() {
       if (resizeToken !== pendingChartResizeToken) return;
       const plotly = globalThis.Plotly;
       if (!plotly?.Plots?.resize) return;
-      ["pitchChart", "waveformChart", "harmonicChart", "foldChart"].forEach((chartId) => {
-        const chart = document.getElementById(chartId);
-        if (chart) {
-          plotly.Plots.resize(chart);
-        }
-      });
+      ["pitchChart", "waveformChart", "harmonicChart", "slopePeakChart", "foldChart"].forEach(
+        (chartId) => {
+          const chart = document.getElementById(chartId);
+          if (chart) {
+            plotly.Plots.resize(chart);
+          }
+        },
+      );
     });
   });
 }
@@ -171,15 +246,16 @@ function getMethodAccuracyLabel(result, methodKey) {
   return getAccuracyLabel(summary?.accuracy, summary?.correctCount, summary?.comparedCount);
 }
 
-function updatePerformanceInfo(result, methodVisibility = readStoredMethodVisibility()) {
+function updatePerformanceInfo(result, selectedMethods = readStoredSelectedMethods()) {
   const infoElement = document.getElementById("perfInfo");
-  const visibleMethods = result.methods.filter((method) => methodVisibility[method.key]);
+  const normalizedSelectedMethods = normalizeSelectedMethods(selectedMethods);
+  const visibleMethods = result.methods.filter((method) => normalizedSelectedMethods[method.key]);
   infoElement.innerHTML = `
     <table class="perf-table">
       <thead>
         <tr>
           <th></th>
-          ${visibleMethods.map((method) => `<th>${method.label}</th>`).join("")}
+          ${visibleMethods.map((method) => `<th>${method.key}</th>`).join("")}
         </tr>
       </thead>
       <tbody>
@@ -255,14 +331,14 @@ function logVocalSamplerPicaErrorSummary(preparedSample, settings) {
 
   for (
     let windowIndex = 0;
-    windowIndex < preparedSample.fftAnalysis.timeSec.length;
+    windowIndex < preparedSample.windowSequence.windowCount;
     windowIndex += 1
   ) {
     const actualHz = actualPitchHz[windowIndex];
-    const windowSamples = getPicaWindowSamples(
+    const windowSamples = getDetectorWindowSamples(
       preparedSample.samples,
       preparedSample.sampleRate,
-      preparedSample.fftAnalysis.timeSec[windowIndex],
+      getWindowEndSample(preparedSample.windowSequence, windowIndex),
     );
     const analysis = getPicaPitchAnalysisFromWaveform(
       windowSamples,
@@ -332,7 +408,7 @@ function logVocalSamplerPicaErrorSummary(preparedSample, settings) {
     `Errors with no correct candidate: ${missedCorrectCandidateCount} (${percentage(missedCorrectCandidateCount, errorWindowCount)})`,
   );
   console.log(
-    `False reports: ${falseReportCount} (${percentage(falseReportCount, nullActualWindowCount)} of null-actual windows, ${percentage(falseReportCount, preparedSample.fftAnalysis.timeSec.length)} of all windows)`,
+    `False reports: ${falseReportCount} (${percentage(falseReportCount, nullActualWindowCount)} of null-actual windows, ${percentage(falseReportCount, preparedSample.windowSequence.windowCount)} of all windows)`,
   );
   console.log(
     `Error: too high: ${tooHighErrorCount} (${percentage(tooHighErrorCount, errorWindowCount)})`,
@@ -351,8 +427,8 @@ function logVocalSamplerPicaErrorSummary(preparedSample, settings) {
 function logPicaDebugFoldCountBins(result) {
   if (!Array.isArray(result.actualPitchHz)) return;
 
-  const foldAnalyses = window.picaDebug.foldAnalyses;
-  if (!Array.isArray(foldAnalyses) || foldAnalyses.length === 0) return;
+  const foldAnalyses = window.pizaDebug.foldAnalyses;
+  if (!Array.isArray(foldAnalyses) || foldAnalyses.length === 0) return [];
 
   const foldCountBins = new Map();
   const foldPeriodWindows = [];
@@ -422,11 +498,6 @@ function logPicaDebugFoldCountBins(result) {
     });
   }
 
-  window.picaDebug.foldPeriodWindows = foldPeriodWindows;
-  window.picaDebug.foldCountBins = Object.fromEntries(
-    Array.from(foldCountBins.entries()).sort((a, b) => a[0] - b[0]),
-  );
-
   let cumulativeCount = 0;
   const totalCount = foldPeriodWindows.length;
   console.table(
@@ -446,11 +517,11 @@ function logPicaDebugFoldCountBins(result) {
     "window indices with >33 folds",
     foldPeriodWindows.filter((row) => row.foldCount > 33).map((row) => row.windowIndex),
   );
+  return foldPeriodWindows;
 }
 
-function applyPicaDebugFoldCountSeries(result) {
+function applyPicaDebugFoldCountSeries(result, foldPeriodWindows) {
   result.picaFoldCount = new Array(result.timeSec.length).fill(Number.NaN);
-  const foldPeriodWindows = window.picaDebug.foldPeriodWindows;
   if (!Array.isArray(foldPeriodWindows)) return;
 
   for (const row of foldPeriodWindows) {
@@ -464,33 +535,71 @@ async function renderResult(result) {
     ? createActualLabelEditor(
         localStorage.getItem(SELECTED_SOURCE_STORAGE_KEY) || "",
         result,
-        (windowIndex) => getPicaWaveformWindow(result, windowIndex),
+        (windowIndex) => getWaveformWindow(result, windowIndex),
       )
     : null;
 
-  function updateActualPitchInfo() {
-    document.getElementById("actualPitchInfo").textContent = actualLabelEditor
-      ? `Actual labels ${actualLabelEditor.getLabelCount()}. Shortcuts: A/D move always. Q/E copy, W null + next, S forget + next in labeling mode.`
-      : "No actual labels for this source. Shortcuts: A/D move.";
-  }
-
-  updateActualPitchInfo();
-
   await renderPicaPitchCharts(result, {
     selectedWindowIndex: readStoredWindowIndex(),
-    getWaveformWindow: (windowIndex) => getPicaWaveformWindow(result, windowIndex),
+    settings: result.settings,
+    getWaveformWindow: (windowIndex) => getWaveformWindow(result, windowIndex),
     actualLabelEditor,
-    onLabelChange: () => {
-      updateActualPitchInfo();
+    onSelectWindow: (windowIndex, waveformWindow, selectedMethods) => {
+      const selectedPointIndex =
+        window.piraDebug.windowIndex === windowIndex ? window.piraDebug.selectedPoint?.index : null;
+      const normalizedSelectedMethods = normalizeSelectedMethods(selectedMethods);
+      if (normalizedSelectedMethods.PIFS) {
+        getPifsPitchHzFromWaveform(
+          waveformWindow.samples,
+          waveformWindow.sampleRate,
+          result.settings,
+        );
+      } else {
+        window.pifsDebug.folds = [];
+        window.pifsDebug.scenarioAnalyses = [];
+        window.pifsDebug.predictionReason = null;
+        window.pifsDebug.periodWidth = Number.NaN;
+        window.pifsDebug.foldScenario = Number.NaN;
+        window.pifsDebug.ampDisplacement = Number.NaN;
+        window.pifsDebug.selectedRange = null;
+        window.pifsDebug.global.maxAbsSample = 1;
+      }
+      if (normalizedSelectedMethods.PIRA) {
+        getPiraPitchHzFromWaveform(
+          waveformWindow.samples,
+          waveformWindow.sampleRate,
+          result.settings,
+        );
+      } else {
+        window.piraDebug.points = normalizedSelectedMethods.PIPS
+          ? getPipsPointsFromWaveform(waveformWindow.samples, result.settings)
+          : [];
+        window.piraDebug.predictionSpans = [];
+        window.piraDebug.predictionReason = null;
+        window.piraDebug.maxAbsSample = 1;
+        window.piraDebug.ampPerMilli = 0.1;
+        window.piraDebug.spread = Number.NaN;
+        window.piraDebug.periodSamples = Number.NaN;
+      }
+      window.pifsDebug.global.windowIndex = windowIndex;
+      window.pifsDebug.global.waveformWindow = waveformWindow;
+      window.piraDebug.windowIndex = windowIndex;
+      window.piraDebug.waveformWindow = waveformWindow;
+      window.piraDebug.selectedPoint =
+        selectedPointIndex === null
+          ? null
+          : (window.piraDebug.points.find((point) => point.index === selectedPointIndex) ?? null);
     },
     onWindowSelect: writeStoredWindowIndex,
-    onMethodVisibilityChange: () => {
+    currentMethod: getCurrentMethodDefinition(),
+    onSelectedMethodsChange: (selectedMethods) => {
       if (!currentSourceSelect || !currentSettingInputs) return;
+      updateSettingVisibility(currentSettingInputs, selectedMethods);
       void rerun(
         currentControls,
         currentSourceSelect,
         currentSettingInputs,
-        "Applying method filters...",
+        "Applying selected methods...",
       );
     },
   });
@@ -502,7 +611,7 @@ async function analyzePreparedSample(preparedSample, source, settingInputs) {
   const result = await analyzePreparedPitchSample(
     preparedSample,
     settings,
-    readStoredMethodVisibility(),
+    readStoredSelectedMethods(),
   );
   if (
     !hasLoggedVocalSamplerErrorSummary &&
@@ -512,10 +621,12 @@ async function analyzePreparedSample(preparedSample, source, settingInputs) {
     hasLoggedVocalSamplerErrorSummary = true;
     // logVocalSamplerPicaErrorSummary(preparedSample, settings);
   }
-  logPicaDebugFoldCountBins(result);
-  applyPicaDebugFoldCountSeries(result);
+  const foldPeriodWindows = logPicaDebugFoldCountBins(result);
+  applyPicaDebugFoldCountSeries(result, foldPeriodWindows);
+  window.expDebug.currentSource = source ?? null;
+  window.expDebug.currentResult = result;
   await renderResult(result);
-  updatePerformanceInfo(result, readStoredMethodVisibility());
+  updatePerformanceInfo(result, readStoredSelectedMethods());
   setStatus("Done.");
   scheduleChartResize();
 }
@@ -525,9 +636,14 @@ async function rerun(controls, sourceSelect, settingInputs, statusText, getPrepa
   try {
     setStatus(statusText);
     const selectedSource = getSelectedSource(sourceSelect);
+    const selectedMethods = readStoredSelectedMethods();
     currentPreparedSample = getPreparedSample
-      ? await getPreparedSample()
-      : (currentPreparedSample ?? (await loadPitchSample(loadAudioInputForSource(selectedSource))));
+      ? await getPreparedSample(selectedMethods)
+      : (currentPreparedSample ??
+        (await loadPitchSample(loadAudioInputForSource(selectedSource), selectedMethods)));
+    if (normalizeSelectedMethods(selectedMethods).FFT) {
+      currentPreparedSample = await ensurePreparedPitchSampleFftAnalysis(currentPreparedSample);
+    }
     const resolvedSource = getSelectedSource(sourceSelect);
     await analyzePreparedSample(currentPreparedSample, resolvedSource, settingInputs);
     return true;
@@ -545,9 +661,7 @@ function main() {
   const sourceSelect = document.getElementById("sourceSelect");
   const recordButton = document.getElementById("recordButton");
   const postProcessingEnabledInput = document.getElementById("postProcessingEnabled");
-  const settingInputs = Object.fromEntries(
-    PICA_SETTING_FIELDS.map((field) => [field.key, document.getElementById(field.key)]),
-  );
+  const settingInputs = renderSettingInputs();
   postProcessingEnabledInput.checked = readStoredPostProcessingEnabled();
   const controls = [
     resetStorageButton,
@@ -561,6 +675,7 @@ function main() {
   currentSettingInputs = settingInputs;
 
   writeSettingsToInputs(settingInputs, getStoredSettings());
+  updateSettingVisibility(settingInputs, readStoredSelectedMethods());
   const selectedSource = resolveSelectedSource(
     getAudioSources(),
     localStorage.getItem(SELECTED_SOURCE_STORAGE_KEY) || readSelectedAudioSourceKey(),
@@ -573,20 +688,26 @@ function main() {
   });
 
   recordButton.addEventListener("click", () =>
-    rerun(controls, sourceSelect, settingInputs, "Recording from microphone...", async () => {
-      const capturedAudio = await recordMicrophoneAudio({ maxDurationMs: RECORD_DURATION_MS });
-      saveRecordedAudio(capturedAudio);
-      const recordedSource = getAudioSources().find((source) => source.type === "recorded");
-      if (recordedSource) {
-        sourceSelect.value = recordedSource.key;
-      }
-      return loadPitchSample(capturedAudio);
-    }),
+    rerun(
+      controls,
+      sourceSelect,
+      settingInputs,
+      "Recording from microphone...",
+      async (selectedMethods) => {
+        const capturedAudio = await recordMicrophoneAudio({ maxDurationMs: RECORD_DURATION_MS });
+        saveRecordedAudio(capturedAudio);
+        const recordedSource = getAudioSources().find((source) => source.type === "recorded");
+        if (recordedSource) {
+          sourceSelect.value = recordedSource.key;
+        }
+        return loadPitchSample(capturedAudio, selectedMethods);
+      },
+    ),
   );
 
   sourceSelect.addEventListener("change", () =>
-    rerun(controls, sourceSelect, settingInputs, "", async () =>
-      loadPitchSample(loadAudioInputForSource(getSelectedSource(sourceSelect))),
+    rerun(controls, sourceSelect, settingInputs, "", async (selectedMethods) =>
+      loadPitchSample(loadAudioInputForSource(getSelectedSource(sourceSelect)), selectedMethods),
     ),
   );
 
@@ -639,8 +760,8 @@ function main() {
     });
   });
 
-  void rerun(controls, sourceSelect, settingInputs, "", async () =>
-    loadPitchSample(loadAudioInputForSource(getSelectedSource(sourceSelect))),
+  void rerun(controls, sourceSelect, settingInputs, "", async (selectedMethods) =>
+    loadPitchSample(loadAudioInputForSource(getSelectedSource(sourceSelect)), selectedMethods),
   );
 }
 

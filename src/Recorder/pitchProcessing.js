@@ -178,39 +178,41 @@ function adjustOutliers(processingState) {
   // In:  [A A N N N A A]
   //           ↓ ↓ ↓
   // Out: [A A R R R A A]
-  if (
-    isFiniteCents(pos1) &&
-    isFiniteCents(pos2) &&
-    !isFiniteCents(pos3) &&
-    !isFiniteCents(pos4) &&
-    !isFiniteCents(pos5) &&
-    isFiniteCents(pos6) &&
-    isFiniteCents(pos7)
-  ) {
-    const gapStepCents = (pos6 - pos2) / 4;
-    setCleanupSample(processingState, cleanupWindow, 2, pos2 + gapStepCents);
-    setCleanupSample(processingState, cleanupWindow, 3, pos2 + gapStepCents * 2);
-    setCleanupSample(processingState, cleanupWindow, 4, pos2 + gapStepCents * 3);
-    return;
-  }
+  // TODO (@davidgilbertson): this can cause problems if it spans the gap to an outlier.
+  // if (
+  //   isFiniteCents(pos1) &&
+  //   isFiniteCents(pos2) &&
+  //   !isFiniteCents(pos3) &&
+  //   !isFiniteCents(pos4) &&
+  //   !isFiniteCents(pos5) &&
+  //   isFiniteCents(pos6) &&
+  //   isFiniteCents(pos7)
+  // ) {
+  //   const gapStepCents = (pos6 - pos2) / 4;
+  //   setCleanupSample(processingState, cleanupWindow, 2, pos2 + gapStepCents);
+  //   setCleanupSample(processingState, cleanupWindow, 3, pos2 + gapStepCents * 2);
+  //   setCleanupSample(processingState, cleanupWindow, 4, pos2 + gapStepCents * 3);
+  //   return;
+  // }
 
   // 2 NaNs in last 6
   // In:  [. A A N N A A]
   //             ↓ ↓
   // Out: [. A A R R A A]
-  if (
-    isFiniteCents(pos2) &&
-    isFiniteCents(pos3) &&
-    !isFiniteCents(pos4) &&
-    !isFiniteCents(pos5) &&
-    isFiniteCents(pos6) &&
-    isFiniteCents(pos7)
-  ) {
-    const gapStepCents = (pos6 - pos3) / 3;
-    setCleanupSample(processingState, cleanupWindow, 3, pos3 + gapStepCents);
-    setCleanupSample(processingState, cleanupWindow, 4, pos3 + gapStepCents * 2);
-    return;
-  }
+  // TODO (@davidgilbertson): this can cause problems if it spans the gap to an outlier.
+  // if (
+  //   isFiniteCents(pos2) &&
+  //   isFiniteCents(pos3) &&
+  //   !isFiniteCents(pos4) &&
+  //   !isFiniteCents(pos5) &&
+  //   isFiniteCents(pos6) &&
+  //   isFiniteCents(pos7)
+  // ) {
+  //   const gapStepCents = (pos6 - pos3) / 3;
+  //   setCleanupSample(processingState, cleanupWindow, 3, pos3 + gapStepCents);
+  //   setCleanupSample(processingState, cleanupWindow, 4, pos3 + gapStepCents * 2);
+  //   return;
+  // }
 
   // 1 NaN in last 5
   // In:  [. . A A N A A]
@@ -264,6 +266,58 @@ function adjustOutliers(processingState) {
       setCleanupSample(processingState, cleanupWindow, 4, Number.NaN);
       setCleanupSample(processingState, cleanupWindow, 5, Number.NaN);
     }
+  }
+
+  //  --  ISLANDS -- //
+
+  // 3 in last 7
+  // In:  [N N O O O N N]
+  //           ↓ ↓ ↓
+  // Out: [N N N N N N N]
+  if (
+    !isFiniteCents(pos1) &&
+    !isFiniteCents(pos2) &&
+    isFiniteCents(pos3) &&
+    isFiniteCents(pos4) &&
+    isFiniteCents(pos5) &&
+    !isFiniteCents(pos6) &&
+    !isFiniteCents(pos7)
+  ) {
+    setCleanupSample(processingState, cleanupWindow, 2, Number.NaN);
+    setCleanupSample(processingState, cleanupWindow, 3, Number.NaN);
+    setCleanupSample(processingState, cleanupWindow, 4, Number.NaN);
+    return;
+  }
+
+  // 2 in last 6
+  // In:  [. N N O O N N]
+  //             ↓ ↓
+  // Out: [. N N N N N N]
+  if (
+    !isFiniteCents(pos2) &&
+    !isFiniteCents(pos3) &&
+    isFiniteCents(pos4) &&
+    isFiniteCents(pos5) &&
+    !isFiniteCents(pos6) &&
+    !isFiniteCents(pos7)
+  ) {
+    setCleanupSample(processingState, cleanupWindow, 3, Number.NaN);
+    setCleanupSample(processingState, cleanupWindow, 4, Number.NaN);
+    return;
+  }
+
+  // 1 in last 5
+  // In:  [. . N N O N N]
+  //               ↓
+  // Out: [. . N N N N N]
+  if (
+    !isFiniteCents(pos3) &&
+    !isFiniteCents(pos4) &&
+    isFiniteCents(pos5) &&
+    !isFiniteCents(pos6) &&
+    !isFiniteCents(pos7)
+  ) {
+    setCleanupSample(processingState, cleanupWindow, 4, Number.NaN);
   }
 }
 

@@ -14,6 +14,7 @@ export async function createWindowSpectrumComputer({
   windowSize,
   hopSamples,
   windowCount,
+  firstWindowEndSample = 0,
 }) {
   const context = new OfflineAudioContext(1, samples.length, sampleRate);
   const buffer = context.createBuffer(1, samples.length, sampleRate);
@@ -37,8 +38,8 @@ export async function createWindowSpectrumComputer({
   const epsilon = 1 / sampleRate;
   const durationSeconds = samples.length / sampleRate;
   for (let index = 0; index < windowCount; index += 1) {
-    const startSample = index * hopSamples;
-    let snapshotTime = startSample / sampleRate;
+    const endSample = firstWindowEndSample + index * hopSamples;
+    let snapshotTime = endSample / sampleRate;
     snapshotTime = clamp(snapshotTime, 0, Math.max(0, durationSeconds - epsilon));
     if (snapshotTime <= previousTime) {
       snapshotTime = Math.min(durationSeconds - epsilon, previousTime + epsilon);

@@ -1,9 +1,10 @@
-const SELECTED_SOURCE_STORAGE_KEY = "voicebox.private.selectedAudioSourceKey";
-const RECORDED_AUDIO_STORAGE_KEY = "voicebox.private.recordedAudio";
+const SELECTED_SOURCE_STORAGE_KEY = "vb.exp.selectedAudioSourceKey";
+const RECORDED_AUDIO_STORAGE_KEY = "vb.exp.recordedAudio";
 const RECORDED_SOURCE_KEY = "recorded:last";
 
 const ASSET_FILES = [
   "vocal_sampler.wav",
+  "vocal_sampler_long.wav",
   "a_recording.wav",
   "High ah gaps.wav",
   "david_clipping_e4.wav",

@@ -15,7 +15,7 @@ import {
   writeSelectedAudioSourceKey,
 } from "../audioSource.js";
 
-const SELECTED_WINDOW_STORAGE_KEY = "voicebox.pitchExperiments.selectedWindowIndex";
+const SELECTED_WINDOW_STORAGE_KEY = "vb.exp.selectedWindowIndex";
 const DEFAULT_ASSET_URL = "../../.private/assets/High ah gaps.wav";
 const RECORD_DURATION_MS = 5000;
 

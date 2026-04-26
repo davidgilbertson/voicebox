@@ -1,38 +1,17 @@
 import { PICA_ACCURACY_CENTS } from "./config.js";
 import { postProcessPitchTrack } from "./pitchProcessing.js";
 import { getCentsDifference } from "./utils.js";
-import { getPicaWindowSamples } from "./windowing.js";
+import { buildWindowSequence, getDetectorWindowSamples, getWindowEndSample } from "./windowing.js";
 import { getPicaPitchAnalysisFromWaveform } from "./picaPitch.js";
+import { getPipsPitchHzFromWaveform } from "./pipsPitch.js";
+import { getPiscPitchHzFromWaveform } from "./piscPitch.js";
+import { getPica2PitchAnalysisFromWaveform } from "./pica2Pitch.js";
+import { getPifsPitchHzFromWaveform } from "./pifsPitch.js";
+import { getPiraPitchHzFromWaveform } from "./piraPitch.js";
+import { getPizaPitchAnalysisFromWaveform } from "./pizaPitch.js";
 import { analyzePitchyTrack } from "./pitchyPitch.js";
-import { getActualPitchHz } from "./actualLabels.js";
-
-const TIMESTEPS_PER_SECOND = 80;
-
-function createResolvedPitchMethod(label, key, pitchHz, msPerSecondAudio) {
-  return {
-    label,
-    key,
-    pitchHz,
-    msPerSecondAudio,
-  };
-}
-
-function createAccuracySummary(accuracy, correctCount, comparedCount) {
-  return {
-    accuracy,
-    correctCount,
-    comparedCount,
-  };
-}
-
-function createAccuracySummaryByMethod(actualPitchHz, tracksByMethodKey) {
-  return Object.fromEntries(
-    Object.entries(tracksByMethodKey).map(([methodKey, predictedPitchHz]) => [
-      methodKey,
-      getPitchAccuracy(actualPitchHz, predictedPitchHz),
-    ]),
-  );
-}
+import { getActualPitchData } from "./actualLabels.js";
+import { PICA_METHOD_REGISTRY, normalizeSelectedMethods } from "./methodRegistry.js";
 
 async function loadWavSamples(url) {
   const response = await fetch(url);
@@ -49,27 +28,62 @@ async function loadWavSamples(url) {
   }
 }
 
-export async function loadPitchSample(audioInput) {
+export async function loadPitchSample(audioInput, selectedMethods = {}) {
+  const normalizedSelectedMethods = normalizeSelectedMethods(selectedMethods);
   const { analyzeDecodedPitchSample, loadAudioSample } =
     await import("../pitchDetection/analysis.js");
   const loaded = await loadAudioSample(audioInput);
-  const fftAnalysis = await analyzeDecodedPitchSample(loaded);
-  const actualPitchHz = await getActualPitchHz(audioInput, fftAnalysis.timeSec.length);
+  const windowSequence = buildWindowSequence(loaded.sampleRate, loaded.samples.length);
+  const fftAnalysis = normalizedSelectedMethods.FFT
+    ? await analyzeDecodedPitchSample(loaded, null, { timeline: windowSequence })
+    : null;
+  const { actualPitchHz, baseActualPitchHz } = await getActualPitchData(
+    audioInput,
+    windowSequence.windowCount,
+  );
   return {
     sampleRate: loaded.sampleRate,
     samples: loaded.samples,
+    windowSequence,
+    timeSec: windowSequence.timeSec,
     actualPitchHz,
+    baseActualPitchHz,
     fftAnalysis,
   };
 }
 
+export async function ensurePreparedPitchSampleFftAnalysis(preparedSample) {
+  if (preparedSample.fftAnalysis) {
+    return preparedSample;
+  }
+
+  const { analyzeDecodedPitchSample } = await import("../pitchDetection/analysis.js");
+  const fftAnalysis = await analyzeDecodedPitchSample(
+    {
+      sampleRate: preparedSample.sampleRate,
+      samples: preparedSample.samples,
+    },
+    null,
+    { timeline: preparedSample.windowSequence },
+  );
+  preparedSample.fftAnalysis = fftAnalysis;
+  return preparedSample;
+}
+
 export async function loadActualPitchSample(audioInput) {
   const loaded = await loadWavSamples(audioInput);
-  const actualPitchHz = await getActualPitchHz(audioInput);
+  const windowSequence = buildWindowSequence(loaded.sampleRate, loaded.samples.length);
+  const { actualPitchHz, baseActualPitchHz } = await getActualPitchData(
+    audioInput,
+    windowSequence.windowCount,
+  );
   return {
     sampleRate: loaded.sampleRate,
     samples: loaded.samples,
+    windowSequence,
+    timeSec: windowSequence.timeSec,
     actualPitchHz,
+    baseActualPitchHz,
   };
 }
 
@@ -77,7 +91,11 @@ function getPitchAccuracy(actualPitchHz, predictedPitchHz) {
   let correctCount = 0;
   let comparedCount = 0;
   if (!actualPitchHz) {
-    return createAccuracySummary(Number.NaN, 0, 0);
+    return {
+      accuracy: Number.NaN,
+      correctCount: 0,
+      comparedCount: 0,
+    };
   }
 
   for (let windowIndex = 0; windowIndex < actualPitchHz.length; windowIndex += 1) {
@@ -94,11 +112,11 @@ function getPitchAccuracy(actualPitchHz, predictedPitchHz) {
     }
   }
 
-  return createAccuracySummary(
-    comparedCount > 0 ? correctCount / comparedCount : Number.NaN,
+  return {
+    accuracy: comparedCount > 0 ? correctCount / comparedCount : Number.NaN,
     correctCount,
     comparedCount,
-  );
+  };
 }
 
 function getPriorStep(analysis, priorStep) {
@@ -132,23 +150,6 @@ function getPriorStep(analysis, priorStep) {
   };
 }
 
-function getMethodVisibility(methodVisibility = {}) {
-  if (typeof methodVisibility === "boolean") {
-    return {
-      pitchy: methodVisibility,
-      fft: true,
-      pica: true,
-      carryForward: true,
-    };
-  }
-  return {
-    pitchy: methodVisibility.pitchy !== false,
-    fft: methodVisibility.fft !== false,
-    pica: methodVisibility.pica !== false,
-    carryForward: methodVisibility.carryForward !== false,
-  };
-}
-
 function getMsPerSecondAudio(elapsedMs, timestepsPerSecond, sampleCount) {
   return sampleCount > 0 ? elapsedMs / (sampleCount / timestepsPerSecond) : Number.NaN;
 }
@@ -167,34 +168,43 @@ function timePostProcessPitchTrack(pitchHz, timestepsPerSecond, postProcessingEn
   };
 }
 
-function analyzePitchTrack(
-  timeSec,
+function createEmptyTrack(length) {
+  return {
+    pitchHz: new Array(length).fill(Number.NaN),
+    correlation: new Array(length).fill(Number.NaN),
+    zeroCrossingDensity: new Array(length).fill(Number.NaN),
+    priorStepByWindow: new Array(length).fill(null),
+    msPerSecondAudio: Number.NaN,
+  };
+}
+
+function analyzePicaTrack(
+  windowSequence,
   samples,
   sampleRate,
   settings,
   mode,
-  timestepsPerSecond,
   postProcessingEnabled,
 ) {
-  const pitchHz = new Array(timeSec.length);
-  const correlation = new Array(timeSec.length);
-  const zeroCrossingDensity = new Array(timeSec.length);
-  const priorStepByWindow = new Array(timeSec.length);
+  const pitchHz = new Array(windowSequence.windowCount);
+  const correlation = new Array(windowSequence.windowCount);
+  const zeroCrossingDensity = new Array(windowSequence.windowCount);
+  const priorStepByWindow = new Array(windowSequence.windowCount);
   let priorStep = null;
-  if (mode === "pica") {
-    window.picaDebug.foldAnalyses = new Array(timeSec.length);
-    window.picaDebug.foldPeriodWindows = [];
-    window.picaDebug.foldCountBins = {};
-  }
-  window.picaDebug.recordFoldDebug = mode === "pica";
 
   const startMs = performance.now();
-  for (let windowIndex = 0; windowIndex < timeSec.length; windowIndex += 1) {
-    window.picaDebug.activeWindowIndex = mode === "pica" ? windowIndex : null;
+  for (let windowIndex = 0; windowIndex < windowSequence.windowCount; windowIndex += 1) {
+    const endSample = getWindowEndSample(windowSequence, windowIndex);
+    if (endSample <= 0) {
+      pitchHz[windowIndex] = Number.NaN;
+      correlation[windowIndex] = Number.NaN;
+      zeroCrossingDensity[windowIndex] = Number.NaN;
+      continue;
+    }
     priorStepByWindow[windowIndex] = priorStep ? { ...priorStep } : null;
-    const picaWindow = getPicaWindowSamples(samples, sampleRate, timeSec[windowIndex]);
+    const detectorWindow = getDetectorWindowSamples(samples, sampleRate, endSample);
     const analysis = getPicaPitchAnalysisFromWaveform(
-      picaWindow,
+      detectorWindow,
       sampleRate,
       settings,
       mode === "carryForward" ? priorStep : null,
@@ -205,9 +215,6 @@ function analyzePitchTrack(
     priorStep = getPriorStep(analysis, priorStep);
   }
 
-  window.picaDebug.activeWindowIndex = null;
-  window.picaDebug.recordFoldDebug = false;
-
   const processedTrack = maybePostProcessPitchTrack(pitchHz, postProcessingEnabled);
   const elapsedMs = performance.now() - startMs;
   return {
@@ -215,223 +222,501 @@ function analyzePitchTrack(
     correlation,
     zeroCrossingDensity,
     priorStepByWindow,
-    msPerSecondAudio: getMsPerSecondAudio(elapsedMs, timestepsPerSecond, timeSec.length),
+    msPerSecondAudio: getMsPerSecondAudio(
+      elapsedMs,
+      windowSequence.windowsPerSecond,
+      windowSequence.windowCount,
+    ),
   };
 }
 
-export async function analyzePreparedPitchSample(preparedSample, settings, methodVisibility = {}) {
-  const visibleMethods = getMethodVisibility(methodVisibility);
-  const { actualPitchHz, fftAnalysis, sampleRate, samples } = preparedSample;
-  const processedFftTrack = timePostProcessPitchTrack(
-    fftAnalysis.pitchHz,
-    fftAnalysis.samplesPerSecond,
-    settings.postProcessingEnabled !== false,
-  );
+function analyzePizaTrack(windowSequence, samples, sampleRate, settings, postProcessingEnabled) {
+  const pitchHz = new Array(windowSequence.windowCount);
+
+  window.pizaDebug.foldAnalyses = new Array(windowSequence.windowCount);
+  window.pizaDebug.activeWindowIndex = null;
+  window.pizaDebug.recordFoldDebug = true;
+
+  const startMs = performance.now();
+  for (let windowIndex = 0; windowIndex < windowSequence.windowCount; windowIndex += 1) {
+    const endSample = getWindowEndSample(windowSequence, windowIndex);
+    if (endSample <= 0) {
+      pitchHz[windowIndex] = Number.NaN;
+      continue;
+    }
+    window.pizaDebug.activeWindowIndex = windowIndex;
+    const detectorWindow = getDetectorWindowSamples(samples, sampleRate, endSample);
+    const analysis = getPizaPitchAnalysisFromWaveform(detectorWindow, sampleRate, settings);
+    pitchHz[windowIndex] = analysis.hz;
+  }
+
+  window.pizaDebug.activeWindowIndex = null;
+  window.pizaDebug.recordFoldDebug = false;
+
+  const processedTrack = maybePostProcessPitchTrack(pitchHz, postProcessingEnabled);
+  const elapsedMs = performance.now() - startMs;
+  return {
+    pitchHz: processedTrack,
+    correlation: new Array(windowSequence.windowCount).fill(Number.NaN),
+    zeroCrossingDensity: new Array(windowSequence.windowCount).fill(Number.NaN),
+    priorStepByWindow: new Array(windowSequence.windowCount).fill(null),
+    msPerSecondAudio: getMsPerSecondAudio(
+      elapsedMs,
+      windowSequence.windowsPerSecond,
+      windowSequence.windowCount,
+    ),
+  };
+}
+
+function analyzePica2Track(windowSequence, samples, sampleRate, settings, postProcessingEnabled) {
+  const pitchHz = new Array(windowSequence.windowCount);
+
+  const startMs = performance.now();
+  for (let windowIndex = 0; windowIndex < windowSequence.windowCount; windowIndex += 1) {
+    const endSample = getWindowEndSample(windowSequence, windowIndex);
+    if (endSample <= 0) {
+      pitchHz[windowIndex] = Number.NaN;
+      continue;
+    }
+    const detectorWindow = getDetectorWindowSamples(samples, sampleRate, endSample);
+    const analysis = getPica2PitchAnalysisFromWaveform(detectorWindow, sampleRate, settings);
+    pitchHz[windowIndex] = analysis.hz;
+  }
+
+  const processedTrack = maybePostProcessPitchTrack(pitchHz, postProcessingEnabled);
+  const elapsedMs = performance.now() - startMs;
+  return {
+    pitchHz: processedTrack,
+    correlation: new Array(windowSequence.windowCount).fill(Number.NaN),
+    zeroCrossingDensity: new Array(windowSequence.windowCount).fill(Number.NaN),
+    priorStepByWindow: new Array(windowSequence.windowCount).fill(null),
+    msPerSecondAudio: getMsPerSecondAudio(
+      elapsedMs,
+      windowSequence.windowsPerSecond,
+      windowSequence.windowCount,
+    ),
+  };
+}
+
+function analyzePiraTrack(windowSequence, samples, sampleRate, settings, postProcessingEnabled) {
+  const pitchHz = new Array(windowSequence.windowCount);
+
+  const startMs = performance.now();
+  for (let windowIndex = 0; windowIndex < windowSequence.windowCount; windowIndex += 1) {
+    const endSample = getWindowEndSample(windowSequence, windowIndex);
+    if (endSample <= 0) {
+      pitchHz[windowIndex] = Number.NaN;
+      continue;
+    }
+    window.windowIndex = windowIndex;
+    const detectorWindow = getDetectorWindowSamples(samples, sampleRate, endSample);
+    pitchHz[windowIndex] = getPiraPitchHzFromWaveform(detectorWindow, sampleRate, settings);
+  }
+
+  const processedTrack = maybePostProcessPitchTrack(pitchHz, postProcessingEnabled);
+  const elapsedMs = performance.now() - startMs;
+  return {
+    pitchHz: processedTrack,
+    correlation: new Array(windowSequence.windowCount).fill(Number.NaN),
+    zeroCrossingDensity: new Array(windowSequence.windowCount).fill(Number.NaN),
+    priorStepByWindow: new Array(windowSequence.windowCount).fill(null),
+    msPerSecondAudio: getMsPerSecondAudio(
+      elapsedMs,
+      windowSequence.windowsPerSecond,
+      windowSequence.windowCount,
+    ),
+  };
+}
+
+function analyzePipsTrack(windowSequence, samples, sampleRate, settings, postProcessingEnabled) {
+  const pitchHz = new Array(windowSequence.windowCount);
+
+  const startMs = performance.now();
+  for (let windowIndex = 0; windowIndex < windowSequence.windowCount; windowIndex += 1) {
+    const endSample = getWindowEndSample(windowSequence, windowIndex);
+    if (endSample <= 0) {
+      pitchHz[windowIndex] = Number.NaN;
+      continue;
+    }
+    const detectorWindow = getDetectorWindowSamples(samples, sampleRate, endSample);
+    pitchHz[windowIndex] = getPipsPitchHzFromWaveform(detectorWindow, sampleRate, settings);
+  }
+
+  const processedTrack = maybePostProcessPitchTrack(pitchHz, postProcessingEnabled);
+  const elapsedMs = performance.now() - startMs;
+  return {
+    pitchHz: processedTrack,
+    correlation: new Array(windowSequence.windowCount).fill(Number.NaN),
+    zeroCrossingDensity: new Array(windowSequence.windowCount).fill(Number.NaN),
+    priorStepByWindow: new Array(windowSequence.windowCount).fill(null),
+    msPerSecondAudio: getMsPerSecondAudio(
+      elapsedMs,
+      windowSequence.windowsPerSecond,
+      windowSequence.windowCount,
+    ),
+  };
+}
+
+function analyzePiscTrack(windowSequence, samples, sampleRate, settings, postProcessingEnabled) {
+  const pitchHz = new Array(windowSequence.windowCount);
+  const correlation = new Array(windowSequence.windowCount);
+
+  const startMs = performance.now();
+  for (let windowIndex = 0; windowIndex < windowSequence.windowCount; windowIndex += 1) {
+    const endSample = getWindowEndSample(windowSequence, windowIndex);
+    if (endSample <= 0) {
+      pitchHz[windowIndex] = Number.NaN;
+      correlation[windowIndex] = Number.NaN;
+      continue;
+    }
+    const detectorWindow = getDetectorWindowSamples(samples, sampleRate, endSample);
+    pitchHz[windowIndex] = getPiscPitchHzFromWaveform(detectorWindow, sampleRate, settings);
+    correlation[windowIndex] = window.piscDebug.winningCorrelation;
+  }
+
+  const processedTrack = maybePostProcessPitchTrack(pitchHz, postProcessingEnabled);
+  const elapsedMs = performance.now() - startMs;
+  return {
+    pitchHz: processedTrack,
+    correlation,
+    zeroCrossingDensity: new Array(windowSequence.windowCount).fill(Number.NaN),
+    priorStepByWindow: new Array(windowSequence.windowCount).fill(null),
+    msPerSecondAudio: getMsPerSecondAudio(
+      elapsedMs,
+      windowSequence.windowsPerSecond,
+      windowSequence.windowCount,
+    ),
+  };
+}
+
+function analyzePifsTrack(windowSequence, samples, sampleRate, settings, postProcessingEnabled) {
+  const pitchHz = new Array(windowSequence.windowCount);
+  const foldScenario = new Array(windowSequence.windowCount);
+
+  const startMs = performance.now();
+  for (let windowIndex = 0; windowIndex < windowSequence.windowCount; windowIndex += 1) {
+    const endSample = getWindowEndSample(windowSequence, windowIndex);
+    if (endSample <= 0) {
+      pitchHz[windowIndex] = Number.NaN;
+      foldScenario[windowIndex] = Number.NaN;
+      continue;
+    }
+    window.windowIndex = windowIndex;
+    const detectorWindow = getDetectorWindowSamples(samples, sampleRate, endSample);
+    pitchHz[windowIndex] = getPifsPitchHzFromWaveform(detectorWindow, sampleRate, settings);
+    foldScenario[windowIndex] = window.pifsDebug.foldScenario;
+  }
+
+  const processedTrack = maybePostProcessPitchTrack(pitchHz, postProcessingEnabled);
+  const elapsedMs = performance.now() - startMs;
+  return {
+    pitchHz: processedTrack,
+    foldScenario,
+    correlation: new Array(windowSequence.windowCount).fill(Number.NaN),
+    zeroCrossingDensity: new Array(windowSequence.windowCount).fill(Number.NaN),
+    priorStepByWindow: new Array(windowSequence.windowCount).fill(null),
+    msPerSecondAudio: getMsPerSecondAudio(
+      elapsedMs,
+      windowSequence.windowsPerSecond,
+      windowSequence.windowCount,
+    ),
+  };
+}
+
+export async function analyzePreparedPitchSample(preparedSample, settings, selectedMethods = {}) {
+  const normalizedSelectedMethods = normalizeSelectedMethods(selectedMethods);
+  const { actualPitchHz, fftAnalysis, sampleRate, samples, windowSequence } = preparedSample;
+  const { timeSec } = windowSequence;
   console.assert(
-    actualPitchHz === null || actualPitchHz.length === fftAnalysis.timeSec.length,
-    "Expected actualPitchHz JSON length to match fftAnalysis.timeSec length",
+    actualPitchHz === null || actualPitchHz.length === timeSec.length,
+    "Expected actualPitchHz JSON length to match the shared window sequence length",
     {
       actualPitchHzLength: actualPitchHz?.length ?? null,
-      timeSecLength: fftAnalysis.timeSec.length,
+      timeSecLength: timeSec.length,
     },
   );
-  const emptyTrack = {
-    pitchHz: new Array(fftAnalysis.timeSec.length).fill(Number.NaN),
-    correlation: new Array(fftAnalysis.timeSec.length).fill(Number.NaN),
-    zeroCrossingDensity: new Array(fftAnalysis.timeSec.length).fill(Number.NaN),
-    priorStepByWindow: new Array(fftAnalysis.timeSec.length).fill(null),
-    msPerSecondAudio: Number.NaN,
-  };
-  const picaTrack = visibleMethods.pica
-    ? analyzePitchTrack(
-        fftAnalysis.timeSec,
+  const emptyTrack = createEmptyTrack(timeSec.length);
+  const processedFftTrack =
+    normalizedSelectedMethods.FFT && fftAnalysis
+      ? timePostProcessPitchTrack(
+          fftAnalysis.pitchHz,
+          windowSequence.windowsPerSecond,
+          settings.postProcessingEnabled !== false,
+        )
+      : emptyTrack;
+  const fftPipelineMsPerSecondAudio =
+    normalizedSelectedMethods.FFT && fftAnalysis
+      ? fftAnalysis.perf.voiceboxPipelineMsPerSecondAudio + processedFftTrack.msPerSecondAudio
+      : Number.NaN;
+  window.pizaDebug.foldAnalyses = new Array(timeSec.length);
+  window.pizaDebug.activeWindowIndex = null;
+  window.pizaDebug.recordFoldDebug = false;
+  const tracksByMethodKey = {};
+  tracksByMethodKey.FFT = processedFftTrack;
+  tracksByMethodKey.PICA = normalizedSelectedMethods.PICA
+    ? analyzePicaTrack(
+        windowSequence,
         samples,
         sampleRate,
         settings,
         "pica",
-        fftAnalysis.samplesPerSecond,
         settings.postProcessingEnabled !== false,
       )
     : emptyTrack;
-  const carryForwardTrack = visibleMethods.carryForward
-    ? analyzePitchTrack(
-        fftAnalysis.timeSec,
+  tracksByMethodKey.PIZA = normalizedSelectedMethods.PIZA
+    ? analyzePizaTrack(
+        windowSequence,
+        samples,
+        sampleRate,
+        settings,
+        settings.postProcessingEnabled !== false,
+      )
+    : emptyTrack;
+  tracksByMethodKey.PICA2 = normalizedSelectedMethods.PICA2
+    ? analyzePica2Track(
+        windowSequence,
+        samples,
+        sampleRate,
+        settings,
+        settings.postProcessingEnabled !== false,
+      )
+    : emptyTrack;
+  tracksByMethodKey.PIRA = normalizedSelectedMethods.PIRA
+    ? analyzePiraTrack(
+        windowSequence,
+        samples,
+        sampleRate,
+        settings,
+        settings.postProcessingEnabled !== false,
+      )
+    : emptyTrack;
+  tracksByMethodKey.PIFS = normalizedSelectedMethods.PIFS
+    ? analyzePifsTrack(
+        windowSequence,
+        samples,
+        sampleRate,
+        settings,
+        settings.postProcessingEnabled !== false,
+      )
+    : emptyTrack;
+  tracksByMethodKey.PIPS = normalizedSelectedMethods.PIPS
+    ? analyzePipsTrack(
+        windowSequence,
+        samples,
+        sampleRate,
+        settings,
+        settings.postProcessingEnabled !== false,
+      )
+    : emptyTrack;
+  tracksByMethodKey.PISC = normalizedSelectedMethods.PISC
+    ? analyzePiscTrack(
+        windowSequence,
+        samples,
+        sampleRate,
+        settings,
+        settings.postProcessingEnabled !== false,
+      )
+    : emptyTrack;
+  tracksByMethodKey.PICACF = normalizedSelectedMethods.PICACF
+    ? analyzePicaTrack(
+        windowSequence,
         samples,
         sampleRate,
         settings,
         "carryForward",
-        fftAnalysis.samplesPerSecond,
         settings.postProcessingEnabled !== false,
       )
     : emptyTrack;
-  const rawPitchyTrack = visibleMethods.pitchy
-    ? await analyzePitchyTrack(
-        fftAnalysis.timeSec,
-        samples,
-        sampleRate,
-        fftAnalysis.samplesPerSecond,
-      )
+  tracksByMethodKey.PITCHY = normalizedSelectedMethods.PITCHY
+    ? await analyzePitchyTrack(windowSequence, samples, sampleRate)
     : emptyTrack;
-  const pitchyTrack = visibleMethods.pitchy ? rawPitchyTrack : emptyTrack;
-
-  const accuracyByMethodKey = createAccuracySummaryByMethod(actualPitchHz, {
-    fft: processedFftTrack.pitchHz,
-    pica: picaTrack.pitchHz,
-    pitchy: pitchyTrack.pitchHz,
-    carryForward: carryForwardTrack.pitchHz,
-  });
+  const accuracyByMethodKey = Object.fromEntries(
+    PICA_METHOD_REGISTRY.map((method) => [
+      method.key,
+      getPitchAccuracy(actualPitchHz, tracksByMethodKey[method.key].pitchHz),
+    ]),
+  );
+  const methods = PICA_METHOD_REGISTRY.map((method) => ({
+    key: method.key,
+    label: method.key,
+    pitchHz: tracksByMethodKey[method.key].pitchHz,
+    msPerSecondAudio:
+      method.key === "FFT"
+        ? fftPipelineMsPerSecondAudio
+        : tracksByMethodKey[method.key].msPerSecondAudio,
+  }));
+  const perf = Object.fromEntries(
+    PICA_METHOD_REGISTRY.map((method) => [
+      method.perfKey,
+      method.key === "FFT"
+        ? fftPipelineMsPerSecondAudio
+        : tracksByMethodKey[method.key].msPerSecondAudio,
+    ]),
+  );
   return {
     sampleRate,
     samples,
-    timeSec: fftAnalysis.timeSec,
+    windowSequence,
+    timeSec,
     actualPitchHz,
-    pitchHz: processedFftTrack.pitchHz,
-    picaPitchHz: picaTrack.pitchHz,
-    picaCorrelation: picaTrack.correlation,
-    picaZeroCrossingDensity: picaTrack.zeroCrossingDensity,
-    picaFoldCount: new Array(fftAnalysis.timeSec.length).fill(Number.NaN),
-    pitchyPitchHz: pitchyTrack.pitchHz,
-    carryForwardPitchHz: carryForwardTrack.pitchHz,
-    carryForwardCorrelation: carryForwardTrack.correlation,
-    carryForwardZeroCrossingDensity: carryForwardTrack.zeroCrossingDensity,
-    carryForwardPriorStepByWindow: carryForwardTrack.priorStepByWindow,
+    ...Object.fromEntries(
+      PICA_METHOD_REGISTRY.map((method) => [
+        method.resultKey,
+        tracksByMethodKey[method.key].pitchHz,
+      ]),
+    ),
+    picaCorrelation: tracksByMethodKey.PICA.correlation,
+    piscCorrelation: tracksByMethodKey.PISC.correlation,
+    picaZeroCrossingDensity: tracksByMethodKey.PICA.zeroCrossingDensity,
+    picaFoldCount: new Array(timeSec.length).fill(Number.NaN),
+    pifsFoldScenario: tracksByMethodKey.PIFS.foldScenario,
+    picaCfCorrelation: tracksByMethodKey.PICACF.correlation,
+    picaCfZeroCrossingDensity: tracksByMethodKey.PICACF.zeroCrossingDensity,
+    picaCfPriorStepByWindow: tracksByMethodKey.PICACF.priorStepByWindow,
     settings,
     metrics: {
       accuracyByMethodKey,
     },
-    methods: [
-      createResolvedPitchMethod(
-        "Pitchy",
-        "pitchy",
-        pitchyTrack.pitchHz,
-        pitchyTrack.msPerSecondAudio,
-      ),
-      createResolvedPitchMethod(
-        "Voicebox FFT",
-        "fft",
-        processedFftTrack.pitchHz,
-        fftAnalysis.perf.voiceboxPipelineMsPerSecondAudio + processedFftTrack.msPerSecondAudio,
-      ),
-      createResolvedPitchMethod(
-        "Voicebox Pica",
-        "pica",
-        picaTrack.pitchHz,
-        picaTrack.msPerSecondAudio,
-      ),
-      createResolvedPitchMethod(
-        "Carry Forward",
-        "carryForward",
-        carryForwardTrack.pitchHz,
-        carryForwardTrack.msPerSecondAudio,
-      ),
-    ],
-    perf: {
-      voiceboxPipelineMsPerSecondAudio:
-        fftAnalysis.perf.voiceboxPipelineMsPerSecondAudio + processedFftTrack.msPerSecondAudio,
-      picaPipelineMsPerSecondAudio: picaTrack.msPerSecondAudio,
-      pitchyPipelineMsPerSecondAudio: pitchyTrack.msPerSecondAudio,
-      carryForwardPipelineMsPerSecondAudio: carryForwardTrack.msPerSecondAudio,
-    },
+    methods,
+    perf,
   };
 }
 
 export async function analyzePreparedActualPitchSample(
   preparedSample,
   settings,
-  methodVisibility = {},
+  selectedMethods = {},
 ) {
-  const visibleMethods = getMethodVisibility(methodVisibility);
-  const { actualPitchHz, sampleRate, samples } = preparedSample;
-  const timeSec = actualPitchHz.map((_, index) => index / TIMESTEPS_PER_SECOND);
-  const emptyTrack = {
-    pitchHz: new Array(timeSec.length).fill(Number.NaN),
-    correlation: new Array(timeSec.length).fill(Number.NaN),
-    zeroCrossingDensity: new Array(timeSec.length).fill(Number.NaN),
-    priorStepByWindow: new Array(timeSec.length).fill(null),
-    msPerSecondAudio: Number.NaN,
-  };
-  const picaTrack = visibleMethods.pica
-    ? analyzePitchTrack(
-        timeSec,
+  const normalizedSelectedMethods = normalizeSelectedMethods(selectedMethods);
+  const { actualPitchHz, sampleRate, samples, windowSequence } = preparedSample;
+  const { timeSec } = windowSequence;
+  const emptyTrack = createEmptyTrack(timeSec.length);
+  window.pizaDebug.foldAnalyses = new Array(timeSec.length);
+  window.pizaDebug.activeWindowIndex = null;
+  window.pizaDebug.recordFoldDebug = false;
+  const tracksByMethodKey = {};
+  tracksByMethodKey.FFT = emptyTrack;
+  tracksByMethodKey.PICA = normalizedSelectedMethods.PICA
+    ? analyzePicaTrack(
+        windowSequence,
         samples,
         sampleRate,
         settings,
         "pica",
-        TIMESTEPS_PER_SECOND,
         settings.postProcessingEnabled !== false,
       )
     : emptyTrack;
-  const carryForwardTrack = visibleMethods.carryForward
-    ? analyzePitchTrack(
-        timeSec,
+  tracksByMethodKey.PIZA = normalizedSelectedMethods.PIZA
+    ? analyzePizaTrack(
+        windowSequence,
+        samples,
+        sampleRate,
+        settings,
+        settings.postProcessingEnabled !== false,
+      )
+    : emptyTrack;
+  tracksByMethodKey.PICA2 = normalizedSelectedMethods.PICA2
+    ? analyzePica2Track(
+        windowSequence,
+        samples,
+        sampleRate,
+        settings,
+        settings.postProcessingEnabled !== false,
+      )
+    : emptyTrack;
+  tracksByMethodKey.PIRA = normalizedSelectedMethods.PIRA
+    ? analyzePiraTrack(
+        windowSequence,
+        samples,
+        sampleRate,
+        settings,
+        settings.postProcessingEnabled !== false,
+      )
+    : emptyTrack;
+  tracksByMethodKey.PIFS = normalizedSelectedMethods.PIFS
+    ? analyzePifsTrack(
+        windowSequence,
+        samples,
+        sampleRate,
+        settings,
+        settings.postProcessingEnabled !== false,
+      )
+    : emptyTrack;
+  tracksByMethodKey.PIPS = normalizedSelectedMethods.PIPS
+    ? analyzePipsTrack(
+        windowSequence,
+        samples,
+        sampleRate,
+        settings,
+        settings.postProcessingEnabled !== false,
+      )
+    : emptyTrack;
+  tracksByMethodKey.PISC = normalizedSelectedMethods.PISC
+    ? analyzePiscTrack(
+        windowSequence,
+        samples,
+        sampleRate,
+        settings,
+        settings.postProcessingEnabled !== false,
+      )
+    : emptyTrack;
+  tracksByMethodKey.PICACF = normalizedSelectedMethods.PICACF
+    ? analyzePicaTrack(
+        windowSequence,
         samples,
         sampleRate,
         settings,
         "carryForward",
-        TIMESTEPS_PER_SECOND,
         settings.postProcessingEnabled !== false,
       )
     : emptyTrack;
-  const rawPitchyTrack = visibleMethods.pitchy
-    ? await analyzePitchyTrack(timeSec, samples, sampleRate, TIMESTEPS_PER_SECOND)
+  tracksByMethodKey.PITCHY = normalizedSelectedMethods.PITCHY
+    ? await analyzePitchyTrack(windowSequence, samples, sampleRate)
     : emptyTrack;
-  const pitchyTrack = visibleMethods.pitchy ? rawPitchyTrack : emptyTrack;
-  const accuracyByMethodKey = createAccuracySummaryByMethod(actualPitchHz, {
-    fft: new Array(timeSec.length).fill(Number.NaN),
-    pica: picaTrack.pitchHz,
-    pitchy: pitchyTrack.pitchHz,
-    carryForward: carryForwardTrack.pitchHz,
-  });
+  const accuracyByMethodKey = Object.fromEntries(
+    PICA_METHOD_REGISTRY.map((method) => [
+      method.key,
+      getPitchAccuracy(actualPitchHz, tracksByMethodKey[method.key].pitchHz),
+    ]),
+  );
+  const methods = PICA_METHOD_REGISTRY.map((method) => ({
+    key: method.key,
+    label: method.key,
+    pitchHz: tracksByMethodKey[method.key].pitchHz,
+    msPerSecondAudio:
+      method.key === "FFT" ? Number.NaN : tracksByMethodKey[method.key].msPerSecondAudio,
+  }));
+  const perf = Object.fromEntries(
+    PICA_METHOD_REGISTRY.map((method) => [
+      method.perfKey,
+      method.key === "FFT" ? Number.NaN : tracksByMethodKey[method.key].msPerSecondAudio,
+    ]),
+  );
   return {
     sampleRate,
     samples,
+    windowSequence,
     timeSec,
     actualPitchHz,
-    pitchHz: new Array(timeSec.length).fill(Number.NaN),
-    picaPitchHz: picaTrack.pitchHz,
-    picaCorrelation: picaTrack.correlation,
-    picaZeroCrossingDensity: picaTrack.zeroCrossingDensity,
+    ...Object.fromEntries(
+      PICA_METHOD_REGISTRY.map((method) => [
+        method.resultKey,
+        tracksByMethodKey[method.key].pitchHz,
+      ]),
+    ),
+    picaCorrelation: tracksByMethodKey.PICA.correlation,
+    piscCorrelation: tracksByMethodKey.PISC.correlation,
+    picaZeroCrossingDensity: tracksByMethodKey.PICA.zeroCrossingDensity,
     picaFoldCount: new Array(timeSec.length).fill(Number.NaN),
-    pitchyPitchHz: pitchyTrack.pitchHz,
-    carryForwardPitchHz: carryForwardTrack.pitchHz,
-    carryForwardCorrelation: carryForwardTrack.correlation,
-    carryForwardZeroCrossingDensity: carryForwardTrack.zeroCrossingDensity,
-    carryForwardPriorStepByWindow: carryForwardTrack.priorStepByWindow,
+    pifsFoldScenario: tracksByMethodKey.PIFS.foldScenario,
+    picaCfCorrelation: tracksByMethodKey.PICACF.correlation,
+    picaCfZeroCrossingDensity: tracksByMethodKey.PICACF.zeroCrossingDensity,
+    picaCfPriorStepByWindow: tracksByMethodKey.PICACF.priorStepByWindow,
     settings,
     metrics: {
       accuracyByMethodKey,
     },
-    methods: [
-      createResolvedPitchMethod(
-        "Voicebox FFT",
-        "fft",
-        new Array(timeSec.length).fill(Number.NaN),
-        Number.NaN,
-      ),
-      createResolvedPitchMethod(
-        "Voicebox Pica",
-        "pica",
-        picaTrack.pitchHz,
-        picaTrack.msPerSecondAudio,
-      ),
-      createResolvedPitchMethod(
-        "Pitchy",
-        "pitchy",
-        pitchyTrack.pitchHz,
-        pitchyTrack.msPerSecondAudio,
-      ),
-      createResolvedPitchMethod(
-        "Carry Forward",
-        "carryForward",
-        carryForwardTrack.pitchHz,
-        carryForwardTrack.msPerSecondAudio,
-      ),
-    ],
-    perf: {
-      voiceboxPipelineMsPerSecondAudio: Number.NaN,
-      picaPipelineMsPerSecondAudio: picaTrack.msPerSecondAudio,
-      pitchyPipelineMsPerSecondAudio: pitchyTrack.msPerSecondAudio,
-      carryForwardPipelineMsPerSecondAudio: carryForwardTrack.msPerSecondAudio,
-    },
+    methods,
+    perf,
   };
 }

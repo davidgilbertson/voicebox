@@ -244,19 +244,51 @@ function applyCleanup(processedPitchCents, endIndex) {
   // In:  [N N O O O N N]
   //           ↓ ↓ ↓
   // Out: [N N N N N N N]
-  // TODO (@davidgilbertson): implement this
+  if (
+    !isFiniteCents(pos1) &&
+    !isFiniteCents(pos2) &&
+    isFiniteCents(pos3) &&
+    isFiniteCents(pos4) &&
+    isFiniteCents(pos5) &&
+    !isFiniteCents(pos6) &&
+    !isFiniteCents(pos7)
+  ) {
+    processedPitchCents[endIndex - 4] = Number.NaN;
+    processedPitchCents[endIndex - 3] = Number.NaN;
+    processedPitchCents[endIndex - 2] = Number.NaN;
+    return;
+  }
 
   // 2 in last 6
   // In:  [. N N O O N N]
   //             ↓ ↓
   // Out: [. N N N N N N]
-  // TODO (@davidgilbertson): implement this
+  if (
+    !isFiniteCents(pos2) &&
+    !isFiniteCents(pos3) &&
+    isFiniteCents(pos4) &&
+    isFiniteCents(pos5) &&
+    !isFiniteCents(pos6) &&
+    !isFiniteCents(pos7)
+  ) {
+    processedPitchCents[endIndex - 3] = Number.NaN;
+    processedPitchCents[endIndex - 2] = Number.NaN;
+    return;
+  }
 
   // 1 in last 5
   // In:  [. . N N O N N]
   //               ↓
   // Out: [. . N N N N N]
-  // TODO (@davidgilbertson): implement this
+  if (
+    !isFiniteCents(pos3) &&
+    !isFiniteCents(pos4) &&
+    isFiniteCents(pos5) &&
+    !isFiniteCents(pos6) &&
+    !isFiniteCents(pos7)
+  ) {
+    processedPitchCents[endIndex - 2] = Number.NaN;
+  }
 }
 
 export function postProcessPitchTrack(pitchHz) {

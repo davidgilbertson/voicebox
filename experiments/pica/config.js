@@ -1,9 +1,12 @@
+import { PICA_METHOD_KEYS } from "./methodRegistry.js";
+
 export const DEFAULT_ASSET_URL = "../../.private/assets/High ah gaps.wav";
 export const RECORD_DURATION_MS = 5000;
 export const PICA_MIN_HZ = 40;
 export const PICA_MAX_HZ = 2200;
 export const PICA_MIN_WINDOW_MAX_AMPLITUDE = 0.01; // TODO (@davidgilbertson): doesn't do much in practice
-export const PICA_ACCURACY_CENTS = 50;
+export const PICA_ACCURACY_CENTS = 100;
+export const PICA_METHOD_TYPES = PICA_METHOD_KEYS;
 
 export const SIMILARITY_FUNC = "cosine";
 export const PICA_SETTINGS_DEFAULTS = {
@@ -16,25 +19,20 @@ export const PICA_SETTINGS_DEFAULTS = {
   maxWalkSteps: 60,
   maxCarryRun: 10,
   corrHzRatio: 250,
+  widthWindow: 2,
+  ampWindow: 0.1,
+  cone: 0.005,
+  binWidth: 10,
+  magWeight: 1,
+  reversalSignal: 0.1,
+  spanStretch: 0.05,
+  flatnessWeight: 1,
+  separationWeight: 1,
+  coverageWeight: 1,
+  pifsSpreadThreshold: 10,
+  pifsAmpDisplacementThreshold: 0.03,
+  pifsMaxFolds: 20,
 };
-
-// export const SIMILARITY_FUNC = "scaledDot";
-// export const PICA_SETTINGS_DEFAULTS = {
-//   maxCrossingsPerPeriod: 18,
-//   maxComparisonPatches: 3,
-//   maxWalkSteps: 10,
-//   minCarryCorr: 3,
-//   corrHzRatio: 2.5,
-// };
-
-// export const SIMILARITY_FUNC = "mae";
-// export const PICA_SETTINGS_DEFAULTS = {
-//   maxCrossingsPerPeriod: 18,
-//   maxComparisonPatches: 3,
-//   maxWalkSteps: 10,
-//   minCarryCorr: 3,
-//   corrHzRatio: 2.5,
-// };
 
 export const PICA_SETTING_FIELDS = [
   {
@@ -45,6 +43,7 @@ export const PICA_SETTING_FIELDS = [
     max: 1,
     step: 0.01,
     title: "Minimum window or compared-region peak amplitude required before Pica accepts it.",
+    usedWith: ["PICA", "PICACF", "PICA2"],
   },
   {
     key: "minCorr",
@@ -54,6 +53,7 @@ export const PICA_SETTING_FIELDS = [
     max: 1,
     step: 0.01,
     title: "Minimum winning-candidate correlation required before Pica accepts it.",
+    usedWith: ["PICA", "PICACF", "PISC"],
   },
   {
     key: "minCarryCorr",
@@ -63,6 +63,7 @@ export const PICA_SETTING_FIELDS = [
     max: 1,
     step: 0.01,
     title: "Minimum prior and walked correlation required before the carry-forward path can win.",
+    usedWith: ["PICACF"],
   },
   {
     key: "maxCrossingsPerPeriod",
@@ -71,6 +72,7 @@ export const PICA_SETTING_FIELDS = [
     min: 1,
     step: 2,
     title: "Maximum zero crossings to allow in one period when collecting recent folds.",
+    usedWith: ["PICA", "PICACF", "PIZA"],
   },
   {
     key: "maxComparisonPatches",
@@ -80,6 +82,7 @@ export const PICA_SETTING_FIELDS = [
     step: 1,
     title:
       "Maximum number of trailing period-sized patches to compare when scoring a candidate period.",
+    usedWith: ["PICA", "PICACF", "PISC"],
   },
   {
     key: "corrSamplePoints",
@@ -88,6 +91,7 @@ export const PICA_SETTING_FIELDS = [
     min: 1,
     step: 1,
     title: "Approximate number of sampled points per compared patch when computing correlation.",
+    usedWith: ["PICA", "PICACF"],
   },
   {
     key: "maxWalkSteps",
@@ -97,6 +101,7 @@ export const PICA_SETTING_FIELDS = [
     step: 2,
     title:
       "Maximum number of one-sample period adjustments to try when hill-climbing a candidate period.",
+    usedWith: ["PICA", "PICACF"],
   },
   {
     key: "maxCarryRun",
@@ -106,6 +111,7 @@ export const PICA_SETTING_FIELDS = [
     step: 1,
     title:
       "Maximum number of consecutive carry-forward windows before Pica forces a fresh extrema search.",
+    usedWith: ["PICACF"],
   },
   {
     key: "corrHzRatio",
@@ -114,5 +120,126 @@ export const PICA_SETTING_FIELDS = [
     min: 0,
     step: 0.1,
     title: "Correlation feature weight relative to the Hz feature weight of 1.",
+    usedWith: ["PICA", "PICACF"],
+  },
+  {
+    key: "widthWindow",
+    label: "width window",
+    inputLabel: "widthWindow",
+    min: 0,
+    step: 1,
+    title: "Maximum fold-width difference for Piza to treat two folds as the same cluster.",
+    usedWith: ["PIZA"],
+  },
+  {
+    key: "ampWindow",
+    label: "amp window",
+    inputLabel: "ampWindow",
+    min: 0,
+    step: 0.01,
+    title: "Maximum extremum-amplitude difference for Piza to treat two folds as the same cluster.",
+    usedWith: ["PIZA"],
+  },
+  {
+    key: "cone",
+    label: "cone",
+    inputLabel: "cone",
+    min: 0,
+    step: 0.001,
+    title:
+      "How much Pica2 widens each lane's amplitude search cone for every sample step backwards.",
+    usedWith: ["PICA2"],
+  },
+  {
+    key: "binWidth",
+    label: "bin width",
+    inputLabel: "binWidth",
+    min: 1,
+    step: 1,
+    title: "Period-space histogram bin width used by Pica2 when voting on adjacent-lane spans.",
+    usedWith: ["PICA2"],
+  },
+  {
+    key: "magWeight",
+    label: "mag weight",
+    inputLabel: "magWeight",
+    min: 0,
+    step: 0.1,
+    title: "Extra histogram weight Pica2 gives higher-magnitude spans when voting on period bins.",
+    usedWith: ["PICA2"],
+  },
+  {
+    key: "reversalSignal",
+    label: "reversal signal",
+    inputLabel: "reversalSignal",
+    min: 0,
+    max: 1,
+    step: 0.01,
+    title: "Minimum scaled reversal needed before PISC marks a peak or trough as a feature.",
+    usedWith: ["PISC"],
+  },
+  {
+    key: "spanStretch",
+    label: "PIPS span stretch",
+    inputLabel: "spanStretch",
+    min: 0,
+    step: 0.01,
+    title: "Allowed fractional stretch either side of a PIPS candidate span when linking runs.",
+    usedWith: ["PIPS"],
+  },
+  {
+    key: "flatnessWeight",
+    label: "PIPS flatness weight",
+    inputLabel: "flatnessWeight",
+    min: 0,
+    step: 0.1,
+    title: "Weight of flatness when scoring PIPS candidate spans.",
+    usedWith: ["PIPS"],
+  },
+  {
+    key: "separationWeight",
+    label: "PIPS separation weight",
+    inputLabel: "separationWeight",
+    min: 0,
+    step: 0.1,
+    title: "Weight of separation when scoring PIPS candidate spans.",
+    usedWith: ["PIPS"],
+  },
+  {
+    key: "coverageWeight",
+    label: "PIPS coverage weight",
+    inputLabel: "coverageWeight",
+    min: 0,
+    step: 0.1,
+    title: "Weight of coverage when scoring PIPS candidate spans.",
+    usedWith: ["PIPS"],
+  },
+  {
+    key: "pifsSpreadThreshold",
+    label: "PIFS spread threshold",
+    inputLabel: "pifsSpread",
+    min: 0,
+    step: 0.5,
+    title: "Maximum fold-width spread percentage PIFS allows before rejecting a fold scenario.",
+    usedWith: ["PIFS"],
+  },
+  {
+    key: "pifsAmpDisplacementThreshold",
+    label: "PIFS amp displacement",
+    inputLabel: "pifsAmpDisp",
+    min: 0,
+    step: 0.01,
+    title:
+      "Maximum average extremum-amplitude displacement PIFS allows before rejecting a fold scenario.",
+    usedWith: ["PIFS"],
+  },
+  {
+    key: "pifsMaxFolds",
+    label: "PIFS max folds",
+    inputLabel: "pifsMaxFolds",
+    min: 2,
+    step: 2,
+    title: "Maximum fold count PIFS scans when trying progressively larger matching scenarios.",
+    usedWith: ["PIFS"],
   },
 ];

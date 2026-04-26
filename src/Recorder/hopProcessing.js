@@ -183,25 +183,18 @@ function processHopPitch({
   let cents = Number.NaN;
   if (usePica) {
     if (isAboveSilenceThreshold) {
-      if (rawAudioState.ring.sampleCount < audioSessionState.picaWindowSamples.length) {
-        audioSessionState.picaPriorStep = null;
-      } else {
+      if (rawAudioState.ring.sampleCount >= audioSessionState.picaWindowSamples.length) {
         fillPicaWindowSamples(rawAudioState.ring, audioSessionState.picaWindowSamples);
         const picaPitchResult = getPicaPitchResult(
           audioSessionState.picaWindowSamples,
           rawAudioState.sampleRate,
           minHz,
           maxHz,
-          audioSessionState.picaPriorStep,
         );
         cents = picaPitchResult.cents;
-        audioSessionState.picaPriorStep = picaPitchResult.priorStep;
       }
-    } else {
-      audioSessionState.picaPriorStep = null;
     }
   } else {
-    audioSessionState.picaPriorStep = null;
     cents = isAboveSilenceThreshold
       ? getPitchFromSpectrum(audioSessionState, spectrumForPitchDetection, minHz, maxHz)
       : Number.NaN;

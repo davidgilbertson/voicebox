@@ -94,12 +94,9 @@ export function getCorrelation(samples, periodSize, settings, cache = null) {
 function getWindowStats(samples) {
   let zeroCrossingCount = 0;
   let lastSample = samples[0];
-  let maxAmplitude = Math.abs(lastSample);
 
   for (let sampleIndex = 1; sampleIndex < samples.length; sampleIndex += 1) {
     const sample = samples[sampleIndex];
-    const absolute = Math.abs(sample);
-    if (absolute > maxAmplitude) maxAmplitude = absolute;
     if (lastSample < 0 !== sample < 0) {
       zeroCrossingCount += 1;
     }
@@ -108,7 +105,6 @@ function getWindowStats(samples) {
 
   return {
     zeroCrossingCount,
-    maxAmplitude, // TODO (@davidgilbertson): might be unused
   };
 }
 
@@ -384,14 +380,6 @@ function getFoldExtremaFromWaveform(samples, settings) {
 
   const coveredSampleCount = sawFirstCrossing ? samples.length - coveredStartIndex : 0;
   const zeroCrossingDensity = coveredSampleCount > 0 ? zeroCrossingCount / coveredSampleCount : 0;
-  if (window.picaDebug.recordFoldDebug) {
-    const debugFullFolds = (isLastFoldUseful ? allFolds.slice(0, -1) : allFolds).slice(
-      -maxFoldCount,
-    );
-    window.picaDebug.foldAnalyses[window.picaDebug.activeWindowIndex] = {
-      fullFolds: debugFullFolds,
-    };
-  }
 
   return {
     peaks: allPeaks.slice(-maxExtremaPerType),
@@ -432,10 +420,6 @@ function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, ca
       if (!walkedPeriod || walkedPeriod.correlation < settings.minCorr) continue;
       const hzFeature = Math.log2(walkedPeriod.hz / PICA_MIN_HZ);
       const correlationFeature = walkedPeriod.correlation;
-      // const hzFeature = (walkedPeriod.hz - PICA_MIN_HZ) / PICA_MAX_HZ;
-      // const correlationFeature = Math.exp(walkedPeriod.correlation);
-      // const correlationFeature = walkedPeriod.correlation ** 2;
-      // const correlationFeature = (walkedPeriod.correlation - 0.5) / 0.5;
 
       candidates.push({
         type,
@@ -459,7 +443,6 @@ function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, ca
   }
 
   let winningCandidate = null;
-  // TODO (@davidgilbertson): I don't know why we loop a second time here
   for (const candidate of candidates) {
     candidate.weightedScore =
       settings.corrHzRatio * candidate.correlationFeature + candidate.hzFeature;
@@ -473,8 +456,8 @@ function getCandidatesFromExtrema(samples, sampleRate, foldExtrema, settings, ca
   };
 }
 
-function setRejectionReason(analysis) {
-  if (analysis.zeroCrossingCount === 0) {
+function getPitchResult(analysis, settings, hadZeroCrossings) {
+  if (!hadZeroCrossings) {
     return {
       hz: Number.NaN,
       rejectionReason: "no_zero_crossings",
@@ -491,7 +474,7 @@ function setRejectionReason(analysis) {
   if (
     analysis.winningCandidate.type !== "carryForward" &&
     analysis.winningCandidate.comparedRegionMaxAmplitude !== undefined &&
-    analysis.winningCandidate.comparedRegionMaxAmplitude < analysis.settings.minAmp
+    analysis.winningCandidate.comparedRegionMaxAmplitude < settings.minAmp
   ) {
     return {
       hz: Number.NaN,
@@ -501,7 +484,7 @@ function setRejectionReason(analysis) {
 
   if (
     analysis.winningCandidate.type !== "carryForward" &&
-    analysis.winningCandidate.correlation < analysis.settings.minCorr
+    analysis.winningCandidate.correlation < settings.minCorr
   ) {
     return {
       hz: Number.NaN,
@@ -513,6 +496,17 @@ function setRejectionReason(analysis) {
     hz: analysis.winningCandidate.hz,
     rejectionReason: null,
   };
+}
+
+function writePicaDebug(analysis, rejectionReason) {
+  const winningCandidate = analysis.winningCandidate;
+
+  window.picaDebug.rejectionReason = rejectionReason;
+  window.picaDebug.winningType = winningCandidate?.type ?? null;
+  window.picaDebug.winningHz = winningCandidate?.hz ?? Number.NaN;
+  window.picaDebug.winningPeriodSize = winningCandidate?.periodSize ?? Number.NaN;
+  window.picaDebug.winningCorrelation = winningCandidate?.correlation ?? Number.NaN;
+  window.picaDebug.zeroCrossingDensity = analysis.foldExtrema.zeroCrossingDensity ?? Number.NaN;
 }
 
 function getCarryForwardCandidate(samples, sampleRate, settings, priorStep, cache = null) {
@@ -555,26 +549,19 @@ export function getPicaPitchAnalysisFromWaveform(samples, sampleRate, settings, 
     maxAmplitudeFromRight: undefined,
     walkedPeriodByPeriodSize: new Map(),
   };
-  const { zeroCrossingCount, maxAmplitude } = getWindowStats(samples);
-  const analysis = {
-    settings,
-    zeroCrossingCount,
-    maxAmplitude,
-    foldExtrema: {
-      peaks: [],
-      troughs: [],
-      coveredSampleCount: 0,
-      zeroCrossingDensity: 0,
-    },
-    candidates: [],
-    winningCandidate: null,
-  };
+  const { zeroCrossingCount } = getWindowStats(samples);
+  const emptyExtrema = { peaks: [], troughs: [], coveredSampleCount: 0, zeroCrossingDensity: 0 };
 
   if (zeroCrossingCount === 0) {
-    return {
-      ...analysis,
-      ...setRejectionReason(analysis),
+    const result = {
+      foldExtrema: emptyExtrema,
+      candidates: [],
+      winningCandidate: null,
+      suppressedOctaveJumpCount: 0,
+      ...getPitchResult({ winningCandidate: null }, settings, false),
     };
+    writePicaDebug(result, result.rejectionReason);
+    return result;
   }
 
   const priorSuppressedOctaveJumpCount = priorStep?.suppressedOctaveJumpCount ?? 0;
@@ -586,7 +573,7 @@ export function getPicaPitchAnalysisFromWaveform(samples, sampleRate, settings, 
 
   // If there's no carry forward result, we do a full search
   const extrema = carryForwardCandidate
-    ? { peaks: [], troughs: [], coveredSampleCount: 0, zeroCrossingDensity: 0 }
+    ? emptyExtrema
     : getFoldExtremaFromWaveform(samples, settings);
   const { candidates, winningCandidate } = carryForwardCandidate
     ? {
@@ -631,16 +618,16 @@ export function getPicaPitchAnalysisFromWaveform(samples, sampleRate, settings, 
     }
   }
   const completedAnalysis = {
-    ...analysis,
     foldExtrema: extrema,
     candidates,
     winningCandidate: resolvedWinningCandidate,
     suppressedOctaveJumpCount,
   };
-  const picaPitchResult = setRejectionReason(completedAnalysis);
-
-  return {
+  const picaPitchResult = getPitchResult(completedAnalysis, settings, true);
+  const result = {
     ...completedAnalysis,
     ...picaPitchResult,
   };
+  writePicaDebug(result, result.rejectionReason);
+  return result;
 }

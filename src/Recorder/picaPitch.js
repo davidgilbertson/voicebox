@@ -1,7 +1,7 @@
 import { hzToCents } from "../pitchScale.js";
 
 // Smallest peak level that counts as worth analyzing.
-const PICA_MIN_AMP = 0.01;
+const PICA_MIN_AMP = 0;
 // Number of lowest-note periods to keep in each analysis window.
 const PICA_WINDOW_PERIODS = 2;
 // Maximum recent zero-crossing folds to inspect for candidates.
@@ -14,15 +14,8 @@ const PICA_CORR_SAMPLE_POINTS = 50;
 const PICA_MAX_WALK_STEPS = 60;
 // Weight of correlation relative to octave position when ranking candidates.
 const PICA_CORRELATION_TO_HZ_WEIGHT_RATIO = 250;
-// Minimum correlation required for a fresh non-carry PICA candidate.
-const PICA_MIN_CORR = 0.5;
-// Minimum correlation required for carry-forward to continue.
-const PICA_MIN_CARRY_CORR = 0.2;
-// Maximum consecutive carry-forward hops before forcing a fresh search.
-const PICA_MAX_CARRY_RUN = 10;
-// Fresh predictions required after a gap before carry-forward can start.
-const CARRY_FORWARD_WARMUP_STEPS = 5;
-const MAX_SUPPRESSED_OCTAVE_JUMP_RUN = 2;
+// Minimum correlation required for a PICA candidate.
+const PICA_MIN_CORR = 0.4;
 
 export function getPicaWindowSampleCount(sampleRate, minHz) {
   return Math.max(1, Math.ceil((PICA_WINDOW_PERIODS * sampleRate) / minHz));
@@ -180,90 +173,104 @@ function getRefinedPitchHz(samples, periodSize, sampleRate, cache) {
   return sampleRate / (periodSize + offset);
 }
 
-function getWalkedPeriod(
-  samples,
-  seedPeriodSize,
-  sampleRate,
-  minHz,
-  maxHz,
-  mode = "candidateSearch",
-  cache,
-) {
+function getWalkedPeriod(samples, seedPeriodSize, sampleRate, minHz, maxHz, cache) {
   const cachedWalkedPeriod = cache.walkedPeriodByPeriodSize.get(seedPeriodSize);
   if (cachedWalkedPeriod !== undefined) {
-    if (
-      mode !== "carryForward" &&
-      cachedWalkedPeriod &&
-      cachedWalkedPeriod.comparedRegionMaxAmplitude === undefined
-    ) {
-      cachedWalkedPeriod.comparedRegionMaxAmplitude = getComparedRegionMaxAmplitude(
-        samples,
-        cachedWalkedPeriod.periodSize,
-        cache,
-      );
-    }
     return cachedWalkedPeriod;
   }
 
   let bestPeriodSize = seedPeriodSize;
   let bestCorrelation = getCorrelation(samples, seedPeriodSize, cache);
-  const visitedPeriodSizes = [seedPeriodSize];
+  let currentPeriodSize = bestPeriodSize;
+  let currentCorrelation = bestCorrelation;
+  let phase = "getDirection";
+  let direction = 0;
 
   let step = 0;
   while (step < PICA_MAX_WALK_STEPS) {
-    const walkStepSize = bestPeriodSize % 2 === 0 ? 2 : 1;
-    let lowerPeriodSize = bestPeriodSize - walkStepSize;
-    let higherPeriodSize = bestPeriodSize + walkStepSize;
-    let lowerCorrelation =
-      lowerPeriodSize > 0 ? getCorrelation(samples, lowerPeriodSize, cache) : -1;
-    let higherCorrelation = getCorrelation(samples, higherPeriodSize, cache);
+    if (phase === "getDirection") {
+      // First find the local uphill direction, then snap onto the nearest stride lane.
+      const lowerPeriodSize = bestPeriodSize - 2;
+      const higherPeriodSize = bestPeriodSize + 2;
+      const lowerCorrelation = getCorrelation(samples, lowerPeriodSize, cache);
+      const higherCorrelation = getCorrelation(samples, higherPeriodSize, cache);
 
-    if (lowerCorrelation <= bestCorrelation && higherCorrelation <= bestCorrelation) {
-      lowerPeriodSize = bestPeriodSize - 1;
-      higherPeriodSize = bestPeriodSize + 1;
-      lowerCorrelation = lowerPeriodSize > 0 ? getCorrelation(samples, lowerPeriodSize, cache) : -1;
-      higherCorrelation = getCorrelation(samples, higherPeriodSize, cache);
       if (lowerCorrelation <= bestCorrelation && higherCorrelation <= bestCorrelation) {
         break;
       }
+
+      direction = higherCorrelation > lowerCorrelation ? 1 : -1;
+      currentPeriodSize =
+        direction > 0
+          ? bestPeriodSize % 4 === 0
+            ? bestPeriodSize + 4
+            : Math.ceil(bestPeriodSize / 4) * 4
+          : bestPeriodSize % 4 === 0
+            ? bestPeriodSize - 4
+            : Math.floor(bestPeriodSize / 4) * 4;
+      currentCorrelation = getCorrelation(samples, currentPeriodSize, cache);
+
+      if (currentCorrelation > bestCorrelation) {
+        bestPeriodSize = currentPeriodSize;
+        bestCorrelation = currentCorrelation;
+      }
+
+      phase = "walk";
+      step += 1;
+      continue;
     }
 
-    if (higherCorrelation > lowerCorrelation) {
-      bestPeriodSize = higherPeriodSize;
-      bestCorrelation = higherCorrelation;
-    } else {
-      bestPeriodSize = lowerPeriodSize;
-      bestCorrelation = lowerCorrelation;
+    if (phase === "walk") {
+      // Once we're on the lane, keep walking in stride steps while correlation improves.
+      const nextPeriodSize = currentPeriodSize + direction * 4;
+      const nextCorrelation = getCorrelation(samples, nextPeriodSize, cache);
+
+      if (nextCorrelation > currentCorrelation) {
+        currentPeriodSize = nextPeriodSize;
+        currentCorrelation = nextCorrelation;
+        bestPeriodSize = nextPeriodSize;
+        bestCorrelation = nextCorrelation;
+        step += 1;
+        continue;
+      }
+
+      currentPeriodSize = nextPeriodSize;
+      currentCorrelation = nextCorrelation;
+      phase = "walkBack";
+      step += 1;
+      continue;
     }
-    visitedPeriodSizes.push(bestPeriodSize);
-    step += 1;
+
+    // When the stride walk overshoots, walk back one-by-one to find the exact peak.
+    const nextPeriodSize = currentPeriodSize - direction;
+    const nextCorrelation = getCorrelation(samples, nextPeriodSize, cache);
+
+    if (nextCorrelation > currentCorrelation) {
+      currentPeriodSize = nextPeriodSize;
+      currentCorrelation = nextCorrelation;
+      if (nextCorrelation > bestCorrelation) {
+        bestPeriodSize = nextPeriodSize;
+        bestCorrelation = nextCorrelation;
+      }
+      step += 1;
+      continue;
+    }
+
+    break;
   }
 
   const refinedHz = getRefinedPitchHz(samples, bestPeriodSize, sampleRate, cache);
   const walkedPeriod =
     refinedHz < minHz || refinedHz > maxHz
       ? null
-      : mode === "carryForward"
-        ? {
-            periodSize: bestPeriodSize,
-            hz: refinedHz,
-            correlation: bestCorrelation,
-          }
-        : {
-            periodSize: bestPeriodSize,
-            hz: refinedHz,
-            correlation: bestCorrelation,
-            comparedRegionMaxAmplitude: getComparedRegionMaxAmplitude(
-              samples,
-              bestPeriodSize,
-              cache,
-            ),
-          };
+      : {
+          periodSize: bestPeriodSize,
+          hz: refinedHz,
+          correlation: bestCorrelation,
+          comparedRegionMaxAmplitude: getComparedRegionMaxAmplitude(samples, bestPeriodSize, cache),
+        };
 
-  for (const periodSize of visitedPeriodSizes) {
-    cache.walkedPeriodByPeriodSize.set(periodSize, walkedPeriod);
-  }
-
+  cache.walkedPeriodByPeriodSize.set(seedPeriodSize, walkedPeriod);
   return walkedPeriod;
 }
 
@@ -375,7 +382,6 @@ function getCandidatesFromExtrema(samples, sampleRate, minHz, maxHz, foldExtrema
         sampleRate,
         minHz,
         maxHz,
-        "candidateSearch",
         cache,
       );
       if (
@@ -402,75 +408,11 @@ function getCandidatesFromExtrema(samples, sampleRate, minHz, maxHz, foldExtrema
   return winningCandidate;
 }
 
-function getCarryForwardCandidate(samples, sampleRate, minHz, maxHz, priorStep, cache) {
-  if (
-    !Number.isFinite(priorStep?.hz) ||
-    !Number.isFinite(priorStep?.correlation) ||
-    priorStep.fullPredictionCountSinceLastNaN < CARRY_FORWARD_WARMUP_STEPS ||
-    priorStep.carryForwardRunLength >= PICA_MAX_CARRY_RUN ||
-    priorStep.correlation <= PICA_MIN_CARRY_CORR
-  ) {
-    return null;
-  }
-
-  const sourcePeriodSize = Math.round(sampleRate / priorStep.hz);
-  const walkedPeriod = getWalkedPeriod(
-    samples,
-    sourcePeriodSize,
-    sampleRate,
-    minHz,
-    maxHz,
-    "carryForward",
-    cache,
-  );
-  if (!walkedPeriod || walkedPeriod.correlation <= PICA_MIN_CARRY_CORR) {
-    return null;
-  }
-
-  return {
-    type: "carryForward",
-    hz: walkedPeriod.hz,
-    correlation: walkedPeriod.correlation,
-  };
-}
-
-export function isLargePicaPitchJump(priorHz, nextHz) {
-  if (!Number.isFinite(priorHz) || !Number.isFinite(nextHz) || priorHz <= 0 || nextHz <= 0) {
-    return false;
-  }
-
-  return nextHz / priorHz > 1.8 || priorHz / nextHz > 1.8;
-}
-
-function getPriorStep(result, priorStep) {
-  if (!Number.isFinite(result?.hz) || !Number.isFinite(result?.correlation)) {
-    return {
-      hz: Number.NaN,
-      correlation: Number.NaN,
-      carryForwardRunLength: 0,
-      fullPredictionCountSinceLastNaN: 0,
-      suppressedOctaveJumpCount: 0,
-    };
-  }
-  return {
-    hz: result.hz,
-    correlation: result.correlation,
-    carryForwardRunLength:
-      result.type === "carryForward" ? (priorStep?.carryForwardRunLength ?? 0) + 1 : 0,
-    fullPredictionCountSinceLastNaN:
-      result.type === "carryForward"
-        ? (priorStep?.fullPredictionCountSinceLastNaN ?? 0)
-        : (priorStep?.fullPredictionCountSinceLastNaN ?? 0) + 1,
-    suppressedOctaveJumpCount: result.suppressedOctaveJumpCount ?? 0,
-  };
-}
-
-function getPicaPitchResultFromSamples(samples, sampleRate, minHz, maxHz, priorStep) {
+function getPicaPitchResultFromSamples(samples, sampleRate, minHz, maxHz) {
   const { zeroCrossingCount, maxAmplitude } = getWindowStats(samples);
   if (maxAmplitude < PICA_MIN_AMP || zeroCrossingCount === 0) {
     return {
       cents: Number.NaN,
-      priorStep: null,
     };
   }
 
@@ -479,78 +421,25 @@ function getPicaPitchResultFromSamples(samples, sampleRate, minHz, maxHz, priorS
     maxAmplitudeFromRight: null,
     walkedPeriodByPeriodSize: new Map(),
   };
-  const priorSuppressedOctaveJumpCount = priorStep?.suppressedOctaveJumpCount ?? 0;
-  // Carry-forward is temporarily disabled while we refine the base algorithm.
-  // After we suppress an octave slip, force at least one fresh full search before
-  // the cheap carry-forward shortcut can win again.
-  let winningCandidate = null;
-  // let winningCandidate =
-  //   priorSuppressedOctaveJumpCount > 0
-  //     ? null
-  //     : getCarryForwardCandidate(samples, sampleRate, minHz, maxHz, priorStep, cache);
-  if (!winningCandidate) {
-    winningCandidate = getCandidatesFromExtrema(
-      samples,
-      sampleRate,
-      minHz,
-      maxHz,
-      getFoldExtremaFromWaveform(samples),
-      cache,
-    );
-  }
-
-  let suppressedOctaveJumpCount = 0;
-  if (
-    !winningCandidate?.type &&
-    Number.isFinite(winningCandidate?.hz) &&
-    Number.isFinite(priorStep?.hz) &&
-    isLargePicaPitchJump(priorStep.hz, winningCandidate.hz)
-  ) {
-    // Carry-forward is temporarily disabled while we refine the base algorithm.
-    // const sourcePeriodSize = Math.round(sampleRate / priorStep.hz);
-    // const walkedPeriod = getWalkedPeriod(
-    //   samples,
-    //   sourcePeriodSize,
-    //   sampleRate,
-    //   minHz,
-    //   maxHz,
-    //   "carryForward",
-    //   cache,
-    // );
-    // A short-lived fallback catches obvious octave slips without letting carry-forward
-    // mask a real note change for long.
-    // if (walkedPeriod && priorSuppressedOctaveJumpCount < MAX_SUPPRESSED_OCTAVE_JUMP_RUN) {
-    //   winningCandidate = {
-    //     type: "carryForward",
-    //     hz: walkedPeriod.hz,
-    //     correlation: walkedPeriod.correlation,
-    //   };
-    //   suppressedOctaveJumpCount = priorSuppressedOctaveJumpCount + 1;
-    // }
-  }
-
-  const nextPriorStep = getPriorStep(
-    winningCandidate
-      ? {
-          ...winningCandidate,
-          suppressedOctaveJumpCount,
-        }
-      : winningCandidate,
-    priorStep,
+  const winningCandidate = getCandidatesFromExtrema(
+    samples,
+    sampleRate,
+    minHz,
+    maxHz,
+    getFoldExtremaFromWaveform(samples),
+    cache,
   );
 
   return {
     cents: winningCandidate ? hzToCents(winningCandidate.hz) : Number.NaN,
-    priorStep: nextPriorStep,
   };
 }
 
-export function getPicaPitchResult(samples, sampleRate, minHz, maxHz, priorStep = null) {
+export function getPicaPitchResult(samples, sampleRate, minHz, maxHz) {
   if (samples.length < 2) {
     return {
       cents: Number.NaN,
-      priorStep: null,
     };
   }
-  return getPicaPitchResultFromSamples(samples, sampleRate, minHz, maxHz, priorStep);
+  return getPicaPitchResultFromSamples(samples, sampleRate, minHz, maxHz);
 }
