@@ -132,6 +132,7 @@ export class RecordingEngine {
       runAt30Fps: config.runAt30Fps,
       highResSpectrogram: config.highResSpectrogram,
       usePica: config.usePica,
+      smoothing: config.smoothing,
       pitchRange: {
         minHz: noteNameToHz(config.pitchMinNote),
         maxHz: noteNameToHz(config.pitchMaxNote),
@@ -213,6 +214,7 @@ export class RecordingEngine {
         volumeTracking: this.volumeTracking,
         lineStrengthEma: this.state.lineStrengthEma,
         autoPauseOnSilence: this.state.autoPauseOnSilence,
+        smoothing: this.state.smoothing,
         skipNextSpectrumFrame: this.state.skipNextSpectrumFrame,
         usePica: this.state.usePica,
       },
@@ -535,6 +537,7 @@ export class RecordingEngine {
     runAt30Fps,
     highResSpectrogram,
     usePica,
+    smoothing,
     minVolumeThreshold,
     pitchMinNote,
     pitchMaxNote,
@@ -554,6 +557,9 @@ export class RecordingEngine {
     }
     if (typeof usePica === "boolean") {
       this.state.usePica = usePica;
+    }
+    if (typeof smoothing === "boolean") {
+      this.state.smoothing = smoothing;
     }
     if (Number.isFinite(minVolumeThreshold) && minVolumeThreshold > 0) {
       this.state.minVolumeThreshold = minVolumeThreshold;

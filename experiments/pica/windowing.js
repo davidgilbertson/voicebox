@@ -5,7 +5,7 @@
 // Window index 0 is sample 600, matching the saved JSON label files after their leading placeholder is removed.
 // The sequence stops early enough that FFT still has a full 4096-sample history available when it needs it.
 // `timeSec` is only a chart axis derived from those sample positions.
-export const WINDOWS_PER_SECOND = 80;
+export const WINDOWS_PER_SECOND = 80; // Can't change this now, it's tied to the 'actual' values
 export const FFT_WINDOW_SAMPLES = 4096;
 export const E1_HZ = 41.20344461410875;
 export const DETECTOR_WINDOW_CYCLES = 2;

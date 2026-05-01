@@ -37,6 +37,7 @@ test("readConfig groups persisted values for initial app initialization", () => 
       spectrogramMinHz: 30,
       spectrogramMaxHz: 11_000,
       usePica: false,
+      smoothing: true,
     },
     scales: {
       bpm: 320,

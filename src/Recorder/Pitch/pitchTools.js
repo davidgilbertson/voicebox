@@ -24,7 +24,7 @@ const WAVEFORM_LINE_COLOR = colors.blue[400];
 const LABEL_X = 4;
 const PLOT_LEFT = 21;
 const PLOT_Y_INSET = 5;
-const UNSTABLE_TAIL_ALPHAS = [0.8, 0.7, 0.6, 0.5, 0.4, 0.3];
+const UNSTABLE_TAIL_ALPHAS = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.15, 0.1];
 
 export class PitchChartRenderer {
   constructor({ minCents, maxCents, lineColorMode, renderScale }) {

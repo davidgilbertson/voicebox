@@ -22,6 +22,15 @@ const PITCH_OCTAVE_TICKS = [
   { hz: 523.251, label: "C5" },
   { hz: 1046.502, label: "C6" },
 ].filter((tick) => tick.hz >= PICA_MIN_HZ && tick.hz <= PICA_MAX_HZ);
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const CORRELATION_HEATMAP_MIN_OCTAVE =
+  Math.floor((69 + 12 * Math.log2(PICA_MIN_HZ / 440)) / 12) - 1;
+const CORRELATION_HEATMAP_MAX_OCTAVE =
+  Math.floor((69 + 12 * Math.log2(PICA_MAX_HZ / 440)) / 12) - 1;
+const CORRELATION_HEATMAP_OCTAVES = Array.from(
+  { length: CORRELATION_HEATMAP_MAX_OCTAVE - CORRELATION_HEATMAP_MIN_OCTAVE + 1 },
+  (_, index) => CORRELATION_HEATMAP_MIN_OCTAVE + index,
+);
 const SELECTED_METHODS_STORAGE_KEY = "vb.exp.selectedMethods";
 
 export function readStoredSelectedMethods() {
@@ -128,10 +137,12 @@ function getPicaCorrelationSeries(samples, sampleRate, settings, picaAnalysis) {
   };
   const hz = [];
   const correlation = [];
+  const periodSizes = [];
   const minPeriodSize = Math.max(1, Math.ceil(sampleRate / PICA_MAX_HZ));
   const maxPeriodSize = Math.max(minPeriodSize, Math.floor(sampleRate / PICA_MIN_HZ));
 
   for (let periodSize = maxPeriodSize; periodSize >= minPeriodSize; periodSize -= 1) {
+    periodSizes.push(periodSize);
     hz.push(sampleRate / periodSize);
     correlation.push(getCorrelation(samples, periodSize, settings, cache));
   }
@@ -139,14 +150,24 @@ function getPicaCorrelationSeries(samples, sampleRate, settings, picaAnalysis) {
   return {
     minHz: PICA_MIN_HZ,
     maxHz: PICA_MAX_HZ,
+    periodSizes,
     hz,
     correlation,
     checkedHz: (picaAnalysis?.candidates ?? []).map((candidate) => candidate.hz),
     checkedCorrelation: (picaAnalysis?.candidates ?? []).map((candidate) => candidate.correlation),
+    checkedPeriodSizes: (picaAnalysis?.candidates ?? []).map((candidate) => candidate.periodSize),
     markerHz: picaAnalysis?.winningCandidate?.hz ?? Number.NaN,
     chartLabel: "PICA",
     chartTitle: "Correlation",
     checkedLabel: "Candidates",
+  };
+}
+
+function getPitchGridPoint(hz) {
+  const midi = Math.round(69 + 12 * Math.log2(hz / 440));
+  return {
+    noteName: NOTE_NAMES[((midi % 12) + 12) % 12],
+    octave: Math.floor(midi / 12) - 1,
   };
 }
 
@@ -934,6 +955,113 @@ async function renderHistogram(plotly, correlationSeries, actualPitchHz, onActua
   });
 }
 
+async function renderCorrelationHeatmap(plotly, correlationSeries, actualPitchHz) {
+  const heatmapElement = document.getElementById("correlationHeatmapChart");
+  if (!heatmapElement) return;
+
+  const z = CORRELATION_HEATMAP_OCTAVES.map(() => NOTE_NAMES.map(() => null));
+  const customdata = CORRELATION_HEATMAP_OCTAVES.map(() => NOTE_NAMES.map(() => null));
+
+  for (let index = 0; index < correlationSeries.hz.length; index += 1) {
+    const hz = correlationSeries.hz[index];
+    const score = correlationSeries.correlation[index];
+    if (!Number.isFinite(hz) || !Number.isFinite(score)) continue;
+
+    const { noteName, octave } = getPitchGridPoint(hz);
+    const yIndex = CORRELATION_HEATMAP_OCTAVES.indexOf(octave);
+    const xIndex = NOTE_NAMES.indexOf(noteName);
+    if (yIndex < 0 || xIndex < 0) continue;
+    if (z[yIndex][xIndex] !== null && score <= z[yIndex][xIndex]) continue;
+
+    z[yIndex][xIndex] = score;
+    customdata[yIndex][xIndex] = [hz, correlationSeries.periodSizes[index]];
+  }
+
+  const candidatePoints = correlationSeries.checkedHz
+    .filter((hz) => Number.isFinite(hz))
+    .map((hz) => ({
+      ...getPitchGridPoint(hz),
+      hz,
+    }));
+  const actualPoint = Number.isFinite(actualPitchHz)
+    ? {
+        ...getPitchGridPoint(actualPitchHz),
+        hz: actualPitchHz,
+      }
+    : null;
+
+  await plotly.newPlot(
+    "correlationHeatmapChart",
+    [
+      {
+        x: NOTE_NAMES,
+        y: CORRELATION_HEATMAP_OCTAVES,
+        z,
+        customdata,
+        type: "heatmap",
+        colorscale: "Viridis",
+        zmin: 0,
+        zmax: 1,
+        colorbar: {
+          title: "score",
+          tickfont: { color: "#e2e8f0" },
+        },
+        hovertemplate:
+          "%{x}%{y}<br>Hz=%{customdata[0]:.2f}<br>period=%{customdata[1]}<br>score=%{z:.3f}<extra></extra>",
+        name: "Correlation",
+      },
+      {
+        x: candidatePoints.map((point) => point.noteName),
+        y: candidatePoints.map((point) => point.octave),
+        customdata: candidatePoints.map((point) => [point.hz]),
+        type: "scatter",
+        mode: "markers",
+        marker: {
+          color: "rgba(255, 255, 255, 0.95)",
+          size: 7,
+          line: { color: "rgba(15, 23, 42, 0.8)", width: 1 },
+        },
+        hovertemplate: "Candidate %{customdata[0]:.2f} Hz<extra></extra>",
+        name: correlationSeries.checkedLabel ?? "Candidates",
+      },
+      {
+        x: actualPoint ? [actualPoint.noteName] : [],
+        y: actualPoint ? [actualPoint.octave] : [],
+        customdata: actualPoint ? [[actualPoint.hz]] : [],
+        type: "scatter",
+        mode: "markers",
+        marker: {
+          color: "rgba(74, 222, 128, 0.98)",
+          size: 11,
+          line: { color: "rgba(15, 23, 42, 0.95)", width: 1.5 },
+        },
+        hovertemplate: "Actual %{customdata[0]:.2f} Hz<extra></extra>",
+        name: "Actual",
+      },
+    ],
+    {
+      title: "Correlation Heatmap",
+      paper_bgcolor: "#050505",
+      plot_bgcolor: "#050505",
+      font: { color: "#e2e8f0" },
+      margin: { l: 52, r: 52, t: 54, b: 76 },
+      xaxis: {
+        title: "note",
+        fixedrange: true,
+        showgrid: false,
+      },
+      yaxis: {
+        title: "octave",
+        fixedrange: true,
+        dtick: 1,
+        gridcolor: "#1f2937",
+      },
+      legend: getBottomLegend(),
+    },
+    { responsive: true },
+  );
+}
+
 async function renderSlopePeakChart(plotly, correlationSeries) {
   if (!document.getElementById("slopePeakChart")) return;
 
@@ -1044,6 +1172,36 @@ async function renderDisabledHistogram(plotly) {
           xref: "paper",
           yref: "paper",
           text: "Enable PICA or PISC to inspect correlation details.",
+          showarrow: false,
+          font: { color: "#94a3b8", size: 14 },
+        },
+      ],
+    },
+    { responsive: true },
+  );
+}
+
+async function renderDisabledCorrelationHeatmap(plotly) {
+  if (!document.getElementById("correlationHeatmapChart")) return;
+
+  await plotly.newPlot(
+    "correlationHeatmapChart",
+    [],
+    {
+      title: "Correlation Heatmap",
+      paper_bgcolor: "#050505",
+      plot_bgcolor: "#050505",
+      font: { color: "#e2e8f0" },
+      margin: { l: 52, r: 52, t: 54, b: 76 },
+      xaxis: { visible: false },
+      yaxis: { visible: false },
+      annotations: [
+        {
+          x: 0.5,
+          y: 0.5,
+          xref: "paper",
+          yref: "paper",
+          text: "Enable PICA or PISC to inspect pitch-class correlation.",
           showarrow: false,
           font: { color: "#94a3b8", size: 14 },
         },
@@ -1658,9 +1816,15 @@ export async function renderPicaPitchCharts(result, options = {}) {
             }
           : undefined,
       );
+      await renderCorrelationHeatmap(
+        plotly,
+        correlationSeries,
+        getResolvedActualPitchHz(activeWindowIndex),
+      );
       await renderSlopePeakChart(plotly, correlationSeries);
     } else {
       await renderDisabledHistogram(plotly);
+      await renderDisabledCorrelationHeatmap(plotly);
       await renderDisabledSlopePeakChart(plotly);
     }
     if (typeof onWindowSelect === "function") {

@@ -22,14 +22,7 @@ const ASSET_FILES = [
   "opera-vocals_129bpm_F_minor.wav",
   "rozette_vibrato.wav",
   "missed-low-notes.wav",
-  "voicebox-last-6-seconds-2026-03-20-0607.wav",
-  "voicebox-last-6-seconds-2026-03-23-0606.wav", // High gap
-  "voicebox-last-6-seconds-2026-03-23-0608.wav", // Octave down errors
-  "voicebox-last-6-seconds-2026-03-23-0623.wav", // Good god
-  "voicebox-last-6-seconds-2026-03-23-0652.wav", // Errors
-  "voicebox-last-6-seconds-2026-03-24-2033.wav", // Errors
-  "voicebox-last-18-seconds-2026-03-25-1815.wav", // Errors
-  "voicebox-last-6-seconds-2026-03-26-0632.wav", // Errors
+  "voicebox-last-6-seconds-2026-04-27-0614.wav", // Errors
 ];
 
 function bytesToBase64(bytes) {

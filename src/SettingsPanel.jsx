@@ -51,6 +51,8 @@ export default function SettingsPanel({
   onSpectrogramMaxHzChange,
   usePica,
   onUsePicaChange,
+  smoothing,
+  onSmoothingChange,
   batteryUsagePerMinute,
   showRecorderShare,
 }) {
@@ -220,6 +222,20 @@ export default function SettingsPanel({
               className={settingsCheckboxClass}
             />
           </label>
+          {developerMode ? (
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <div className="flex flex-col gap-1">
+                <span>Smoothing</span>
+                <span className="text-xs text-slate-400">Smooth the pitch line.</span>
+              </div>
+              <input
+                type="checkbox"
+                checked={smoothing}
+                onChange={(event) => onSmoothingChange(event.target.checked)}
+                className={settingsCheckboxClass}
+              />
+            </label>
+          ) : null}
           <div className="flex items-start justify-between gap-4 text-sm">
             <div className="flex flex-col gap-1">
               <span>Calibrate microphone</span>

@@ -11,6 +11,7 @@ import {
   readMinVolumeThreshold,
   readPitchLineColorMode,
   readRunAt30Fps,
+  readSmoothing,
   readSpectrogramMaxHz,
   readSpectrogramMinHz,
 } from "../../src/Recorder/config.js";
@@ -40,6 +41,7 @@ test("settings defaults and persistence work via localStorage", async () => {
   expect(runAt30FpsCheckbox).not.toBeChecked();
   expect(halfResolutionCanvasCheckbox).not.toBeChecked();
   expect(halfResolutionSpectrogramCheckbox).not.toBeChecked();
+  expect(screen.queryByRole("checkbox", { name: /Smoothing/i })).toBeNull();
 
   await user.click(runAt30FpsCheckbox);
   expect(runAt30FpsCheckbox).toBeChecked();
@@ -246,7 +248,14 @@ test("developer mode unlocks after four quick taps on the settings heading and c
 
   expect(screen.getByRole("button", { name: "Exit dev mode" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "/debug" })).toHaveAttribute("href", "/debug");
+  const smoothingCheckbox = screen.getByRole("checkbox", { name: /Smoothing/i });
+  expect(smoothingCheckbox).toBeChecked();
   expect(readAppDeveloperMode()).toBe(true);
+
+  await user.click(smoothingCheckbox);
+  await waitFor(() => {
+    expect(readSmoothing()).toBe(false);
+  });
 
   await user.click(screen.getByRole("button", { name: "Exit dev mode" }));
 

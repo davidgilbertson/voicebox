@@ -205,6 +205,21 @@ test("display smoothing finalizes index i-3 as new samples arrive", () => {
   assert.equal(Number(display[3].toFixed(2)), 3.8);
 });
 
+test("display smoothing can be disabled", () => {
+  const state = createState();
+  const series = [0, 0, 0, 10, 0, 0, 0, 0];
+  for (const cents of series) {
+    processPitchSample(state, {
+      cents,
+      lineStrength: 0.5,
+      smoothing: false,
+    });
+  }
+
+  const display = orderedDisplayValues(state);
+  assert.equal(display[3], 10);
+});
+
 test("display smoothing keeps raw value when smoothing window has NaN", () => {
   const state = createState();
   const series = [0, 0, 0, 10, 0, Number.NaN, 0];
@@ -218,6 +233,17 @@ test("display smoothing keeps raw value when smoothing window has NaN", () => {
 
   const display = orderedDisplayValues(state);
   assert.equal(display[3], 10);
+});
+
+test("display smoothing recomputes values affected by cleaned octave errors", () => {
+  const state = createState();
+  writeSeries(state, [0, 0, 0, 0, 0, 1200, 1200, 1200, 1200, 1200, 0, 0, 0, 0]);
+
+  assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(
+    roundSeries(orderedDisplayValues(state)),
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  );
 });
 
 test("1 outlier in last 3 is replaced with the anchor mean", () => {

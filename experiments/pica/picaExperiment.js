@@ -100,10 +100,16 @@ function getPitchAccuracy(actualPitchHz, predictedPitchHz) {
 
   for (let windowIndex = 0; windowIndex < actualPitchHz.length; windowIndex += 1) {
     const actualHz = actualPitchHz[windowIndex];
-    if (!Number.isFinite(actualHz)) continue;
-    comparedCount += 1;
-
     const predictedHz = predictedPitchHz[windowIndex];
+
+    if (!Number.isFinite(actualHz)) {
+      if (Number.isFinite(predictedHz)) {
+        comparedCount += 1;
+      }
+      continue;
+    }
+
+    comparedCount += 1;
     if (
       Number.isFinite(predictedHz) &&
       getCentsDifference(predictedHz, actualHz) <= PICA_ACCURACY_CENTS

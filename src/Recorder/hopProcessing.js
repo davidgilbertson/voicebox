@@ -164,6 +164,7 @@ function processHopPitch({
   volumeTracking,
   lineStrengthEma,
   autoPauseOnSilence,
+  smoothing,
   pitchRange,
   spectrumForPitchDetection,
   usePica,
@@ -207,6 +208,7 @@ function processHopPitch({
   nextLineStrengthEma = smoothedLineStrength;
   pitchWriteResult = processPitchSample(processingState, {
     autoPauseOnSilence,
+    smoothing,
     hasSignal: isAboveSilenceThreshold,
     cents,
     lineStrength: smoothedLineStrength,
@@ -235,6 +237,7 @@ export function processOneAudioHop({ engineState, hopState }) {
     volumeTracking,
     lineStrengthEma,
     autoPauseOnSilence,
+    smoothing,
     skipNextSpectrumFrame,
     usePica,
   } = engineState;
@@ -280,6 +283,7 @@ export function processOneAudioHop({ engineState, hopState }) {
     volumeTracking: activeVolumeTracking,
     lineStrengthEma,
     autoPauseOnSilence,
+    smoothing,
     processingState,
     audioSessionState,
     rawAudioState,

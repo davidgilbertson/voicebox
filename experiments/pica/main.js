@@ -212,14 +212,19 @@ function scheduleChartResize() {
       if (resizeToken !== pendingChartResizeToken) return;
       const plotly = globalThis.Plotly;
       if (!plotly?.Plots?.resize) return;
-      ["pitchChart", "waveformChart", "harmonicChart", "slopePeakChart", "foldChart"].forEach(
-        (chartId) => {
-          const chart = document.getElementById(chartId);
-          if (chart) {
-            plotly.Plots.resize(chart);
-          }
-        },
-      );
+      [
+        "pitchChart",
+        "waveformChart",
+        "harmonicChart",
+        "correlationHeatmapChart",
+        "slopePeakChart",
+        "foldChart",
+      ].forEach((chartId) => {
+        const chart = document.getElementById(chartId);
+        if (chart) {
+          plotly.Plots.resize(chart);
+        }
+      });
     });
   });
 }

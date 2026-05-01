@@ -16,6 +16,7 @@ const MIN_VOLUME_THRESHOLD_STORAGE_KEY = "voicebox.minVolumeThreshold";
 const SPECTROGRAM_MIN_HZ_STORAGE_KEY = "voicebox.spectrogramMinHz";
 const SPECTROGRAM_MAX_HZ_STORAGE_KEY = "voicebox.spectrogramMaxHz";
 const USE_PICA_STORAGE_KEY = "voicebox.usePica";
+const SMOOTHING_STORAGE_KEY = "voicebox.smoothing";
 
 // Developer-changeable tuning and defaults.
 // The FFT_SIZE trade-off:
@@ -44,6 +45,7 @@ const RUN_AT_30_FPS_DEFAULT = false;
 const HALF_RESOLUTION_CANVAS_DEFAULT = false;
 const HIGH_RES_SPECTROGRAM_DEFAULT = true;
 const USE_PICA_DEFAULT = false;
+const SMOOTHING_DEFAULT = true;
 const MAX_VOLUME_DEFAULT = 6;
 export const MIN_VOLUME_THRESHOLD_DEFAULT = 2;
 const PITCH_LINE_COLOR_MODE_SET = new Set(PITCH_LINE_COLOR_MODES.map((item) => item.value));
@@ -106,6 +108,14 @@ export function readUsePica() {
 
 export function writeUsePica(value) {
   ls.set(USE_PICA_STORAGE_KEY, value);
+}
+
+export function readSmoothing() {
+  return ls.get(SMOOTHING_STORAGE_KEY, SMOOTHING_DEFAULT) === true;
+}
+
+export function writeSmoothing(value) {
+  ls.set(SMOOTHING_STORAGE_KEY, value);
 }
 
 export function readPitchMinNote() {

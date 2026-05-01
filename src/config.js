@@ -16,6 +16,7 @@ import {
   readPitchMinNote,
   readPitchLineColorMode,
   readRunAt30Fps,
+  readSmoothing,
   readSpectrogramMaxHz,
   readSpectrogramMinHz,
   readUsePica,
@@ -42,6 +43,7 @@ export function readConfig() {
       spectrogramMinHz: readSpectrogramMinHz(),
       spectrogramMaxHz: readSpectrogramMaxHz(),
       usePica: readUsePica(),
+      smoothing: readSmoothing(),
     },
     scales: {
       bpm: readScaleBpm(),

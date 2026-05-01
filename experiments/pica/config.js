@@ -1,24 +1,20 @@
-import { PICA_METHOD_KEYS } from "./methodRegistry.js";
-
 export const DEFAULT_ASSET_URL = "../../.private/assets/High ah gaps.wav";
 export const RECORD_DURATION_MS = 5000;
 export const PICA_MIN_HZ = 40;
 export const PICA_MAX_HZ = 2200;
-export const PICA_MIN_WINDOW_MAX_AMPLITUDE = 0.01; // TODO (@davidgilbertson): doesn't do much in practice
+export const PICA_MIN_WINDOW_MAX_AMPLITUDE = 0.02;
 export const PICA_ACCURACY_CENTS = 100;
-export const PICA_METHOD_TYPES = PICA_METHOD_KEYS;
 
-export const SIMILARITY_FUNC = "cosine";
 export const PICA_SETTINGS_DEFAULTS = {
   minAmp: PICA_MIN_WINDOW_MAX_AMPLITUDE,
-  minCorr: 0.5,
+  minCorr: 0.6,
   minCarryCorr: 0.5, // TODO (@davidgilbertson): redundant if minCorr stays at 0.5
-  maxCrossingsPerPeriod: 23,
-  maxComparisonPatches: 3,
+  maxCrossingsPerPeriod: 20,
+  maxComparisonPatches: 5,
   corrSamplePoints: 50,
   maxWalkSteps: 60,
   maxCarryRun: 10,
-  corrHzRatio: 250,
+  corrHzRatio: 140,
   widthWindow: 2,
   ampWindow: 0.1,
   cone: 0.005,
@@ -118,7 +114,7 @@ export const PICA_SETTING_FIELDS = [
     label: "corr/hz ratio",
     inputLabel: "corrHzRatio",
     min: 0,
-    step: 0.1,
+    step: 1,
     title: "Correlation feature weight relative to the Hz feature weight of 1.",
     usedWith: ["PICA", "PICACF"],
   },

@@ -1,21 +1,21 @@
 import { hzToCents } from "../pitchScale.js";
 
 // Smallest peak level that counts as worth analyzing.
-const PICA_MIN_AMP = 0;
+const PICA_MIN_AMP = 0.02;
 // Number of lowest-note periods to keep in each analysis window.
 const PICA_WINDOW_PERIODS = 2;
 // Maximum recent zero-crossing folds to inspect for candidates.
-const PICA_MAX_CROSSINGS_PER_PERIOD = 23;
+const PICA_MAX_CROSSINGS_PER_PERIOD = 20;
 // Maximum period-sized patches to compare when scoring correlation.
-const PICA_MAX_COMPARISON_PATCHES = 3;
+const PICA_MAX_COMPARISON_PATCHES = 5;
 // Approximate samples per patch used when estimating correlation.
 const PICA_CORR_SAMPLE_POINTS = 50;
 // Maximum one-sample hill-climb steps when refining a period.
 const PICA_MAX_WALK_STEPS = 60;
 // Weight of correlation relative to octave position when ranking candidates.
-const PICA_CORRELATION_TO_HZ_WEIGHT_RATIO = 250;
+const PICA_CORRELATION_TO_HZ_WEIGHT_RATIO = 140;
 // Minimum correlation required for a PICA candidate.
-const PICA_MIN_CORR = 0.4;
+const PICA_MIN_CORR = 0.6;
 
 export function getPicaWindowSampleCount(sampleRate, minHz) {
   return Math.max(1, Math.ceil((PICA_WINDOW_PERIODS * sampleRate) / minHz));

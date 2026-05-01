@@ -37,7 +37,6 @@ function setCleanupSample(processingState, cleanupWindow, cleanupWindowIndex, ce
   const rawPitchCentsRing = processingState.rawPitchCentsRing;
   const ringIndex = cleanupWindowIndex - cleanupWindow.length;
   rawPitchCentsRing.setAt(ringIndex, cents);
-  processingState.smoothedPitchCentsRing.setAt(ringIndex, cents);
   cleanupWindow[cleanupWindowIndex] = cents;
 }
 
@@ -321,33 +320,47 @@ function adjustOutliers(processingState) {
   }
 }
 
+function smoothAt(processingState, centerOffset) {
+  const rawPitchCentsRing = processingState.rawPitchCentsRing;
+  const centerValue = rawPitchCentsRing.at(centerOffset);
+  processingState.smoothedPitchCentsRing.setAt(centerOffset, centerValue);
+  if (!Number.isFinite(centerValue)) return;
+
+  let smoothedCents = 0;
+  for (let i = 0; i < SMOOTH_KERNEL.length; i += 1) {
+    const sample = rawPitchCentsRing.at(centerOffset - SMOOTH_RADIUS + i);
+    if (!Number.isFinite(sample)) return;
+    smoothedCents += sample * SMOOTH_KERNEL[i];
+  }
+  processingState.smoothedPitchCentsRing.setAt(centerOffset, smoothedCents);
+}
+
 function smooth(processingState) {
   const rawPitchCentsRing = processingState.rawPitchCentsRing;
   if (rawPitchCentsRing.sampleCount < CLEANUP_WINDOW_SIZE) return;
 
-  const cleanupWindow = processingState.cleanupWindow;
-  for (let i = 0; i < cleanupWindow.length; i += 1) {
-    cleanupWindow[i] = rawPitchCentsRing.at(i - cleanupWindow.length);
+  // Cleanup can rewrite recent raw samples after their neighbours were already smoothed.
+  // Recompute the affected centers so octave errors do not survive as smaller blended dips.
+  for (
+    let centerOffset = -(CLEANUP_WINDOW_SIZE + SMOOTH_RADIUS);
+    centerOffset <= -(SMOOTH_RADIUS + 1);
+    centerOffset += 1
+  ) {
+    smoothAt(processingState, centerOffset);
   }
-
-  let smoothed = 0;
-  for (let i = 0; i < cleanupWindow.length; i += 1) {
-    const sample = cleanupWindow[i];
-    if (!Number.isFinite(sample)) return;
-    smoothed += sample * SMOOTH_KERNEL[i];
-  }
-  processingState.smoothedPitchCentsRing.setAt(-(SMOOTH_RADIUS + 1), smoothed);
 }
 
-function pushPitchValue(processingState, value, lineStrength) {
+function pushPitchValue(processingState, value, lineStrength, smoothing) {
   processingState.rawPitchCentsRing.push(value);
   processingState.smoothedPitchCentsRing.push(value);
   processingState.lineStrengthRing.push(lineStrength);
   processingState.vibratoRateHzRing.push(Number.NaN);
   adjustOutliers(processingState);
-  smooth(processingState);
+  if (smoothing) {
+    smooth(processingState);
+  }
   const estimatedRateNow = estimateTimelineVibratoRate({
-    ring: processingState.smoothedPitchCentsRing,
+    ring: processingState.rawPitchCentsRing,
     samplesPerSecond: processingState.columnRateHz,
   });
   processingState.vibratoRateHzRing.setAt(-1, estimatedRateNow ?? Number.NaN);
@@ -360,6 +373,7 @@ export function processPitchSample(
     lineStrength = Number.NaN,
     hasSignal = Number.isFinite(cents),
     autoPauseOnSilence = true,
+    smoothing = true,
   },
 ) {
   if (autoPauseOnSilence) {
@@ -386,7 +400,7 @@ export function processPitchSample(
   const hasPitch = Number.isFinite(cents);
   const value = hasPitch ? cents : Number.NaN;
   const nextLineStrength = hasPitch ? lineStrength : Number.NaN;
-  pushPitchValue(processingState, value, nextLineStrength);
+  pushPitchValue(processingState, value, nextLineStrength, smoothing);
   return { steps: 1, paused: false };
 }
 

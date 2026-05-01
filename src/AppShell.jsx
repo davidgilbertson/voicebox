@@ -21,6 +21,7 @@ import {
   writePitchMinNote,
   writePitchLineColorMode,
   writeRunAt30Fps,
+  writeSmoothing,
   writeSpectrogramMaxHz,
   writeSpectrogramMinHz,
   writeUsePica,
@@ -71,6 +72,7 @@ export default function AppShell({ downloadingUpdate = false }) {
   const [spectrogramMinHz, setSpectrogramMinHz] = useState(() => config.recorder.spectrogramMinHz);
   const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => config.recorder.spectrogramMaxHz);
   const [usePica, setUsePica] = useState(() => config.recorder.usePica);
+  const [smoothing, setSmoothing] = useState(() => config.recorder.smoothing);
   const [batteryUsagePerMinute, setBatteryUsagePerMinute] = useState(null);
   const onScalesPage = activeView === "scales";
   const isLiveHost = document.location.host === "voicebox.dgapps.io";
@@ -157,6 +159,10 @@ export default function AppShell({ downloadingUpdate = false }) {
   }, [usePica]);
 
   useEffect(() => {
+    writeSmoothing(smoothing);
+  }, [smoothing]);
+
+  useEffect(() => {
     recorderEngine.setActiveView(activeView);
   }, [activeView, recorderEngine]);
 
@@ -174,6 +180,7 @@ export default function AppShell({ downloadingUpdate = false }) {
       spectrogramMinHz,
       spectrogramMaxHz,
       usePica,
+      smoothing,
     });
   }, [
     autoPauseOnSilence,
@@ -186,6 +193,7 @@ export default function AppShell({ downloadingUpdate = false }) {
     pitchLineColorMode,
     recorderEngine,
     runAt30Fps,
+    smoothing,
     spectrogramMaxHz,
     spectrogramMinHz,
     usePica,
@@ -438,6 +446,8 @@ export default function AppShell({ downloadingUpdate = false }) {
             onSpectrogramMaxHzChange={onSpectrogramMaxHzChange}
             usePica={usePica}
             onUsePicaChange={setUsePica}
+            smoothing={smoothing}
+            onSmoothingChange={setSmoothing}
             batteryUsagePerMinute={batteryUsagePerMinute}
             showRecorderShare={!onScalesPage}
           />
