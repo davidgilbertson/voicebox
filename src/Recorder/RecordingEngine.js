@@ -32,7 +32,7 @@ import {
 import { getPicaWindowSampleCount } from "./picaPitch.js";
 
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
-const STARTUP_MAX_VOLUME_DECAY_FACTOR = 0.9;
+const STARTUP_MAX_VOLUME_DECAY_FACTOR = 0.95;
 const RAW_AUDIO_SAVE_PICKER_ID = "voicebox-raw-audio";
 let recordingEngineSingleton = null;
 
