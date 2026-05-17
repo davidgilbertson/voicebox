@@ -20,7 +20,11 @@ export default function ScalesPage({
   engine,
 }) {
   const [engineUi, setEngineUi] = useState(() => engine.getUiSnapshot());
-  const [showGestureHelp, setShowGestureHelp] = useState(() => !readScaleGestureHelpDismissed());
+  const [showGestureHelp, setShowGestureHelp] = useState(
+    () =>
+      (window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0) &&
+      !readScaleGestureHelpDismissed(),
+  );
 
   useEffect(() => engine.subscribeUi(setEngineUi), [engine]);
 

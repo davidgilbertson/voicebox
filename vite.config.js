@@ -46,6 +46,18 @@ export default defineConfig(({ mode }) => {
           background_color: "#000",
           icons: [
             {
+              src: "/icon-voice-192.png",
+              sizes: "192x192",
+              type: "image/png",
+              purpose: "any maskable",
+            },
+            {
+              src: "/icon-voice-512.png",
+              sizes: "512x512",
+              type: "image/png",
+              purpose: "any maskable",
+            },
+            {
               src: "/icon-voice.svg",
               sizes: "any",
               type: "image/svg+xml",

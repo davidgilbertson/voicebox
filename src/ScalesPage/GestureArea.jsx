@@ -112,6 +112,11 @@ export default function GestureArea({
   };
 
   const onPointerDownCapture = (event) => {
+    if (event.pointerType !== "touch") {
+      gestureRef.current.pointerId = null;
+      gestureRef.current.handled = false;
+      return;
+    }
     gestureRef.current.pointerId = event.pointerId;
     gestureRef.current.startX = event.clientX;
     gestureRef.current.startY = event.clientY;
