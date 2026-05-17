@@ -15,21 +15,10 @@ const updateViewportHeight = () => {
   );
 };
 
-const updateNextFrame = () => {
-  requestAnimationFrame(updateViewportHeight);
-};
-
 updateViewportHeight();
 installFocusVisibilityPolicy();
 
-window.addEventListener("pageshow", updateNextFrame, { passive: true });
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) updateNextFrame();
-});
 window.visualViewport.addEventListener("resize", updateViewportHeight, {
-  passive: true,
-});
-window.visualViewport.addEventListener("scroll", updateViewportHeight, {
   passive: true,
 });
 

@@ -2,20 +2,10 @@
 
 :root {
   --app-height: 100dvh;
-  --app-safe-area-top: 0px;
-  font-family:
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    sans-serif;
-}
-
-@media (display-mode: standalone) {
-  @supports (-webkit-touch-callout: none) {
-    :root {
-      --app-safe-area-top: env(safe-area-inset-top, 0px);
-    }
-  }
+  font-family: system-ui,
+  -apple-system,
+  "Segoe UI",
+  sans-serif;
 }
 
 * {
@@ -26,9 +16,6 @@ html {
   height: 100%;
   margin: 0;
   overflow-x: hidden;
-  /* The border-top is magic to get iPad viewport height reporting to work */
-  /* Without this, visualViewport.height reports as 1004, not 1024. */
-  border-top: 1px solid black;
 }
 
 body {
@@ -45,10 +32,6 @@ body {
   overflow: hidden;
   /* Flashes on iOS page load */
   background: black;
-}
-
-.app-shell {
-  padding-top: var(--app-safe-area-top);
 }
 
 html.disable-focus-rings :focus,
@@ -165,13 +148,13 @@ summary {
 
 .pitch-line-mode-terrain {
   background-image: linear-gradient(
-    90deg,
-    rgb(51 51 153) 0%,
-    rgb(0 153 255) 20%,
-    rgb(51 204 102) 45%,
-    rgb(204 204 76) 65%,
-    rgb(153 115 76) 82%,
-    rgb(242 242 242) 100%
+          90deg,
+          rgb(51 51 153) 0%,
+          rgb(0 153 255) 20%,
+          rgb(51 204 102) 45%,
+          rgb(204 204 76) 65%,
+          rgb(153 115 76) 82%,
+          rgb(242 242 242) 100%
   );
 }
 
@@ -185,14 +168,14 @@ summary {
 
 .pitch-line-mode-gist-rainbow {
   background-image: linear-gradient(
-    90deg,
-    rgb(255 0 0) 0%,
-    rgb(255 128 0) 17%,
-    rgb(255 255 0) 33%,
-    rgb(0 255 0) 50%,
-    rgb(0 255 255) 67%,
-    rgb(0 0 255) 83%,
-    rgb(255 0 255) 100%
+          90deg,
+          rgb(255 0 0) 0%,
+          rgb(255 128 0) 17%,
+          rgb(255 255 0) 33%,
+          rgb(0 255 0) 50%,
+          rgb(0 255 255) 67%,
+          rgb(0 0 255) 83%,
+          rgb(255 0 255) 100%
   );
 }
 
