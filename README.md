@@ -51,7 +51,7 @@ Where it is used:
 
 ### Maximum Heard Volume
 
-This is the loudest volume Voicebox has heard recently for that user/device.
+This is the loudest volume Voicebox has heard for that user/device.
 
 Why it exists:
 
@@ -62,7 +62,8 @@ Why it exists:
 How it adapts:
 
 1. Within a session, it can only increase.
-2. On page load, the remembered value is decayed by a small factor so it can adapt downward over time as real-world usage changes.
+2. It is remembered across sessions so visual volume stays consistent week to week.
+3. The user can reset it from settings if an unusually loud sound or a different mic input made the remembered maximum unhelpful.
 
 Where it is used:
 

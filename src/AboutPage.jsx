@@ -217,11 +217,18 @@ export default function AboutPage() {
                   silence.
                 </li>
                 <li>
-                  <strong>Calibrate microphone</strong>: different phones and tablets can have very
-                  different microphone levels. If Voicebox is missing quiet sounds, use this to
-                  calibrate to your microphone. When you press the button, Voicebox will record one
-                  second of audio. Make the quietest sound you want captured, and Voicebox will
-                  adjust the minimum volume it uses for pitch detection and auto-pause.
+                  <strong>Record minimum volume</strong>: different phones and tablets can have very
+                  different microphone levels. Use this to teach Voicebox the quietest sound you
+                  want treated as intentional input, while leaving softer room noise ignored.
+                  Voicebox records one second of audio, then adjusts the minimum volume it uses for
+                  pitch detection and auto-pause.
+                </li>
+                <li>
+                  <strong>Reset maximum volume</strong>: Voicebox remembers the loudest volume it
+                  has heard on this device so the pitch colors and spectrogram brightness stay
+                  scaled sensibly for your microphone. If that remembered maximum was set by an
+                  unusually loud sound or a different mic input, reset it and Voicebox will learn a
+                  new maximum as audio comes in.
                 </li>
               </ul>
 

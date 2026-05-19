@@ -8,6 +8,7 @@ import {
   readAutoPauseOnSilence,
   readHighResSpectrogram,
   readHalfResolutionCanvas,
+  readMaxVolume,
   readMinVolumeThreshold,
   readPitchLineColorMode,
   readRunAt30Fps,
@@ -25,7 +26,7 @@ test("settings defaults and persistence work via localStorage", async () => {
   const autoPauseCheckbox = screen.getByRole("checkbox", {
     name: /Auto pause on silence/i,
   });
-  const calibrateButton = screen.getByRole("button", { name: /Calibrate microphone/i });
+  const calibrateButton = screen.getByRole("button", { name: /Record minimum volume/i });
   const runAt30FpsCheckbox = screen.getByRole("checkbox", {
     name: /Run at 30 FPS/i,
   });
@@ -66,7 +67,19 @@ test("calibrate microphone stays available on the scales page", async () => {
   await user.click(screen.getByRole("button", { name: "Scales" }));
   await user.click(screen.getByLabelText("Open settings"));
 
-  expect(screen.getByRole("button", { name: /Calibrate microphone/i })).toBeEnabled();
+  expect(screen.getByRole("button", { name: /Record minimum volume/i })).toBeEnabled();
+});
+
+test("settings can reset the remembered maximum volume", async () => {
+  localStorage.setItem("voicebox.maxVolume", "8");
+  const user = userEvent.setup();
+  render(<AppShell />);
+
+  await user.click(screen.getByLabelText("Open settings"));
+  await user.click(screen.getByRole("button", { name: /Reset maximum volume/i }));
+
+  expect(readMaxVolume()).toBe(2);
+  expect(globalThis.__appRecordingEngineForTests.volumeTracking.maxHeardVolume).toBe(2);
 });
 
 test("spectrogram frequency settings are editable and persisted", async () => {

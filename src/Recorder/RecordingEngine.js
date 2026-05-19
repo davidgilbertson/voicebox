@@ -32,7 +32,6 @@ import {
 import { getPicaWindowSampleCount } from "./picaPitch.js";
 
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
-const STARTUP_MAX_VOLUME_DECAY_FACTOR = 0.95;
 const RAW_AUDIO_SAVE_PICKER_ID = "voicebox-raw-audio";
 let recordingEngineSingleton = null;
 
@@ -106,10 +105,7 @@ export class RecordingEngine {
       }),
     };
     this.resizeObserver = null;
-    // Decay the remembered max a little on each session start so it can adapt downward over time
-    // while still retaining a device-specific sense of "loud enough" between runs.
-    const initialMaxVolume = readMaxVolume() * STARTUP_MAX_VOLUME_DECAY_FACTOR;
-    writeMaxVolume(initialMaxVolume);
+    const initialMaxVolume = readMaxVolume();
 
     this.state = {
       ui: {
@@ -348,6 +344,12 @@ export class RecordingEngine {
       settleMs,
       captureMs,
     });
+  };
+
+  resetMaxVolume = () => {
+    this.volumeTracking.maxHeardVolume = this.state.minVolumeThreshold;
+    writeMaxVolume(this.volumeTracking.maxHeardVolume);
+    this.state.forceRedraw = true;
   };
 
   stopAudio = () => {

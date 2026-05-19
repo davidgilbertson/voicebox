@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { RecordingEngine } from "../../src/Recorder/RecordingEngine.js";
 import { PlaybackEngine } from "../../src/ScalesPage/PlaybackEngine.js";
+import { readMaxVolume } from "../../src/Recorder/config.js";
 import { readConfig } from "../../src/config.js";
 import { createPlaybackEngineConfig, createRecordingEngineConfig } from "../utils/engineConfig.js";
 
@@ -47,6 +48,18 @@ test("readConfig groups persisted values for initial app initialization", () => 
       gestureHelpDismissed: false,
     },
   });
+});
+
+test("remembered max volume is stable across engine construction", () => {
+  localStorage.setItem("voicebox.maxVolume", "8");
+  const recorder = new RecordingEngine(createRecordingEngineConfig());
+
+  try {
+    expect(readMaxVolume()).toBe(8);
+    expect(recorder.volumeTracking.maxHeardVolume).toBe(8);
+  } finally {
+    recorder.destroy();
+  }
 });
 
 test("engines can be constructed from boot settings before React effects run", () => {

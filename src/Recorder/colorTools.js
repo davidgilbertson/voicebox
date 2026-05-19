@@ -116,11 +116,13 @@ function rgbToString(rgb) {
 
 function mapWaveformIntensityToPaletteIndex(intensity, mode) {
   if (isFixedColorMode(resolvePitchLineColorMode(mode))) return null;
-  const dead_zone = 0.25;
-  // Keep a dead zone at the bottom so the lowest fraction of normalized values all map
-  // to the lowest palette color, then stretch the rest across the remaining color range.
-  const normalized = intensity <= dead_zone ? 0 : (intensity - dead_zone) / (1 - dead_zone);
-  return clamp(Math.round(normalized * 255), 0, 255);
+  const min_color_intensity = 0.25;
+  const max_color_intensity = 0.95;
+  const color_intensity_range = max_color_intensity - min_color_intensity;
+  const normalized =
+    (clamp(intensity, min_color_intensity, max_color_intensity) - min_color_intensity) /
+    color_intensity_range;
+  return Math.round(normalized * 255);
 }
 
 export function mapWaveformIntensityToStrokeColor(intensity, fallbackColor, mode, brightness = 1) {

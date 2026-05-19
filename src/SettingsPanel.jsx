@@ -1,10 +1,11 @@
-import { Circle, Share, Share2, Volume2 } from "lucide-react";
+import { Circle, RotateCcw, Share, Share2, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import StepperControl from "./components/StepperControl.jsx";
 import { PITCH_LINE_COLOR_MODES } from "./Recorder/colorTools.js";
 import { isAppleTouchDevice } from "./platform.js";
 
 const settingsCheckboxClass = "settings-checkbox h-5 w-5 shrink-0";
+const settingsDividerClass = "border-t border-slate-700/80";
 const settingsSectionHeadingClass = "font-semibold uppercase tracking-[0.18em] text-blue-400";
 const PITCH_LINE_MODE_PREVIEW_CLASS_BY_MODE = {
   blue: "pitch-line-mode-preview pitch-line-mode-blue",
@@ -32,6 +33,7 @@ export default function SettingsPanel({
   autoPauseOnSilence,
   onAutoPauseOnSilenceChange,
   onCalibrateMicFloor,
+  onResetMaxVolume,
   runAt30Fps,
   onRunAt30FpsChange,
   halfResolutionCanvas,
@@ -236,9 +238,10 @@ export default function SettingsPanel({
               />
             </label>
           ) : null}
+          <div className={settingsDividerClass} />
           <div className="flex items-start justify-between gap-4 text-sm">
             <div className="flex flex-col gap-1">
-              <span>Calibrate microphone</span>
+              <span>Record minimum volume</span>
               <span className="text-xs text-slate-400">
                 Press the button and make the quietest sound you'd like Voicebox to capture.
                 <br />
@@ -250,11 +253,11 @@ export default function SettingsPanel({
               onClick={onCalibrateMicFloorClick}
               disabled={isCalibratingMic}
               className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-white ${
-                isCalibratingMic ? "bg-red-500" : "bg-blue-400"
+                isCalibratingMic
+                  ? "bg-red-500"
+                  : "bg-blue-400 transition active:scale-95 active:bg-blue-500"
               }`}
-              aria-label={
-                isCalibratingMic ? "Recording microphone calibration" : "Calibrate microphone"
-              }
+              aria-label={isCalibratingMic ? "Recording minimum volume" : "Record minimum volume"}
             >
               {isCalibratingMic ? (
                 <Circle
@@ -267,7 +270,23 @@ export default function SettingsPanel({
               )}
             </button>
           </div>
-          <div className="h-2 border-t border-slate-700/80" />
+          <div className="flex items-start justify-between gap-4 text-sm">
+            <div className="flex flex-col gap-1">
+              <span>Reset maximum volume</span>
+              <span className="text-xs text-slate-400">
+                Reset the remembered loudest volume. It will rise again as mic input arrives.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onResetMaxVolume}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-700 text-white transition hover:bg-slate-600 active:scale-95 active:bg-slate-800"
+              aria-label="Reset maximum volume"
+            >
+              <RotateCcw aria-hidden="true" className="h-5 w-5" strokeWidth={2.2} />
+            </button>
+          </div>
+          <div className={settingsDividerClass} />
           <div className={settingsSectionHeadingClass}>Scales Page</div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-2">
@@ -340,7 +359,7 @@ export default function SettingsPanel({
               </div>
             </div>
           </div>
-          <div className="h-2 border-t border-slate-700/80" />
+          <div className={settingsDividerClass} />
           <div className={settingsSectionHeadingClass}>Pitch Page</div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-2">
@@ -370,8 +389,8 @@ export default function SettingsPanel({
               />
             </div>
           </div>
-          <div className="h-2 border-t border-slate-700/80" />
-          <div className={settingsSectionHeadingClass}>Pitch + Vibrato Pages</div>
+          <div className={settingsDividerClass} />
+          <div className={settingsSectionHeadingClass}>Pitch &amp; Vibrato Pages</div>
           <fieldset className="space-y-2">
             <legend className="block text-xs tracking-wide text-slate-400 uppercase">
               Pitch line color
@@ -400,7 +419,7 @@ export default function SettingsPanel({
               The gradient options respond to volume in real time.
             </div>
           </fieldset>
-          <div className="h-2 border-t border-slate-700/80" />
+          <div className={settingsDividerClass} />
           <div className={settingsSectionHeadingClass}>Performance</div>
           <label className="flex items-start justify-between gap-4 text-sm">
             <div className="flex flex-col gap-1">

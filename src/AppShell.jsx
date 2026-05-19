@@ -225,6 +225,10 @@ export default function AppShell({ downloadingUpdate = false }) {
     return { measuredVolume, threshold };
   };
 
+  const onResetMaxVolume = () => {
+    recorderEngine.resetMaxVolume();
+  };
+
   const onPitchMinNoteChange = (nextNote) => {
     const lastIndex = PITCH_NOTE_OPTIONS.length - 1;
     let nextMinIndex = PITCH_NOTE_OPTIONS.indexOf(nextNote);
@@ -426,6 +430,7 @@ export default function AppShell({ downloadingUpdate = false }) {
             autoPauseOnSilence={autoPauseOnSilence}
             onAutoPauseOnSilenceChange={setAutoPauseOnSilence}
             onCalibrateMicFloor={onCalibrateMicFloor}
+            onResetMaxVolume={onResetMaxVolume}
             runAt30Fps={runAt30Fps}
             onRunAt30FpsChange={setRunAt30Fps}
             halfResolutionCanvas={halfResolutionCanvas}
