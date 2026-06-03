@@ -107,6 +107,6 @@ test("pitch renderer fades the latest unstable tail samples", () => {
   });
 
   expect(
-    alphaWrites.filter((value) => value !== 1).map((value) => Number(value.toFixed(1))),
-  ).toEqual([0.8, 0.7, 0.6, 0.5, 0.4, 0.3]);
+    alphaWrites.filter((value) => value !== 1).map((value) => Number(value.toFixed(2))),
+  ).toEqual([0.5, 0.4, 0.3, 0.2, 0.15, 0.1]);
 });

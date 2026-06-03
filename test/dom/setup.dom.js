@@ -48,6 +48,48 @@ Object.defineProperty(window, "devicePixelRatio", {
   value: 1,
 });
 
+class TestLocalStorage {
+  get length() {
+    return Object.keys(this).length;
+  }
+
+  key(index) {
+    return Object.keys(this)[index] ?? null;
+  }
+
+  getItem(key) {
+    return Object.hasOwn(this, key) ? this[key] : null;
+  }
+
+  setItem(key, value) {
+    this[key] = String(value);
+  }
+
+  removeItem(key) {
+    delete this[key];
+  }
+
+  clear() {
+    for (const key of Object.keys(this)) {
+      delete this[key];
+    }
+  }
+}
+
+const testLocalStorage = new TestLocalStorage();
+
+// Node 26 has its own localStorage global that is unavailable without a CLI flag.
+Object.defineProperty(window, "localStorage", {
+  configurable: true,
+  writable: true,
+  value: testLocalStorage,
+});
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  writable: true,
+  value: testLocalStorage,
+});
+
 window.matchMedia =
   window.matchMedia ||
   ((query) => ({
