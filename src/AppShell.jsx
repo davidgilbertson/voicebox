@@ -1,8 +1,8 @@
 import { Settings } from "lucide-react";
 import { useEffect, useState } from "react";
-import Recorder from "./Recorder/Recorder.jsx";
-import ScalesPage from "./ScalesPage/ScalesPage.jsx";
-import SettingsPanel from "./SettingsPanel.jsx";
+import { Recorder } from "./Recorder/Recorder.jsx";
+import { ScalesPage } from "./ScalesPage/ScalesPage.jsx";
+import { SettingsPanel } from "./SettingsPanel.jsx";
 import { RecordingEngine } from "./Recorder/RecordingEngine.js";
 import { createBatteryUsageMonitor } from "./Recorder/batteryUsage.js";
 import { PlaybackEngine } from "./ScalesPage/PlaybackEngine.js";
@@ -28,7 +28,7 @@ import {
 } from "./Recorder/config.js";
 import { readConfig } from "./config.js";
 
-export default function AppShell({ downloadingUpdate = false }) {
+export function AppShell({ downloadingUpdate = false }) {
   const [isForeground, setIsForeground] = useState(computeIsForeground);
   const [config] = useState(readConfig);
   const [activeView, setActiveView] = useState(() => config.app.activeView);

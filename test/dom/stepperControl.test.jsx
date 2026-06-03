@@ -1,7 +1,6 @@
-import React from "react";
 import { render, screen } from "@testing-library/react";
 import { expect, test } from "vitest";
-import StepperControl from "../../src/components/StepperControl.jsx";
+import { StepperControl } from "../../src/components/StepperControl.jsx";
 
 test("stepper control defaults to small size", () => {
   render(

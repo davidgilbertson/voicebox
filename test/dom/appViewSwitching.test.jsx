@@ -1,8 +1,7 @@
-import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { test, expect } from "vitest";
-import AppShell from "../../src/AppShell.jsx";
+import { AppShell } from "../../src/AppShell.jsx";
 import { readActiveView, writeActiveView } from "../../src/AppShell/config.js";
 
 test("active view is restored from localStorage and saved on switch", async () => {

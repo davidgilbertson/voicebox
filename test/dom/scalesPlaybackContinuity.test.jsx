@@ -1,7 +1,6 @@
-import React from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
-import ScalesPage from "../../src/ScalesPage/ScalesPage.jsx";
+import { ScalesPage } from "../../src/ScalesPage/ScalesPage.jsx";
 import { PlaybackEngine } from "../../src/ScalesPage/PlaybackEngine.js";
 import { createPlaybackEngineConfig } from "../utils/engineConfig.js";
 

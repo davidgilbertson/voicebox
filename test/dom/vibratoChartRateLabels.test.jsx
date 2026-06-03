@@ -1,7 +1,6 @@
-import React from "react";
 import { render, screen } from "@testing-library/react";
 import { test, expect } from "vitest";
-import VibratoChart from "../../src/Recorder/Vibrato/VibratoChart.jsx";
+import { VibratoChart } from "../../src/Recorder/Vibrato/VibratoChart.jsx";
 import { readPitchLineColorMode } from "../../src/Recorder/config.js";
 
 test("vibrato bar shows intermediate integer rate labels", () => {

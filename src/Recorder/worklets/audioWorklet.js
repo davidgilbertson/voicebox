@@ -1,5 +1,6 @@
 // Do not import anything into this file. That can appear to work in dev mode, but it breaks when
 // the app is bundled for production.
+/* global AudioWorkletProcessor, registerProcessor */
 
 // This worklet is our clock.
 // It posts a message every `batchSize` samples (e.g. 600) with the sample count

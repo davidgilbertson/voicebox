@@ -202,11 +202,9 @@ function processHopPitch({
   }
 
   let didFrameDataChange = false;
-  let pitchWriteResult = null;
-  let nextLineStrengthEma = lineStrengthEma;
   const smoothedLineStrength = lineStrengthEma + (volumeStrength - lineStrengthEma) * 0.2;
-  nextLineStrengthEma = smoothedLineStrength;
-  pitchWriteResult = processPitchSample(processingState, {
+  const nextLineStrengthEma = smoothedLineStrength;
+  const pitchWriteResult = processPitchSample(processingState, {
     autoPauseOnSilence,
     smoothing,
     hasSignal: isAboveSilenceThreshold,

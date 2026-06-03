@@ -39,7 +39,7 @@ function swipeDirection(deltaX, deltaY) {
       : null;
 }
 
-export default function GestureArea({
+export function GestureArea({
   onTap,
   onSwipe,
   externalFlashSignal = null,

@@ -76,7 +76,6 @@ test("pitch history keeps SPS * seconds points and 60 points per 5Hz oscillation
 });
 
 test("columnRateHz defines pitch-history resolution when provided", () => {
-  const samplesPerSecond = 1200;
   const columnRateHz = 60;
   const seconds = 5;
   const state = createPitchProcessingState({

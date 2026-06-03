@@ -1,8 +1,6 @@
 import {
-  readScaleBpm,
   readScaleMaxNote,
   readScaleMinNote,
-  readScaleSelectedName,
   SCALE_BPM_MAX,
   SCALE_BPM_MIN,
   writeScaleBpm,
@@ -235,7 +233,9 @@ export class PlaybackEngine {
       try {
         const startedNote = await playNote(cueRootMidi, stepDuration * 2);
         noteWasPlayed = this.trackStartedNote(startedNote);
-      } catch {}
+      } catch {
+        // A missed note is acceptable; keep the pulse loop running.
+      }
     } else if (timelineEntry !== "rest") {
       const noteMidi = clamp(
         this.state.currentSetRootMidi + timelineEntry,
@@ -245,7 +245,9 @@ export class PlaybackEngine {
       try {
         const startedNote = await playNote(noteMidi, stepDuration);
         noteWasPlayed = this.trackStartedNote(startedNote);
-      } catch {}
+      } catch {
+        // A missed note is acceptable; keep the pulse loop running.
+      }
     }
 
     const nextIndex = (this.state.timelineIndex + 1) % this.state.setTimeline.length;
@@ -322,9 +324,9 @@ export class PlaybackEngine {
         this.state.startupPriming = false;
         const stepMs = (60 / this.state.ui.bpm) * 1000;
         this.schedulePulseAt(performance.now() + stepMs);
-        return;
+      } else {
+        this.reschedulePulseFromLastStep();
       }
-      this.reschedulePulseFromLastStep();
     }
   };
 

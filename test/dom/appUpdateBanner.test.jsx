@@ -1,7 +1,6 @@
-import React from "react";
 import { render, screen } from "@testing-library/react";
 import { expect, test } from "vitest";
-import AppShell from "../../src/AppShell.jsx";
+import { AppShell } from "../../src/AppShell.jsx";
 
 test("update banner is hidden by default", () => {
   render(<AppShell />);

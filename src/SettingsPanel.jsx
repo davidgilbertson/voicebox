@@ -1,6 +1,6 @@
 import { Circle, RotateCcw, Share, Share2, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import StepperControl from "./components/StepperControl.jsx";
+import { StepperControl } from "./components/StepperControl.jsx";
 import { PITCH_LINE_COLOR_MODES } from "./Recorder/colorTools.js";
 import { isAppleTouchDevice } from "./platform.js";
 
@@ -17,7 +17,7 @@ const PITCH_LINE_MODE_PREVIEW_CLASS_BY_MODE = {
   gist_rainbow: "pitch-line-mode-preview pitch-line-mode-gist-rainbow",
 };
 
-export default function SettingsPanel({
+export function SettingsPanel({
   recorderEngine,
   open,
   onClose,

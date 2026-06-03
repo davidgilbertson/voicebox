@@ -1,4 +1,3 @@
-import React from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { writeActiveView } from "../../src/AppShell/config.js";
@@ -17,7 +16,7 @@ vi.mock("../../src/ScalesPage/piano.js", async (importOriginal) => {
   };
 });
 
-import AppShell from "../../src/AppShell.jsx";
+import { AppShell } from "../../src/AppShell.jsx";
 
 beforeEach(() => {
   playNoteMock.mockClear();

@@ -42,7 +42,7 @@ function ScreenshotPopover({ src, alt, openLabel }) {
   );
 }
 
-export default function AboutPage() {
+export function AboutPage() {
   useEffect(() => {
     const root = document.getElementById("root");
     const previous = {

@@ -355,10 +355,7 @@ function getFoldExtremaFromWaveform(samples) {
 
 function getCandidatesFromExtrema(samples, sampleRate, minHz, maxHz, foldExtrema, cache) {
   let winningCandidate = null;
-  for (const [type, typedExtrema] of [
-    ["peak", foldExtrema.peaks],
-    ["trough", foldExtrema.troughs],
-  ]) {
+  for (const typedExtrema of [foldExtrema.peaks, foldExtrema.troughs]) {
     const anchor = typedExtrema[0];
     if (!anchor) continue;
 

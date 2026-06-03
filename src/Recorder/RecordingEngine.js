@@ -440,7 +440,7 @@ export class RecordingEngine {
     if (this.state.activeView === "vibrato") {
       const vibratoRateRing = this.pitchProcessingState.vibratoRateHzRing;
       const newestRate = vibratoRateRing.newest();
-      let estimatedRate = null;
+      let estimatedRate;
       if (Number.isFinite(newestRate)) {
         estimatedRate = newestRate;
         this.renderState.lastKnownVibratoRate = newestRate;

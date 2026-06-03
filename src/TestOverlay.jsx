@@ -36,7 +36,7 @@ function readMetrics() {
   ];
 }
 
-export default function TestOverlay() {
+export function TestOverlay() {
   const [metrics, setMetrics] = useState([]);
 
   useEffect(() => {

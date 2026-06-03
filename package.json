@@ -9,6 +9,7 @@
     "deploy": "npm run build && wrangler deploy",
     "preview": "vite build && vite preview",
     "format": "prettier . --write --cache",
+    "lint": "eslint . --cache",
     "test": "vitest run --config vitest.config.cjs",
     "test:watch": "vitest --config vitest.config.cjs"
   },
@@ -32,9 +33,13 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.22.1",
+    "@david/eslint-plugin-agent-rules": "file:..\\eslint-plugin-agent-rules",
+    "@eslint/js": "^10.0.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "eslint": "^10.4.0",
+    "globals": "^17.6.0",
     "happy-dom": "^20.7.0",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.7.1",

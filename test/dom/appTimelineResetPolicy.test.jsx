@@ -1,8 +1,7 @@
-import React from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { test, expect } from "vitest";
-import AppShell from "../../src/AppShell.jsx";
+import { AppShell } from "../../src/AppShell.jsx";
 
 test("opening and closing settings does not clear active view", async () => {
   const user = userEvent.setup();

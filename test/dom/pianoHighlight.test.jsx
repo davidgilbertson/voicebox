@@ -1,7 +1,6 @@
-import React from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import Piano from "../../src/ScalesPage/Piano.jsx";
+import { Piano } from "../../src/ScalesPage/Piano.jsx";
 import { playNote } from "../../src/ScalesPage/piano.js";
 
 const listeners = new Set();

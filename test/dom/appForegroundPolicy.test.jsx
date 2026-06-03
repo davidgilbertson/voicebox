@@ -1,7 +1,6 @@
-import React from "react";
 import { render } from "@testing-library/react";
 import { test, expect, vi } from "vitest";
-import AppShell from "../../src/AppShell.jsx";
+import { AppShell } from "../../src/AppShell.jsx";
 
 test("foreground tracking subscribes and unsubscribes to page lifecycle events", () => {
   const documentAdd = vi.spyOn(document, "addEventListener");

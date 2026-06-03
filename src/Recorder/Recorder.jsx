@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Download, Pause } from "lucide-react";
-import VibratoChart from "./Vibrato/VibratoChart.jsx";
-import PitchChart from "./Pitch/PitchChart.jsx";
-import SpectrogramChart from "./Spectrogram/SpectrogramChart.jsx";
+import { VibratoChart } from "./Vibrato/VibratoChart.jsx";
+import { PitchChart } from "./Pitch/PitchChart.jsx";
+import { SpectrogramChart } from "./Spectrogram/SpectrogramChart.jsx";
 
-export default function Recorder({ activeView, settingsOpen, engine, developerMode }) {
+export function Recorder({ activeView, settingsOpen, engine, developerMode }) {
   const vibratoChartRef = useRef(null);
   const pitchChartRef = useRef(null);
   const spectrogramChartRef = useRef(null);

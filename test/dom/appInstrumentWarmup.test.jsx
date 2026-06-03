@@ -1,4 +1,3 @@
-import React from "react";
 import { render, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { writeActiveView } from "../../src/AppShell/config.js";
@@ -17,7 +16,7 @@ vi.mock("../../src/ScalesPage/piano.js", async (importOriginal) => {
   };
 });
 
-import AppShell from "../../src/AppShell.jsx";
+import { AppShell } from "../../src/AppShell.jsx";
 
 test("instrument warmup starts on app load even when opening on a non-scales page", async () => {
   writeActiveView("pitch");

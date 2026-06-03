@@ -103,7 +103,7 @@ function readOverlayMetrics() {
   ];
 }
 
-export default function DebugPage() {
+export function DebugPage() {
   const [localStorageSnapshot] = useState(() => readLocalStorageSnapshot());
   const [isLocalStorageOpen, setIsLocalStorageOpen] = useState(() =>
     readStoredSectionOpenState(DEBUG_LOCAL_STORAGE_OPEN_KEY, true),

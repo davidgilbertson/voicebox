@@ -7,7 +7,7 @@ import {
   VIBRATO_SWEET_MIN_HZ,
 } from "../config.js";
 
-const VibratoChart = forwardRef(function VibratoChart({ vibratoRate }, ref) {
+export const VibratoChart = forwardRef(function VibratoChart({ vibratoRate }, ref) {
   const vibratoRatePositionPct =
     vibratoRate === null
       ? null
@@ -99,5 +99,3 @@ const VibratoChart = forwardRef(function VibratoChart({ vibratoRate }, ref) {
     </>
   );
 });
-
-export default VibratoChart;

@@ -89,7 +89,7 @@ function pianoKeyId(note) {
   return `piano-key-${note}`;
 }
 
-export default function Piano({
+export function Piano({
   minNote = DEFAULT_MIN_NOTE,
   maxNote = DEFAULT_MAX_NOTE,
   onKeyPress,

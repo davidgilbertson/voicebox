@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Metronome } from "lucide-react";
-import StepperControl from "../components/StepperControl.jsx";
-import Select from "../components/Select.jsx";
-import Piano from "./Piano.jsx";
-import GestureArea from "./GestureArea.jsx";
+import { StepperControl } from "../components/StepperControl.jsx";
+import { Select } from "../components/Select.jsx";
+import { Piano } from "./Piano.jsx";
+import { GestureArea } from "./GestureArea.jsx";
 import {
   readScaleGestureHelpDismissed,
   SCALE_BPM_MAX,
@@ -14,7 +14,7 @@ import {
 } from "./config.js";
 import { SCALE_PATTERNS } from "./PlaybackEngine.js";
 
-export default function ScalesPage({
+export function ScalesPage({
   scaleMinNote = readScaleMinNote(),
   scaleMaxNote = readScaleMaxNote(),
   engine,

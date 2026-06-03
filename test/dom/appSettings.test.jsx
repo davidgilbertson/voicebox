@@ -1,8 +1,7 @@
-import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { test, expect, vi } from "vitest";
-import AppShell from "../../src/AppShell.jsx";
+import { AppShell } from "../../src/AppShell.jsx";
 import { appendRawAudioSamples } from "../../src/Recorder/rawAudio.js";
 import {
   readAutoPauseOnSilence,

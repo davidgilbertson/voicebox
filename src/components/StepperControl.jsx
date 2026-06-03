@@ -1,6 +1,6 @@
 import { Minus, Plus } from "lucide-react";
 
-export default function StepperControl({
+export function StepperControl({
   value,
   onDecrement,
   onIncrement,

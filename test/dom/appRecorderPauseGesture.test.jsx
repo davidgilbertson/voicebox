@@ -1,7 +1,6 @@
-import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, test } from "vitest";
-import AppShell from "../../src/AppShell.jsx";
+import { AppShell } from "../../src/AppShell.jsx";
 
 test("recorder pause toggles on pointer down and paused pill includes pause icon", async () => {
   const originalAudioWorkletNode = window.AudioWorkletNode;

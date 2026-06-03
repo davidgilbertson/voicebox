@@ -1,7 +1,6 @@
-import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import { expect, test } from "vitest";
-import DebugPage from "../../src/debug/DebugPage.jsx";
+import { DebugPage } from "../../src/debug/DebugPage.jsx";
 
 test("debug page shows a localStorage snapshot above the audio controls", () => {
   localStorage.setItem("voicebox.alpha", "1");

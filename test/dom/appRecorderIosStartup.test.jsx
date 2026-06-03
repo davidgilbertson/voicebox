@@ -1,7 +1,6 @@
-import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
-import AppShell from "../../src/AppShell.jsx";
+import { AppShell } from "../../src/AppShell.jsx";
 
 test("prompted microphone permission shows the manual start overlay before the first microphone request", async () => {
   window.__setForegroundForTests({ visible: true, focused: true });

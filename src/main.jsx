@@ -1,8 +1,8 @@
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
-import AppShell from "./AppShell.jsx";
-import AboutPage from "./AboutPage.jsx";
-import DebugPage from "./debug/DebugPage.jsx";
+import { AppShell } from "./AppShell.jsx";
+import { AboutPage } from "./AboutPage.jsx";
+import { DebugPage } from "./debug/DebugPage.jsx";
 import { installFocusVisibilityPolicy } from "./focusVisibility.js";
 import "./index.css";
 import { registerSW } from "virtual:pwa-register";
