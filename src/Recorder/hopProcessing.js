@@ -3,16 +3,6 @@ import { getPitchFromSpectrum } from "./pitchDetection.js";
 import { fillPicaWindowSamples, getPicaPitchResult } from "./picaPitch.js";
 import { processPitchSample } from "./pitchProcessing.js";
 
-function getRelativeVolumeStrength(volume, minVolumeThreshold, maxHeardVolume) {
-  const epsilon = 1e-4;
-  let usedMinVolume = minVolumeThreshold;
-  if (usedMinVolume + epsilon > maxHeardVolume) {
-    usedMinVolume = 0;
-  }
-  const volumeSpan = maxHeardVolume - usedMinVolume;
-  return volumeSpan > epsilon ? clamp((volume - usedMinVolume) / volumeSpan, 0, 1) : 1;
-}
-
 export function createSpectrogramBuffers(binCount) {
   return {
     spectrumDb: new Float32Array(binCount),
@@ -178,7 +168,12 @@ function processHopPitch({
     shouldPersistMaxVolume = true;
   }
   const maxHeardVolume = volumeTracking.maxHeardVolume;
-  const volumeStrength = getRelativeVolumeStrength(volume, minVolumeThreshold, maxHeardVolume);
+  const epsilon = 1e-4;
+  const usedMinVolume =
+    minVolumeThreshold + epsilon > maxHeardVolume ? 0 : minVolumeThreshold;
+  const volumeSpan = maxHeardVolume - usedMinVolume;
+  const volumeStrength =
+    volumeSpan > epsilon ? clamp((volume - usedMinVolume) / volumeSpan, 0, 1) : 1;
 
   const isAboveSilenceThreshold = volume > minVolumeThreshold;
   let cents = Number.NaN;

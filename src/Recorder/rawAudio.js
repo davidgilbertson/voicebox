@@ -30,11 +30,6 @@ export function readRawAudioSamples(rawAudioState) {
   return rawAudioState.ring.values();
 }
 
-function floatTo16BitPcm(value) {
-  const clamped = clamp(value, -1, 1);
-  return clamped < 0 ? Math.round(clamped * 0x8000) : Math.round(clamped * 0x7fff);
-}
-
 export function createWavBlob(samples, sampleRate) {
   const bytesPerSample = 2;
   const dataSize = samples.length * bytesPerSample;
@@ -57,7 +52,12 @@ export function createWavBlob(samples, sampleRate) {
 
   let offset = 44;
   for (let i = 0; i < samples.length; i += 1) {
-    view.setInt16(offset, floatTo16BitPcm(samples[i]), true);
+    const clamped = clamp(samples[i], -1, 1);
+    view.setInt16(
+      offset,
+      clamped < 0 ? Math.round(clamped * 0x8000) : Math.round(clamped * 0x7fff),
+      true,
+    );
     offset += bytesPerSample;
   }
 

@@ -21,10 +21,6 @@ function orderedDisplayValues(state) {
   return Array.from(state.smoothedPitchCentsRing.values());
 }
 
-function orderedVibratoRates(state) {
-  return Array.from(state.vibratoRateHzRing.values());
-}
-
 function createState(columnRateHz = 20, seconds = 1) {
   return createPitchProcessingState({
     columnRateHz,
@@ -184,7 +180,7 @@ test("each write initializes vibrato rate to NaN", () => {
     lineStrength: 0.8,
   });
 
-  const rates = orderedVibratoRates(state);
+  const rates = Array.from(state.vibratoRateHzRing.values());
   assert.ok(rates.every(Number.isNaN));
 });
 

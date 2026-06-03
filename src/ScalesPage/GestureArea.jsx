@@ -6,24 +6,6 @@ const SWIPE_GESTURE_THRESHOLD_PX = 100;
 const SWIPE_FLASH_HOLD_MS = 140;
 const SWIPE_FLASH_TOTAL_MS = 700;
 
-function isGestureTapTarget(element) {
-  return (
-    element?.closest?.(
-      "button,input,select,textarea,a,label,[role='button'],[data-no-gesture-tap]",
-    ) !== null
-  );
-}
-
-function classifyGesture(deltaX, deltaY) {
-  const absX = Math.abs(deltaX);
-  const absY = Math.abs(deltaY);
-  const maxAxisPx = Math.max(absX, absY);
-  return {
-    isTap: maxAxisPx < TAP_GESTURE_MAX_PX,
-    isSwipe: maxAxisPx > SWIPE_GESTURE_THRESHOLD_PX,
-  };
-}
-
 function swipeDirection(deltaX, deltaY) {
   if (Math.abs(deltaX) >= Math.abs(deltaY)) {
     return deltaX >= SWIPE_GESTURE_THRESHOLD_PX
@@ -139,15 +121,22 @@ export function GestureArea({
     if (gesture.pointerId !== event.pointerId) return;
     const deltaX = event.clientX - gesture.startX;
     const deltaY = event.clientY - gesture.startY;
-    const gestureType = classifyGesture(deltaX, deltaY);
-    const handled = gestureType.isSwipe ? handleGestureMove(deltaX, deltaY) : gesture.handled;
+    const maxAxisPx = Math.max(Math.abs(deltaX), Math.abs(deltaY));
+    const handled =
+      maxAxisPx > SWIPE_GESTURE_THRESHOLD_PX ? handleGestureMove(deltaX, deltaY) : gesture.handled;
     gestureRef.current.pointerId = null;
-    if (gesture.handled || handled || !gestureType.isTap) {
+    if (gesture.handled || handled || maxAxisPx >= TAP_GESTURE_MAX_PX) {
       event.preventDefault();
       event.stopPropagation();
       return;
     }
-    if (isGestureTapTarget(event.target)) return;
+    if (
+      event.target?.closest?.(
+        "button,input,select,textarea,a,label,[role='button'],[data-no-gesture-tap]",
+      ) !== null
+    ) {
+      return;
+    }
     onTap?.();
   };
 

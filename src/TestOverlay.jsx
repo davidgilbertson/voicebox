@@ -1,41 +1,5 @@
 import { useEffect, useState } from "react";
 
-function readMetrics() {
-  const root = document.getElementById("root");
-  const rootRect = root?.getBoundingClientRect();
-  const shell = document.getElementById("test-overlay-shell");
-  const shellRect = shell?.getBoundingClientRect();
-  const footer = document.getElementById("test-overlay-footer");
-  const footerRect = footer?.getBoundingClientRect();
-  const visualViewport = window.visualViewport;
-  const htmlStyles = getComputedStyle(document.documentElement);
-  const bodyStyles = getComputedStyle(document.body);
-
-  return [
-    `standalone(matchMedia): ${window.matchMedia("(display-mode: standalone)").matches}`,
-    `standalone(navigator): ${String(window.navigator.standalone ?? "n/a")}`,
-    `screen.height: ${window.screen.height}`,
-    `outerHeight: ${window.outerHeight}`,
-    `innerHeight: ${window.innerHeight}`,
-    `visualViewport.height: ${visualViewport?.height ?? "n/a"}`,
-    `documentElement.clientHeight: ${document.documentElement.clientHeight}`,
-    `documentElement.computedHeight: ${htmlStyles.height}`,
-    `body.clientHeight: ${document.body.clientHeight}`,
-    `body.computedHeight: ${bodyStyles.height}`,
-    `--app-height: ${htmlStyles.getPropertyValue("--app-height").trim()}`,
-    `--app-safe-area-top: ${htmlStyles.getPropertyValue("--app-safe-area-top").trim()}`,
-    `root.top: ${rootRect ? Math.round(rootRect.top) : "n/a"}`,
-    `root.bottom: ${rootRect ? Math.round(rootRect.bottom) : "n/a"}`,
-    `root.height: ${rootRect ? Math.round(rootRect.height) : "n/a"}`,
-    `shell.top: ${shellRect ? Math.round(shellRect.top) : "n/a"}`,
-    `shell.bottom: ${shellRect ? Math.round(shellRect.bottom) : "n/a"}`,
-    `shell.height: ${shellRect ? Math.round(shellRect.height) : "n/a"}`,
-    `footer.top: ${footerRect ? Math.round(footerRect.top) : "n/a"}`,
-    `footer.bottom: ${footerRect ? Math.round(footerRect.bottom) : "n/a"}`,
-    `footer.height: ${footerRect ? Math.round(footerRect.height) : "n/a"}`,
-  ];
-}
-
 export function TestOverlay() {
   const [metrics, setMetrics] = useState([]);
 
@@ -62,7 +26,40 @@ export function TestOverlay() {
       rootStyle.overflow = "hidden";
     }
 
-    const update = () => setMetrics(readMetrics());
+    const update = () => {
+      const rootRect = root?.getBoundingClientRect();
+      const shell = document.getElementById("test-overlay-shell");
+      const shellRect = shell?.getBoundingClientRect();
+      const footer = document.getElementById("test-overlay-footer");
+      const footerRect = footer?.getBoundingClientRect();
+      const visualViewport = window.visualViewport;
+      const htmlStyles = getComputedStyle(document.documentElement);
+      const bodyStyles = getComputedStyle(document.body);
+
+      setMetrics([
+        `standalone(matchMedia): ${window.matchMedia("(display-mode: standalone)").matches}`,
+        `standalone(navigator): ${String(window.navigator.standalone ?? "n/a")}`,
+        `screen.height: ${window.screen.height}`,
+        `outerHeight: ${window.outerHeight}`,
+        `innerHeight: ${window.innerHeight}`,
+        `visualViewport.height: ${visualViewport?.height ?? "n/a"}`,
+        `documentElement.clientHeight: ${document.documentElement.clientHeight}`,
+        `documentElement.computedHeight: ${htmlStyles.height}`,
+        `body.clientHeight: ${document.body.clientHeight}`,
+        `body.computedHeight: ${bodyStyles.height}`,
+        `--app-height: ${htmlStyles.getPropertyValue("--app-height").trim()}`,
+        `--app-safe-area-top: ${htmlStyles.getPropertyValue("--app-safe-area-top").trim()}`,
+        `root.top: ${rootRect ? Math.round(rootRect.top) : "n/a"}`,
+        `root.bottom: ${rootRect ? Math.round(rootRect.bottom) : "n/a"}`,
+        `root.height: ${rootRect ? Math.round(rootRect.height) : "n/a"}`,
+        `shell.top: ${shellRect ? Math.round(shellRect.top) : "n/a"}`,
+        `shell.bottom: ${shellRect ? Math.round(shellRect.bottom) : "n/a"}`,
+        `shell.height: ${shellRect ? Math.round(shellRect.height) : "n/a"}`,
+        `footer.top: ${footerRect ? Math.round(footerRect.top) : "n/a"}`,
+        `footer.bottom: ${footerRect ? Math.round(footerRect.bottom) : "n/a"}`,
+        `footer.height: ${footerRect ? Math.round(footerRect.height) : "n/a"}`,
+      ]);
+    };
     const updateNextFrame = () => requestAnimationFrame(update);
 
     update();

@@ -1,5 +1,5 @@
 import js from "@eslint/js";
-// import agentRules from "@david/eslint-plugin-agent-rules";
+import agentRules from "@david/eslint-plugin-agent-rules";
 import globals from "globals";
 
 export default [
@@ -7,15 +7,14 @@ export default [
   {
     ignores: ["dist/**", "node_modules/**", ".private/**", "experiments/**"],
   },
-  // {
-  //   plugins: {
-  //     "agent-rules": agentRules,
-  //   },
-  //   rules: {
-  //     "agent-rules/no-date-footguns": "error",
-  //     "agent-rules/no-low-value-local-function": "error",
-  //   },
-  // },
+  {
+    plugins: {
+      "agent-rules": agentRules,
+    },
+    rules: {
+      "agent-rules/no-low-value-local-function": "error",
+    },
+  },
   {
     files: ["src/**/*.js", "src/**/*.jsx", "test/**/*.js", "test/**/*.jsx"],
     languageOptions: {

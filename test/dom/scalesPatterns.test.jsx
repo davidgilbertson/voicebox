@@ -33,35 +33,18 @@ async function waitForReady() {
   expect(screen.getByRole("button", { name: "Play" })).toBeEnabled();
 }
 
-function renderScales(props) {
-  const { scaleMinNote, scaleMaxNote, keepRunningInBackground, isForeground, ...pageProps } =
-    props ?? {};
-  const engine = new PlaybackEngine({
-    ...createPlaybackEngineConfig(),
-    ...(scaleMinNote ? { scaleMinNote } : {}),
-    ...(scaleMaxNote ? { scaleMaxNote } : {}),
-    ...(typeof keepRunningInBackground === "boolean" ? { keepRunningInBackground } : {}),
-    ...(typeof isForeground === "boolean" ? { isForeground } : {}),
-  });
-  return render(
-    <ScalesPage
-      engine={engine}
-      scaleMinNote={scaleMinNote}
-      scaleMaxNote={scaleMaxNote}
-      keepRunningInBackground={keepRunningInBackground}
-      isForeground={isForeground}
-      {...pageProps}
-    />,
-  );
-}
-
 test.each([
   { pattern: "Semitones", firstNotes: [48, 48, 49, 50, 51, 52] },
   { pattern: "Pentatonic", firstNotes: [48, 48, 50, 52, 55, 57] },
   { pattern: "Major", firstNotes: [48, 48, 50, 52, 53, 55] },
   { pattern: "2 Up 1 Down", firstNotes: [48, 48, 52, 50, 53, 52] },
 ])("plays expected opening notes for $pattern pattern", async ({ pattern, firstNotes }) => {
-  renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
+  const engine = new PlaybackEngine({
+    ...createPlaybackEngineConfig(),
+    scaleMinNote: "C3",
+    scaleMaxNote: "E4",
+  });
+  render(<ScalesPage engine={engine} scaleMinNote="C3" scaleMaxNote="E4" />);
   await waitForReady();
 
   fireEvent.change(screen.getByRole("combobox", { name: "Scale pattern" }), {

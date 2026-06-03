@@ -1,18 +1,5 @@
 import { clamp } from "../tools.js";
 
-function finalizeDetection(detectionState, { hz, minHz, maxHz }) {
-  const { hzBuffer } = detectionState;
-  const inHzRange = hz >= minHz && hz <= maxHz;
-  const cents = inHzRange ? 1200 * Math.log2(hz) : Number.NaN;
-
-  if (inHzRange) {
-    hzBuffer[detectionState.hzIndex] = hz;
-    detectionState.hzIndex = (detectionState.hzIndex + 1) % hzBuffer.length;
-  }
-
-  return cents;
-}
-
 function fftBinsToPitch(spectrumBins, sampleRate, minHz, maxHz) {
   if (!spectrumBins || spectrumBins.length < 8) {
     return Number.NaN;
@@ -188,10 +175,11 @@ export function getPitchFromSpectrum(detectionState, spectrumBins, minHz, maxHz)
   if (!hzBuffer || !spectrumBins || !spectrumBins.length) return Number.NaN;
 
   const hz = fftBinsToPitch(spectrumBins, detectionState.sampleRate, minHz, maxHz);
+  const inHzRange = hz >= minHz && hz <= maxHz;
+  if (inHzRange) {
+    hzBuffer[detectionState.hzIndex] = hz;
+    detectionState.hzIndex = (detectionState.hzIndex + 1) % hzBuffer.length;
+  }
 
-  return finalizeDetection(detectionState, {
-    hz,
-    minHz,
-    maxHz,
-  });
+  return inHzRange ? 1200 * Math.log2(hz) : Number.NaN;
 }

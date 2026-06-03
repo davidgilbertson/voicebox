@@ -35,19 +35,8 @@ const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
 const RAW_AUDIO_SAVE_PICKER_ID = "voicebox-raw-audio";
 let recordingEngineSingleton = null;
 
-function createHzBuffer(length) {
-  const hzBuffer = new Float32Array(length);
-  hzBuffer.fill(Number.NaN);
-  return hzBuffer;
-}
-
 function getChartSeconds(chartWidthPx) {
   return clamp(chartWidthPx / DISPLAY_PIXELS_PER_SECOND, 1 / DISPLAY_PIXELS_PER_SECOND, Infinity);
-}
-
-function formatShareTimestamp(date) {
-  const pad = (value) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
 }
 
 function getCapturedSeconds(rawAudioState) {
@@ -59,7 +48,10 @@ function createRawAudioExportFile(rawAudioState, date = new Date()) {
   const samples = readRawAudioSamples(rawAudioState);
   const blob = createWavBlob(samples, rawAudioState.sampleRate);
   const seconds = Math.max(1, Math.ceil(getCapturedSeconds(rawAudioState)));
-  return new File([blob], `voicebox-last-${seconds}-seconds-${formatShareTimestamp(date)}.wav`, {
+  const timestamp =
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}-` +
+    `${String(date.getHours()).padStart(2, "0")}${String(date.getMinutes()).padStart(2, "0")}`;
+  return new File([blob], `voicebox-last-${seconds}-seconds-${timestamp}.wav`, {
     type: blob.type,
   });
 }
@@ -275,7 +267,7 @@ export class RecordingEngine {
       const hzBuffer =
         this.audioSessionState.hzBuffer && this.audioSessionState.hzBuffer.length === hzLength
           ? this.audioSessionState.hzBuffer
-          : createHzBuffer(hzLength);
+          : new Float32Array(hzLength).fill(Number.NaN);
 
       this.state.hopSize = session.hopSize;
       this.audioSessionState.context = session.context;

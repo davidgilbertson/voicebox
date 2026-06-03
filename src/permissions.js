@@ -1,7 +1,3 @@
-function normalizePermissionState(state) {
-  return state === "granted" || state === "prompt" || state === "denied" ? state : "unknown";
-}
-
 export async function queryMicrophonePermissionState() {
   if (typeof navigator.permissions?.query !== "function") {
     return "unknown";
@@ -9,7 +5,9 @@ export async function queryMicrophonePermissionState() {
 
   try {
     const status = await navigator.permissions.query({ name: "microphone" });
-    return normalizePermissionState(status?.state);
+    return status?.state === "granted" || status?.state === "prompt" || status?.state === "denied"
+      ? status.state
+      : "unknown";
   } catch {
     return "unknown";
   }

@@ -350,22 +350,6 @@ function smooth(processingState) {
   }
 }
 
-function pushPitchValue(processingState, value, lineStrength, smoothing) {
-  processingState.rawPitchCentsRing.push(value);
-  processingState.smoothedPitchCentsRing.push(value);
-  processingState.lineStrengthRing.push(lineStrength);
-  processingState.vibratoRateHzRing.push(Number.NaN);
-  adjustOutliers(processingState);
-  if (smoothing) {
-    smooth(processingState);
-  }
-  const estimatedRateNow = estimateTimelineVibratoRate({
-    ring: processingState.rawPitchCentsRing,
-    samplesPerSecond: processingState.columnRateHz,
-  });
-  processingState.vibratoRateHzRing.setAt(-1, estimatedRateNow ?? Number.NaN);
-}
-
 export function processPitchSample(
   processingState,
   {
@@ -400,7 +384,19 @@ export function processPitchSample(
   const hasPitch = Number.isFinite(cents);
   const value = hasPitch ? cents : Number.NaN;
   const nextLineStrength = hasPitch ? lineStrength : Number.NaN;
-  pushPitchValue(processingState, value, nextLineStrength, smoothing);
+  processingState.rawPitchCentsRing.push(value);
+  processingState.smoothedPitchCentsRing.push(value);
+  processingState.lineStrengthRing.push(nextLineStrength);
+  processingState.vibratoRateHzRing.push(Number.NaN);
+  adjustOutliers(processingState);
+  if (smoothing) {
+    smooth(processingState);
+  }
+  const estimatedRateNow = estimateTimelineVibratoRate({
+    ring: processingState.rawPitchCentsRing,
+    samplesPerSecond: processingState.columnRateHz,
+  });
+  processingState.vibratoRateHzRing.setAt(-1, estimatedRateNow ?? Number.NaN);
   return { steps: 1, paused: false };
 }
 

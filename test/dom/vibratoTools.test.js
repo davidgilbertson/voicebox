@@ -53,17 +53,6 @@ function assertOutOfRangeReturnsNull(estimate) {
   assert.equal(rateHz, null);
 }
 
-function assertSilentGapReturnsNull(estimate) {
-  const samplesPerSecond = 200;
-  const series = [...new Array(700).fill(Number.NaN), ...new Array(300).fill(0)];
-  const ring = createRingFromSeries(series);
-  const rateHz = estimate({
-    ring,
-    samplesPerSecond,
-  });
-  assert.equal(rateHz, null);
-}
-
 test("default vibrato estimator detects a stable 6Hz signal", () => {
   assertDetectsStable6Hz(estimateTimelineVibratoRate);
 });
@@ -73,7 +62,14 @@ test("default vibrato estimator returns null when signal is out of range", () =>
 });
 
 test("default vibrato estimator returns null for silent gaps", () => {
-  assertSilentGapReturnsNull(estimateTimelineVibratoRate);
+  const samplesPerSecond = 200;
+  const series = [...new Array(700).fill(Number.NaN), ...new Array(300).fill(0)];
+  const ring = createRingFromSeries(series);
+  const rateHz = estimateTimelineVibratoRate({
+    ring,
+    samplesPerSecond,
+  });
+  assert.equal(rateHz, null);
 });
 
 test("default vibrato estimator handles rounded plateaus", () => {

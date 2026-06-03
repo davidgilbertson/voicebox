@@ -22,20 +22,6 @@ function stringifyJson(value) {
   return JSON.stringify(value, null, 2);
 }
 
-function readLocalStorageSnapshot() {
-  return Object.fromEntries(
-    Object.keys(localStorage)
-      .sort()
-      .map((key) => [key, localStorage.getItem(key)]),
-  );
-}
-
-function listSupportedConstraints(constraints) {
-  return Object.entries(constraints)
-    .filter(([, supported]) => supported === true)
-    .map(([name]) => name);
-}
-
 function readAnalyserFrame(analyser, samples) {
   if (typeof analyser.getFloatTimeDomainData === "function") {
     analyser.getFloatTimeDomainData(samples);
@@ -104,7 +90,13 @@ function readOverlayMetrics() {
 }
 
 export function DebugPage() {
-  const [localStorageSnapshot] = useState(() => readLocalStorageSnapshot());
+  const [localStorageSnapshot] = useState(() =>
+    Object.fromEntries(
+      Object.keys(localStorage)
+        .sort()
+        .map((key) => [key, localStorage.getItem(key)]),
+    ),
+  );
   const [isLocalStorageOpen, setIsLocalStorageOpen] = useState(() =>
     readStoredSectionOpenState(DEBUG_LOCAL_STORAGE_OPEN_KEY, true),
   );
@@ -159,7 +151,9 @@ export function DebugPage() {
     batchMax: 0,
     lastPublishedAt: null,
   });
-  const supportedConstraintNames = listSupportedConstraints(supportedConstraints);
+  const supportedConstraintNames = Object.entries(supportedConstraints)
+    .filter(([, supported]) => supported === true)
+    .map(([name]) => name);
 
   useEffect(() => {
     const previousTitle = document.title;
