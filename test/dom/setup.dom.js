@@ -221,9 +221,23 @@ class FakeAudioContext {
     };
   }
 
+  async decodeAudioData() {
+    return { duration: 0, length: 0, numberOfChannels: 1, sampleRate: this.sampleRate };
+  }
+
   async close() {
     this.state = "closed";
   }
+}
+
+class FakeOscillatorNode {
+  connect() {}
+
+  disconnect() {}
+
+  start() {}
+
+  stop() {}
 }
 
 class FakeAudioWorkletNode {
@@ -240,6 +254,14 @@ class FakeAudioWorkletNode {
 
 window.AudioContext = FakeAudioContext;
 window.AudioWorkletNode = FakeAudioWorkletNode;
+window.OscillatorNode = FakeOscillatorNode;
+
+// piano.js fetches the metronome sample; return an empty buffer so the real
+// loader resolves without hitting the network.
+globalThis.fetch = vi.fn(async () => ({
+  ok: true,
+  arrayBuffer: async () => new ArrayBuffer(0),
+}));
 
 if (!navigator.mediaDevices) {
   navigator.mediaDevices = {};

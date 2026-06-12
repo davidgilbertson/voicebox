@@ -1,20 +1,33 @@
 import js from "@eslint/js";
-import agentRules from "@david/eslint-plugin-agent-rules";
+import { existsSync } from "node:fs";
+import { URL } from "node:url";
 import globals from "globals";
+
+// The agent-rules plugin lives in a sibling directory and is intentionally NOT a
+// package.json dependency, so `npm install` works on build servers that only check
+// out this repo. When the sibling dir is absent (e.g. CI), the rules are skipped.
+const agentRulesPath = new URL("../eslint-plugin-agent-rules/index.js", import.meta.url);
+const agentRules = existsSync(agentRulesPath)
+  ? (await import(agentRulesPath.href)).default
+  : undefined;
 
 export default [
   js.configs.recommended,
   {
     ignores: ["dist/**", "node_modules/**", ".private/**", "experiments/**"],
   },
-  {
-    plugins: {
-      "agent-rules": agentRules,
-    },
-    rules: {
-      "agent-rules/no-low-value-local-function": "error",
-    },
-  },
+  ...(agentRules
+    ? [
+        {
+          plugins: {
+            "agent-rules": agentRules,
+          },
+          rules: {
+            "agent-rules/no-low-value-local-function": "error",
+          },
+        },
+      ]
+    : []),
   {
     files: ["src/**/*.js", "src/**/*.jsx", "test/**/*.js", "test/**/*.jsx"],
     languageOptions: {

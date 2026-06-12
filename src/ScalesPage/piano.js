@@ -7,6 +7,7 @@ let resumeAudioPromise = null;
 let pianoGain = 1;
 let metronomeTickBuffer = null;
 let loadingMetronomeTickPromise = null;
+let keepAliveStarted = false;
 const playedNoteListeners = new Set();
 // Downloaded from: https://gleitz.github.io/midi-js-soundfonts/MusyngKite/acoustic_grand_piano-mp3.js
 const LOCAL_PIANO_SOUNDFONT_URL = "/soundfonts/acoustic_grand_piano-mp3.js";
@@ -36,6 +37,23 @@ async function ensureAudioReady() {
     if (resumed === false || audioContext.state === "suspended") {
       return false;
     }
+  }
+  // Chrome on Android shuts down the hardware audio output stream after a
+  // stretch of silence (threshold varies by device/version, on the order of
+  // tens of seconds), even though the AudioContext still reports "running".
+  // Restarting the stream delays the next sound by a noticeable amount and can
+  // flush several already-scheduled metronome ticks at once. An endless,
+  // inaudible signal keeps the stream open. It must be non-zero — a perfectly
+  // silent signal still trips Chrome's silence detection — so we use a quiet
+  // 40 Hz tone, well below what phone speakers can reproduce.
+  if (!keepAliveStarted) {
+    keepAliveStarted = true;
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = 0.001;
+    gainNode.connect(audioContext.destination);
+    const oscillator = new OscillatorNode(audioContext, { frequency: 40 });
+    oscillator.connect(gainNode);
+    oscillator.start();
   }
   return true;
 }
@@ -92,7 +110,6 @@ export async function ensurePianoReadyForPlayback() {
 }
 
 export async function ensureMetronomeTickLoaded() {
-  if (import.meta.env.MODE === "test") return null;
   if (metronomeTickBuffer) return metronomeTickBuffer;
   ensureAudioContext();
   if (!loadingMetronomeTickPromise) {

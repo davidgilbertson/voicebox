@@ -33,7 +33,6 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.22.1",
-    "@david/eslint-plugin-agent-rules": "file:..\\eslint-plugin-agent-rules",
     "@eslint/js": "^10.0.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
