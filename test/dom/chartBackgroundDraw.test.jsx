@@ -1,4 +1,4 @@
-import { test, expect, vi } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import { drawWaveformTrace } from "../../src/Recorder/canvasTools.js";
 import { readPitchLineColorMode } from "../../src/Recorder/config.js";
 import { PitchChartRenderer } from "../../src/Recorder/Pitch/pitchTools.js";
@@ -44,69 +44,71 @@ function createCanvas(ctx) {
   };
 }
 
-test("pitch renderer draws background even when there is no waveform data", () => {
-  const drawImage = vi.fn();
-  const ctx = createCanvasContext(drawImage);
-  const canvas = createCanvas(ctx);
-  const renderer = new PitchChartRenderer({
-    minCents: 0,
-    maxCents: 1200,
-    lineColorMode: readPitchLineColorMode(),
-    renderScale: 1,
-  });
-  renderer.setCanvas(canvas);
-  renderer.draw({
-    smoothedPitchCentsRing: createRing([]),
-    lineStrengthRing: createRing([]),
-  });
+describe("Charts", () => {
+  test("The pitch renderer draws the background even with no waveform data", () => {
+    const drawImage = vi.fn();
+    const ctx = createCanvasContext(drawImage);
+    const canvas = createCanvas(ctx);
+    const renderer = new PitchChartRenderer({
+      minCents: 0,
+      maxCents: 1200,
+      lineColorMode: readPitchLineColorMode(),
+      renderScale: 1,
+    });
+    renderer.setCanvas(canvas);
+    renderer.draw({
+      smoothedPitchCentsRing: createRing([]),
+      lineStrengthRing: createRing([]),
+    });
 
-  expect(drawImage).toHaveBeenCalled();
-});
-
-test("line renderer uses color mapping callback when color values are provided", () => {
-  const mapColorValueToStroke = vi.fn(() => "rgb(0 0 0)");
-  const ctx = createCanvasContext();
-
-  const valuesRing = createRing([0, 0.5, 1]);
-  const colorValuesRing = createRing([0.1, 0.5, 0.9]);
-  drawWaveformTrace({
-    ctx,
-    valuesRing,
-    colorValuesRing,
-    yRange: 1,
-    mapColorValueToStroke,
-    plotWidth: 200,
-    plotHeight: 120,
+    expect(drawImage).toHaveBeenCalled();
   });
 
-  expect(mapColorValueToStroke).toHaveBeenCalled();
-});
+  test("The line renderer uses the color-mapping callback when color values are provided", () => {
+    const mapColorValueToStroke = vi.fn(() => "rgb(0 0 0)");
+    const ctx = createCanvasContext();
 
-test("pitch renderer fades the latest unstable tail samples", () => {
-  const alphaWrites = [];
-  let globalAlpha = 1;
-  const ctx = createCanvasContext();
-  Object.defineProperty(ctx, "globalAlpha", {
-    get: () => globalAlpha,
-    set: (value) => {
-      globalAlpha = value;
-      alphaWrites.push(value);
-    },
-  });
-  const renderer = new PitchChartRenderer({
-    minCents: 0,
-    maxCents: 1200,
-    lineColorMode: "blue",
-    renderScale: 1,
-  });
-  renderer.setCanvas(createCanvas(ctx));
+    const valuesRing = createRing([0, 0.5, 1]);
+    const colorValuesRing = createRing([0.1, 0.5, 0.9]);
+    drawWaveformTrace({
+      ctx,
+      valuesRing,
+      colorValuesRing,
+      yRange: 1,
+      mapColorValueToStroke,
+      plotWidth: 200,
+      plotHeight: 120,
+    });
 
-  renderer.draw({
-    smoothedPitchCentsRing: createRing([100, 110, 120, 130, 140, 150, 160]),
-    lineStrengthRing: createRing([1, 1, 1, 1, 1, 1, 1]),
+    expect(mapColorValueToStroke).toHaveBeenCalled();
   });
 
-  expect(
-    alphaWrites.filter((value) => value !== 1).map((value) => Number(value.toFixed(2))),
-  ).toEqual([0.5, 0.4, 0.3, 0.2, 0.15, 0.1]);
+  test("The pitch renderer fades the latest unstable tail samples", () => {
+    const alphaWrites = [];
+    let globalAlpha = 1;
+    const ctx = createCanvasContext();
+    Object.defineProperty(ctx, "globalAlpha", {
+      get: () => globalAlpha,
+      set: (value) => {
+        globalAlpha = value;
+        alphaWrites.push(value);
+      },
+    });
+    const renderer = new PitchChartRenderer({
+      minCents: 0,
+      maxCents: 1200,
+      lineColorMode: "blue",
+      renderScale: 1,
+    });
+    renderer.setCanvas(createCanvas(ctx));
+
+    renderer.draw({
+      smoothedPitchCentsRing: createRing([100, 110, 120, 130, 140, 150, 160]),
+      lineStrengthRing: createRing([1, 1, 1, 1, 1, 1, 1]),
+    });
+
+    expect(
+      alphaWrites.filter((value) => value !== 1).map((value) => Number(value.toFixed(2))),
+    ).toEqual([0.5, 0.4, 0.3, 0.2, 0.15, 0.1]);
+  });
 });

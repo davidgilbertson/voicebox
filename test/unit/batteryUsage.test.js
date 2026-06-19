@@ -1,75 +1,77 @@
-import { expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { BatteryUsageMonitor, createBatteryUsageMonitor } from "../../src/Recorder/batteryUsage.js";
 
-test("Returns -- until at least one minute has elapsed", async () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(1_000);
-  const battery = { level: 0.8, charging: false };
-  navigator.getBattery = vi.fn(async () => battery);
-  const monitor = createBatteryUsageMonitor();
+describe("Battery usage", () => {
+  test("Reads -- until at least one minute has elapsed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const battery = { level: 0.8, charging: false };
+    navigator.getBattery = vi.fn(async () => battery);
+    const monitor = createBatteryUsageMonitor();
 
-  expect(await monitor.readUsagePerMinute()).toBe("--");
+    expect(await monitor.readUsagePerMinute()).toBe("--");
 
-  vi.advanceTimersByTime(30_000);
-  battery.level = 0.79;
-  expect(await monitor.readUsagePerMinute()).toBe("--");
-});
+    vi.advanceTimersByTime(30_000);
+    battery.level = 0.79;
+    expect(await monitor.readUsagePerMinute()).toBe("--");
+  });
 
-test("Computes %/min from app-open baseline to current charge", async () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(5_000);
-  const battery = { level: 0.8, charging: false };
-  navigator.getBattery = vi.fn(async () => battery);
-  const monitor = createBatteryUsageMonitor();
+  test("Computes %/min from the app-open baseline to the current charge", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(5_000);
+    const battery = { level: 0.8, charging: false };
+    navigator.getBattery = vi.fn(async () => battery);
+    const monitor = createBatteryUsageMonitor();
 
-  expect(await monitor.readUsagePerMinute()).toBe("--");
+    expect(await monitor.readUsagePerMinute()).toBe("--");
 
-  vi.advanceTimersByTime(60_000);
-  battery.level = 0.78;
-  expect(await monitor.readUsagePerMinute()).toBeCloseTo(2, 6);
+    vi.advanceTimersByTime(60_000);
+    battery.level = 0.78;
+    expect(await monitor.readUsagePerMinute()).toBeCloseTo(2, 6);
 
-  vi.advanceTimersByTime(60_000);
-  battery.level = 0.76;
-  expect(await monitor.readUsagePerMinute()).toBeCloseTo(2, 6);
-});
+    vi.advanceTimersByTime(60_000);
+    battery.level = 0.76;
+    expect(await monitor.readUsagePerMinute()).toBeCloseTo(2, 6);
+  });
 
-test("Returns null when charging or battery info is unavailable", async () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(10_000);
-  const battery = { level: 0.7, charging: false };
-  navigator.getBattery = vi.fn(async () => battery);
-  const monitor = createBatteryUsageMonitor();
+  test("Returns null when charging or battery info is unavailable", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const battery = { level: 0.7, charging: false };
+    navigator.getBattery = vi.fn(async () => battery);
+    const monitor = createBatteryUsageMonitor();
 
-  expect(await monitor.readUsagePerMinute()).toBe("--");
+    expect(await monitor.readUsagePerMinute()).toBe("--");
 
-  battery.charging = true;
-  vi.advanceTimersByTime(60_000);
-  expect(await monitor.readUsagePerMinute()).toBeNull();
+    battery.charging = true;
+    vi.advanceTimersByTime(60_000);
+    expect(await monitor.readUsagePerMinute()).toBeNull();
 
-  navigator.getBattery = vi.fn(async () => ({
-    level: undefined,
-    charging: false,
-  }));
-  const unavailableMonitor = createBatteryUsageMonitor();
-  expect(await unavailableMonitor.readUsagePerMinute()).toBeNull();
-});
+    navigator.getBattery = vi.fn(async () => ({
+      level: undefined,
+      charging: false,
+    }));
+    const unavailableMonitor = createBatteryUsageMonitor();
+    expect(await unavailableMonitor.readUsagePerMinute()).toBeNull();
+  });
 
-test("Polls on an interval and publishes updates to subscribers", async () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(20_000);
-  const battery = { level: 0.8, charging: false };
-  navigator.getBattery = vi.fn(async () => battery);
-  const monitor = new BatteryUsageMonitor();
-  const listener = vi.fn();
+  test("Polls on an interval and publishes updates to subscribers", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(20_000);
+    const battery = { level: 0.8, charging: false };
+    navigator.getBattery = vi.fn(async () => battery);
+    const monitor = new BatteryUsageMonitor();
+    const listener = vi.fn();
 
-  const unsubscribe = monitor.subscribe(listener);
-  await vi.advanceTimersByTimeAsync(0);
-  expect(listener).toHaveBeenLastCalledWith("--");
+    const unsubscribe = monitor.subscribe(listener);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(listener).toHaveBeenLastCalledWith("--");
 
-  battery.level = 0.78;
-  await vi.advanceTimersByTimeAsync(60_000);
-  expect(listener.mock.calls.at(-1)?.[0]).toBeCloseTo(2, 6);
+    battery.level = 0.78;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(listener.mock.calls.at(-1)?.[0]).toBeCloseTo(2, 6);
 
-  unsubscribe();
-  monitor.destroy();
+    unsubscribe();
+    monitor.destroy();
+  });
 });

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { test, expect, vi } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import { AppShell } from "../../src/AppShell.jsx";
 import { appendRawAudioSamples } from "../../src/Recorder/rawAudio.js";
 import {
@@ -17,311 +17,315 @@ import {
 } from "../../src/Recorder/config.js";
 import { readDeveloperMode as readAppDeveloperMode } from "../../src/AppShell/config.js";
 
-test("settings defaults and persistence work via localStorage", async () => {
-  const user = userEvent.setup();
-  render(<AppShell />);
+describe("Settings", () => {
+  test("Settings defaults are applied and persisted to localStorage", async () => {
+    const user = userEvent.setup();
+    render(<AppShell />);
 
-  await user.click(screen.getByLabelText("Open settings"));
-  const autoPauseCheckbox = screen.getByRole("checkbox", {
-    name: /Auto pause on silence/i,
-  });
-  const calibrateButton = screen.getByRole("button", { name: /Record minimum volume/i });
-  const runAt30FpsCheckbox = screen.getByRole("checkbox", {
-    name: /Run at 30 FPS/i,
-  });
-  const halfResolutionCanvasCheckbox = screen.getByRole("checkbox", {
-    name: /Half-resolution canvas/i,
-  });
-  const halfResolutionSpectrogramCheckbox = screen.getByRole("checkbox", {
-    name: /Half-resolution spectrogram/i,
-  });
+    await user.click(screen.getByLabelText("Open settings"));
+    const autoPauseCheckbox = screen.getByRole("checkbox", {
+      name: /Auto pause on silence/i,
+    });
+    const calibrateButton = screen.getByRole("button", { name: /Record minimum volume/i });
+    const runAt30FpsCheckbox = screen.getByRole("checkbox", {
+      name: /Run at 30 FPS/i,
+    });
+    const halfResolutionCanvasCheckbox = screen.getByRole("checkbox", {
+      name: /Half-resolution canvas/i,
+    });
+    const halfResolutionSpectrogramCheckbox = screen.getByRole("checkbox", {
+      name: /Half-resolution spectrogram/i,
+    });
 
-  expect(autoPauseCheckbox).toBeChecked();
-  expect(calibrateButton).toBeEnabled();
-  expect(runAt30FpsCheckbox).not.toBeChecked();
-  expect(halfResolutionCanvasCheckbox).not.toBeChecked();
-  expect(halfResolutionSpectrogramCheckbox).not.toBeChecked();
-  expect(screen.queryByRole("checkbox", { name: /Smoothing/i })).toBeNull();
+    expect(autoPauseCheckbox).toBeChecked();
+    expect(calibrateButton).toBeEnabled();
+    expect(runAt30FpsCheckbox).not.toBeChecked();
+    expect(halfResolutionCanvasCheckbox).not.toBeChecked();
+    expect(halfResolutionSpectrogramCheckbox).not.toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: /Smoothing/i })).toBeNull();
 
-  await user.click(runAt30FpsCheckbox);
-  expect(runAt30FpsCheckbox).toBeChecked();
-  await user.click(halfResolutionCanvasCheckbox);
-  expect(halfResolutionCanvasCheckbox).toBeChecked();
-  await user.click(halfResolutionSpectrogramCheckbox);
-  expect(halfResolutionSpectrogramCheckbox).toBeChecked();
+    await user.click(runAt30FpsCheckbox);
+    expect(runAt30FpsCheckbox).toBeChecked();
+    await user.click(halfResolutionCanvasCheckbox);
+    expect(halfResolutionCanvasCheckbox).toBeChecked();
+    await user.click(halfResolutionSpectrogramCheckbox);
+    expect(halfResolutionSpectrogramCheckbox).toBeChecked();
 
-  await waitFor(() => {
-    expect(readAutoPauseOnSilence()).toBe(true);
-    expect(readMinVolumeThreshold()).toBe(2);
-    expect(readRunAt30Fps()).toBe(true);
-    expect(readHalfResolutionCanvas()).toBe(true);
-    expect(readHighResSpectrogram()).toBe(false);
-  });
-});
-
-test("calibrate microphone stays available on the scales page", async () => {
-  const user = userEvent.setup();
-  render(<AppShell />);
-
-  await user.click(screen.getByRole("button", { name: "Scales" }));
-  await user.click(screen.getByLabelText("Open settings"));
-
-  expect(screen.getByRole("button", { name: /Record minimum volume/i })).toBeEnabled();
-});
-
-test("settings can reset the remembered maximum volume", async () => {
-  localStorage.setItem("voicebox.maxVolume", "8");
-  const user = userEvent.setup();
-  render(<AppShell />);
-
-  await user.click(screen.getByLabelText("Open settings"));
-  await user.click(screen.getByRole("button", { name: /Reset maximum volume/i }));
-
-  expect(readMaxVolume()).toBe(2);
-  expect(globalThis.__appRecordingEngineForTests.volumeTracking.maxHeardVolume).toBe(2);
-});
-
-test("spectrogram frequency settings are editable and persisted", async () => {
-  render(<AppShell />);
-  fireEvent.click(screen.getByLabelText("Open settings"));
-  const minInput = screen.getByLabelText("Spectrogram minimum frequency (Hz)");
-  const maxInput = screen.getByLabelText("Spectrogram maximum frequency (Hz)");
-
-  expect(minInput).toHaveValue(readSpectrogramMinHz());
-  expect(maxInput).toHaveValue(readSpectrogramMaxHz());
-  expect(minInput).not.toHaveAttribute("min");
-  expect(minInput).not.toHaveAttribute("max");
-  expect(maxInput).not.toHaveAttribute("min");
-  expect(maxInput).not.toHaveAttribute("max");
-
-  fireEvent.change(minInput, { target: { value: "55" } });
-  fireEvent.change(maxInput, { target: { value: "7200" } });
-  fireEvent.blur(minInput);
-  fireEvent.blur(maxInput);
-
-  await waitFor(() => {
-    expect(readSpectrogramMinHz()).toBe(55);
-    expect(readSpectrogramMaxHz()).toBe(7200);
-  });
-});
-
-test("spectrogram frequency inputs can be cleared while editing and commit on blur", async () => {
-  const user = userEvent.setup();
-  render(<AppShell />);
-
-  await user.click(screen.getByLabelText("Open settings"));
-  const minInput = screen.getByLabelText("Spectrogram minimum frequency (Hz)");
-
-  fireEvent.change(minInput, { target: { value: "" } });
-  expect(minInput).toHaveValue(null);
-
-  fireEvent.change(minInput, { target: { value: "65" } });
-  fireEvent.blur(minInput);
-
-  await waitFor(() => {
-    expect(readSpectrogramMinHz()).toBe(65);
-  });
-});
-
-test("temporary pitch detector overlay buttons are removed", async () => {
-  const user = userEvent.setup();
-  render(<AppShell />);
-
-  await user.click(screen.getByRole("button", { name: "Pitch" }));
-  expect(screen.queryByRole("button", { name: "FFT residual" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "FFT raw" })).toBeNull();
-});
-
-test("temporary window/bin overlay buttons are removed", async () => {
-  const user = userEvent.setup();
-  render(<AppShell />);
-
-  await user.click(screen.getByRole("button", { name: "Pitch" }));
-  expect(screen.queryByRole("button", { name: "WINDOW_SIZE 4096" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "SPECTROGRAM_BINS 8192" })).toBeNull();
-});
-
-test("battery use shows -- in the first minute", async () => {
-  const battery = {
-    level: 0.8,
-    charging: false,
-  };
-  navigator.getBattery = vi.fn(async () => battery);
-
-  const user = userEvent.setup();
-  render(<AppShell />);
-
-  await user.click(screen.getByLabelText("Open settings"));
-  expect(await screen.findByText("Battery use")).toBeInTheDocument();
-  expect(screen.getByText("-- %/min")).toBeInTheDocument();
-});
-
-test("battery use shows NA while charging", async () => {
-  navigator.getBattery = vi.fn(async () => ({
-    level: 0.52,
-    charging: true,
-  }));
-
-  const user = userEvent.setup();
-  render(<AppShell />);
-
-  await user.click(screen.getByLabelText("Open settings"));
-  await waitFor(() => {
-    expect(screen.getByText("Battery use")).toBeInTheDocument();
-    expect(screen.getByText("NA")).toBeInTheDocument();
-  });
-});
-
-test("battery use shows NA when battery level is unavailable", async () => {
-  navigator.getBattery = vi.fn(async () => ({
-    level: undefined,
-    charging: false,
-  }));
-
-  const user = userEvent.setup();
-  render(<AppShell />);
-
-  await user.click(screen.getByLabelText("Open settings"));
-  await waitFor(() => {
-    expect(screen.getByText("Battery use")).toBeInTheDocument();
-    expect(screen.getByText("NA")).toBeInTheDocument();
-  });
-});
-
-test("pitch line color mode persists from settings", async () => {
-  const user = userEvent.setup();
-  render(<AppShell />);
-
-  await user.click(screen.getByLabelText("Open settings"));
-  const orangeRadio = screen.getByRole("radio", { name: "Orange" });
-  await user.click(orangeRadio);
-
-  await waitFor(() => {
-    expect(readPitchLineColorMode()).toBe("orange");
-  });
-});
-
-test("pitch line color options are ordered and inferno is removed", async () => {
-  const user = userEvent.setup();
-  render(<AppShell />);
-
-  await user.click(screen.getByLabelText("Open settings"));
-  const radios = screen.getAllByRole("radio", { name: /.+/ });
-  const colorModeLabels = radios
-    .map((radio) => radio.closest("label")?.textContent?.trim())
-    .filter(Boolean);
-
-  expect(colorModeLabels).toEqual([
-    "Terrain",
-    "Gist Rainbow",
-    "Cool",
-    "Autumn",
-    "Blue",
-    "Orange",
-    "Green",
-  ]);
-  expect(screen.queryByRole("radio", { name: "Inferno" })).toBeNull();
-});
-
-test("invalid persisted pitch line color mode falls back to terrain", async () => {
-  localStorage.setItem("voicebox.pitchLineColorMode", "red");
-  const user = userEvent.setup();
-  render(<AppShell />);
-
-  await user.click(screen.getByLabelText("Open settings"));
-  const terrainRadio = screen.getByRole("radio", { name: "Terrain" });
-  expect(terrainRadio).toBeChecked();
-  expect(readPitchLineColorMode()).toBe("terrain");
-});
-
-test("settings about link points to the local about page", async () => {
-  const user = userEvent.setup();
-  render(<AppShell />);
-
-  await user.click(screen.getByLabelText("Open settings"));
-  const aboutLink = screen.getByRole("link", { name: "Help" });
-
-  expect(aboutLink).toHaveAttribute("href", "/about");
-});
-
-test("developer mode unlocks after four quick taps on the settings heading and can be exited", async () => {
-  const user = userEvent.setup();
-  const tapTimes = [0, 200, 400, 600];
-  vi.spyOn(performance, "now").mockImplementation(() => tapTimes.shift() ?? 600);
-  render(<AppShell />);
-
-  await user.click(screen.getByLabelText("Open settings"));
-  const headingButton = screen.getByRole("button", { name: "Settings" });
-
-  await user.click(headingButton);
-  await user.click(headingButton);
-  await user.click(headingButton);
-  await user.click(headingButton);
-
-  expect(screen.getByRole("button", { name: "Exit dev mode" })).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "/debug" })).toHaveAttribute("href", "/debug");
-  const smoothingCheckbox = screen.getByRole("checkbox", { name: /Smoothing/i });
-  expect(smoothingCheckbox).toBeChecked();
-  expect(readAppDeveloperMode()).toBe(true);
-
-  await user.click(smoothingCheckbox);
-  await waitFor(() => {
-    expect(readSmoothing()).toBe(false);
+    await waitFor(() => {
+      expect(readAutoPauseOnSilence()).toBe(true);
+      expect(readMinVolumeThreshold()).toBe(2);
+      expect(readRunAt30Fps()).toBe(true);
+      expect(readHalfResolutionCanvas()).toBe(true);
+      expect(readHighResSpectrogram()).toBe(false);
+    });
   });
 
-  await user.click(screen.getByRole("button", { name: "Exit dev mode" }));
+  test("Calibrate microphone stays available on the scales page", async () => {
+    const user = userEvent.setup();
+    render(<AppShell />);
 
-  await waitFor(() => {
-    expect(screen.queryByRole("button", { name: "Exit dev mode" })).toBeNull();
-    expect(readAppDeveloperMode()).toBe(false);
-  });
-});
+    await user.click(screen.getByRole("button", { name: "Scales" }));
+    await user.click(screen.getByLabelText("Open settings"));
 
-test("share button only appears for paused recorder views with captured audio", async () => {
-  navigator.share = vi.fn(async () => {});
-  navigator.canShare = vi.fn(() => true);
-
-  const user = userEvent.setup();
-  render(<AppShell />);
-
-  await user.click(screen.getByLabelText("Open settings"));
-  expect(screen.queryByRole("button", { name: /Share paused recording/i })).toBeNull();
-
-  const engine = globalThis.__appRecordingEngineForTests;
-  appendRawAudioSamples(engine.rawAudioState, new Float32Array(48_000).fill(0.25));
-  engine.setUi({ hasEverRun: true, isWantedRunning: false });
-
-  await waitFor(() => {
-    expect(screen.getByRole("button", { name: /Share paused recording/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Record minimum volume/i })).toBeEnabled();
   });
 
-  await user.click(screen.getByLabelText("Close settings"));
-  await user.click(screen.getByRole("button", { name: "Scales" }));
-  await user.click(screen.getByLabelText("Open settings"));
+  test("Settings can reset the remembered maximum volume", async () => {
+    localStorage.setItem("voicebox.maxVolume", "8");
+    const user = userEvent.setup();
+    render(<AppShell />);
 
-  expect(screen.queryByRole("button", { name: /Share paused recording/i })).toBeNull();
-});
+    await user.click(screen.getByLabelText("Open settings"));
+    await user.click(screen.getByRole("button", { name: /Reset maximum volume/i }));
 
-test("developer mode shows a paused download button in recorder views", async () => {
-  const user = userEvent.setup();
-  window.showSaveFilePicker = vi.fn();
-  render(<AppShell />);
-
-  const engine = globalThis.__appRecordingEngineForTests;
-  appendRawAudioSamples(engine.rawAudioState, new Float32Array(48_000).fill(0.25));
-  engine.setUi({ hasEverRun: true, isWantedRunning: false });
-
-  await user.click(screen.getByLabelText("Open settings"));
-  const headingButton = screen.getByRole("button", { name: "Settings" });
-  await user.click(headingButton);
-  await user.click(headingButton);
-  await user.click(headingButton);
-  await user.click(headingButton);
-  await user.click(screen.getByLabelText("Close settings"));
-
-  await waitFor(() => {
-    expect(screen.getByRole("button", { name: /Download paused recording/i })).toBeInTheDocument();
+    expect(readMaxVolume()).toBe(2);
+    expect(globalThis.__appRecordingEngineForTests.volumeTracking.maxHeardVolume).toBe(2);
   });
 
-  delete window.showSaveFilePicker;
+  test("Spectrogram frequency settings are editable and persisted", async () => {
+    render(<AppShell />);
+    fireEvent.click(screen.getByLabelText("Open settings"));
+    const minInput = screen.getByLabelText("Spectrogram minimum frequency (Hz)");
+    const maxInput = screen.getByLabelText("Spectrogram maximum frequency (Hz)");
+
+    expect(minInput).toHaveValue(readSpectrogramMinHz());
+    expect(maxInput).toHaveValue(readSpectrogramMaxHz());
+    expect(minInput).not.toHaveAttribute("min");
+    expect(minInput).not.toHaveAttribute("max");
+    expect(maxInput).not.toHaveAttribute("min");
+    expect(maxInput).not.toHaveAttribute("max");
+
+    fireEvent.change(minInput, { target: { value: "55" } });
+    fireEvent.change(maxInput, { target: { value: "7200" } });
+    fireEvent.blur(minInput);
+    fireEvent.blur(maxInput);
+
+    await waitFor(() => {
+      expect(readSpectrogramMinHz()).toBe(55);
+      expect(readSpectrogramMaxHz()).toBe(7200);
+    });
+  });
+
+  test("Spectrogram frequency inputs can be cleared while editing and commit on blur", async () => {
+    const user = userEvent.setup();
+    render(<AppShell />);
+
+    await user.click(screen.getByLabelText("Open settings"));
+    const minInput = screen.getByLabelText("Spectrogram minimum frequency (Hz)");
+
+    fireEvent.change(minInput, { target: { value: "" } });
+    expect(minInput).toHaveValue(null);
+
+    fireEvent.change(minInput, { target: { value: "65" } });
+    fireEvent.blur(minInput);
+
+    await waitFor(() => {
+      expect(readSpectrogramMinHz()).toBe(65);
+    });
+  });
+
+  test("The temporary pitch-detector overlay buttons are removed", async () => {
+    const user = userEvent.setup();
+    render(<AppShell />);
+
+    await user.click(screen.getByRole("button", { name: "Pitch" }));
+    expect(screen.queryByRole("button", { name: "FFT residual" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "FFT raw" })).toBeNull();
+  });
+
+  test("The temporary window/bin overlay buttons are removed", async () => {
+    const user = userEvent.setup();
+    render(<AppShell />);
+
+    await user.click(screen.getByRole("button", { name: "Pitch" }));
+    expect(screen.queryByRole("button", { name: "WINDOW_SIZE 4096" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "SPECTROGRAM_BINS 8192" })).toBeNull();
+  });
+
+  test("Battery use shows -- in the first minute", async () => {
+    const battery = {
+      level: 0.8,
+      charging: false,
+    };
+    navigator.getBattery = vi.fn(async () => battery);
+
+    const user = userEvent.setup();
+    render(<AppShell />);
+
+    await user.click(screen.getByLabelText("Open settings"));
+    expect(await screen.findByText("Battery use")).toBeInTheDocument();
+    expect(screen.getByText("-- %/min")).toBeInTheDocument();
+  });
+
+  test("Battery use shows NA while charging", async () => {
+    navigator.getBattery = vi.fn(async () => ({
+      level: 0.52,
+      charging: true,
+    }));
+
+    const user = userEvent.setup();
+    render(<AppShell />);
+
+    await user.click(screen.getByLabelText("Open settings"));
+    await waitFor(() => {
+      expect(screen.getByText("Battery use")).toBeInTheDocument();
+      expect(screen.getByText("NA")).toBeInTheDocument();
+    });
+  });
+
+  test("Battery use shows NA when the battery level is unavailable", async () => {
+    navigator.getBattery = vi.fn(async () => ({
+      level: undefined,
+      charging: false,
+    }));
+
+    const user = userEvent.setup();
+    render(<AppShell />);
+
+    await user.click(screen.getByLabelText("Open settings"));
+    await waitFor(() => {
+      expect(screen.getByText("Battery use")).toBeInTheDocument();
+      expect(screen.getByText("NA")).toBeInTheDocument();
+    });
+  });
+
+  test("The pitch-line color mode persists from settings", async () => {
+    const user = userEvent.setup();
+    render(<AppShell />);
+
+    await user.click(screen.getByLabelText("Open settings"));
+    const orangeRadio = screen.getByRole("radio", { name: "Orange" });
+    await user.click(orangeRadio);
+
+    await waitFor(() => {
+      expect(readPitchLineColorMode()).toBe("orange");
+    });
+  });
+
+  test("The pitch-line color options are ordered and inferno is removed", async () => {
+    const user = userEvent.setup();
+    render(<AppShell />);
+
+    await user.click(screen.getByLabelText("Open settings"));
+    const radios = screen.getAllByRole("radio", { name: /.+/ });
+    const colorModeLabels = radios
+      .map((radio) => radio.closest("label")?.textContent?.trim())
+      .filter(Boolean);
+
+    expect(colorModeLabels).toEqual([
+      "Terrain",
+      "Gist Rainbow",
+      "Cool",
+      "Autumn",
+      "Blue",
+      "Orange",
+      "Green",
+    ]);
+    expect(screen.queryByRole("radio", { name: "Inferno" })).toBeNull();
+  });
+
+  test("An invalid persisted pitch-line color mode falls back to terrain", async () => {
+    localStorage.setItem("voicebox.pitchLineColorMode", "red");
+    const user = userEvent.setup();
+    render(<AppShell />);
+
+    await user.click(screen.getByLabelText("Open settings"));
+    const terrainRadio = screen.getByRole("radio", { name: "Terrain" });
+    expect(terrainRadio).toBeChecked();
+    expect(readPitchLineColorMode()).toBe("terrain");
+  });
+
+  test("The settings about link points to the local about page", async () => {
+    const user = userEvent.setup();
+    render(<AppShell />);
+
+    await user.click(screen.getByLabelText("Open settings"));
+    const aboutLink = screen.getByRole("link", { name: "Help" });
+
+    expect(aboutLink).toHaveAttribute("href", "/about");
+  });
+
+  test("Developer mode unlocks after four quick taps on the settings heading and can be exited", async () => {
+    const user = userEvent.setup();
+    const tapTimes = [0, 200, 400, 600];
+    vi.spyOn(performance, "now").mockImplementation(() => tapTimes.shift() ?? 600);
+    render(<AppShell />);
+
+    await user.click(screen.getByLabelText("Open settings"));
+    const headingButton = screen.getByRole("button", { name: "Settings" });
+
+    await user.click(headingButton);
+    await user.click(headingButton);
+    await user.click(headingButton);
+    await user.click(headingButton);
+
+    expect(screen.getByRole("button", { name: "Exit dev mode" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "/debug" })).toHaveAttribute("href", "/debug");
+    const smoothingCheckbox = screen.getByRole("checkbox", { name: /Smoothing/i });
+    expect(smoothingCheckbox).toBeChecked();
+    expect(readAppDeveloperMode()).toBe(true);
+
+    await user.click(smoothingCheckbox);
+    await waitFor(() => {
+      expect(readSmoothing()).toBe(false);
+    });
+
+    await user.click(screen.getByRole("button", { name: "Exit dev mode" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Exit dev mode" })).toBeNull();
+      expect(readAppDeveloperMode()).toBe(false);
+    });
+  });
+
+  test("The share button only appears for paused recorder views with captured audio", async () => {
+    navigator.share = vi.fn(async () => {});
+    navigator.canShare = vi.fn(() => true);
+
+    const user = userEvent.setup();
+    render(<AppShell />);
+
+    await user.click(screen.getByLabelText("Open settings"));
+    expect(screen.queryByRole("button", { name: /Share paused recording/i })).toBeNull();
+
+    const engine = globalThis.__appRecordingEngineForTests;
+    appendRawAudioSamples(engine.rawAudioState, new Float32Array(48_000).fill(0.25));
+    engine.setUi({ hasEverRun: true, isWantedRunning: false });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Share paused recording/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText("Close settings"));
+    await user.click(screen.getByRole("button", { name: "Scales" }));
+    await user.click(screen.getByLabelText("Open settings"));
+
+    expect(screen.queryByRole("button", { name: /Share paused recording/i })).toBeNull();
+  });
+
+  test("Developer mode shows a paused download button in recorder views", async () => {
+    const user = userEvent.setup();
+    window.showSaveFilePicker = vi.fn();
+    render(<AppShell />);
+
+    const engine = globalThis.__appRecordingEngineForTests;
+    appendRawAudioSamples(engine.rawAudioState, new Float32Array(48_000).fill(0.25));
+    engine.setUi({ hasEverRun: true, isWantedRunning: false });
+
+    await user.click(screen.getByLabelText("Open settings"));
+    const headingButton = screen.getByRole("button", { name: "Settings" });
+    await user.click(headingButton);
+    await user.click(headingButton);
+    await user.click(headingButton);
+    await user.click(headingButton);
+    await user.click(screen.getByLabelText("Close settings"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Download paused recording/i }),
+      ).toBeInTheDocument();
+    });
+
+    delete window.showSaveFilePicker;
+  });
 });

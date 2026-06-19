@@ -89,11 +89,7 @@ function pianoKeyId(note) {
   return `piano-key-${note}`;
 }
 
-export function Piano({
-  minNote = DEFAULT_MIN_NOTE,
-  maxNote = DEFAULT_MAX_NOTE,
-  onKeyPress,
-}) {
+export function Piano({ minNote = DEFAULT_MIN_NOTE, maxNote = DEFAULT_MAX_NOTE, onKeyPress }) {
   // For audio to play, it requires a user interaction, which means onClick, not onPointerDown
   // But onClick means a slight delay, so we use that for the very first press only
   const [useClickActivation, setUseClickActivation] = useState(true);

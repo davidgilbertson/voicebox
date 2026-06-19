@@ -10,7 +10,7 @@
     "preview": "vite build && vite preview",
     "format": "prettier . --write --cache",
     "lint": "eslint . --cache",
-    "test": "vitest run --config vitest.config.cjs",
+    "test": "vitest run --config vitest.config.cjs --reporter=default --reporter=./scripts/appBehaviorReporter.js",
     "test:watch": "vitest --config vitest.config.cjs"
   },
   "keywords": [],
@@ -29,7 +29,7 @@
     "react-dom": "^19.2.4",
     "soundfont-player": "^0.12.0",
     "tailwindcss": "^4.1.18",
-    "vite": "^7.3.1"
+    "vite": "8.0.5"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.22.1",

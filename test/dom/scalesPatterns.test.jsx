@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ScalesPage } from "../../src/ScalesPage/ScalesPage.jsx";
 import { PlaybackEngine } from "../../src/ScalesPage/PlaybackEngine.js";
 import { createPlaybackEngineConfig } from "../utils/engineConfig.js";
@@ -33,34 +33,36 @@ async function waitForReady() {
   expect(screen.getByRole("button", { name: "Play" })).toBeEnabled();
 }
 
-test.each([
-  { pattern: "Semitones", firstNotes: [48, 48, 49, 50, 51, 52] },
-  { pattern: "Pentatonic", firstNotes: [48, 48, 50, 52, 55, 57] },
-  { pattern: "Major", firstNotes: [48, 48, 50, 52, 53, 55] },
-  { pattern: "2 Up 1 Down", firstNotes: [48, 48, 52, 50, 53, 52] },
-])("plays expected opening notes for $pattern pattern", async ({ pattern, firstNotes }) => {
-  const engine = new PlaybackEngine({
-    ...createPlaybackEngineConfig(),
-    scaleMinNote: "C3",
-    scaleMaxNote: "E4",
-  });
-  render(<ScalesPage engine={engine} scaleMinNote="C3" scaleMaxNote="E4" />);
-  await waitForReady();
+describe("Scales", () => {
+  test.each([
+    { pattern: "Semitones", firstNotes: [48, 48, 49, 50, 51, 52] },
+    { pattern: "Pentatonic", firstNotes: [48, 48, 50, 52, 55, 57] },
+    { pattern: "Major", firstNotes: [48, 48, 50, 52, 53, 55] },
+    { pattern: "2 Up 1 Down", firstNotes: [48, 48, 52, 50, 53, 52] },
+  ])("The $pattern pattern plays its expected opening notes", async ({ pattern, firstNotes }) => {
+    const engine = new PlaybackEngine({
+      ...createPlaybackEngineConfig(),
+      scaleMinNote: "C3",
+      scaleMaxNote: "E4",
+    });
+    render(<ScalesPage engine={engine} scaleMinNote="C3" scaleMaxNote="E4" />);
+    await waitForReady();
 
-  fireEvent.change(screen.getByRole("combobox", { name: "Scale pattern" }), {
-    target: { value: pattern },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Play" }));
-  await act(async () => {
-    await Promise.resolve();
-  });
+    fireEvent.change(screen.getByRole("combobox", { name: "Scale pattern" }), {
+      target: { value: pattern },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
 
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(2200);
-  });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2200);
+    });
 
-  expect(playNoteMock.mock.calls.length).toBeGreaterThanOrEqual(firstNotes.length);
-  expect(playNoteMock.mock.calls.slice(0, firstNotes.length).map((args) => args[0])).toEqual(
-    firstNotes,
-  );
+    expect(playNoteMock.mock.calls.length).toBeGreaterThanOrEqual(firstNotes.length);
+    expect(playNoteMock.mock.calls.slice(0, firstNotes.length).map((args) => args[0])).toEqual(
+      firstNotes,
+    );
+  });
 });

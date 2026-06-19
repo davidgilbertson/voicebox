@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { RecordingEngine } from "../../src/Recorder/RecordingEngine.js";
 import { createRecordingEngineConfig } from "../utils/engineConfig.js";
 
@@ -25,40 +25,42 @@ afterEach(() => {
   window.__setForegroundForTests({ visible: true, focused: true });
 });
 
-test("pending audio start is cancelled if app backgrounds before start completes", async () => {
-  window.__setForegroundForTests({ visible: true, focused: true });
-  const getUserMediaDeferred = deferred();
-  const stopTrack = vi.fn();
-  const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
-  navigator.mediaDevices.getUserMedia = vi.fn(() => getUserMediaDeferred.promise);
+describe("Recorder", () => {
+  test("Pending audio start is cancelled if the app backgrounds before start completes", async () => {
+    window.__setForegroundForTests({ visible: true, focused: true });
+    const getUserMediaDeferred = deferred();
+    const stopTrack = vi.fn();
+    const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
+    navigator.mediaDevices.getUserMedia = vi.fn(() => getUserMediaDeferred.promise);
 
-  const engine = new RecordingEngine(createRecordingEngineConfig());
-  try {
-    engine.setUi({ isResolvingInitialMicPermission: false });
-    engine.updateSettings({
-      keepRunningInBackground: false,
-      autoPauseOnSilence: true,
-      pitchMinNote: "C1",
-      pitchMaxNote: "F6",
-      spectrogramMinHz: 20,
-      spectrogramMaxHz: 5000,
-    });
-    engine.setWantsToRun(true);
-    engine.startIfNeeded();
+    const engine = new RecordingEngine(createRecordingEngineConfig());
+    try {
+      engine.setUi({ isResolvingInitialMicPermission: false });
+      engine.updateSettings({
+        keepRunningInBackground: false,
+        autoPauseOnSilence: true,
+        pitchMinNote: "C1",
+        pitchMaxNote: "F6",
+        spectrogramMinHz: 20,
+        spectrogramMaxHz: 5000,
+      });
+      engine.setWantsToRun(true);
+      engine.startIfNeeded();
 
-    window.__setForegroundForTests({ visible: false, focused: false });
-    window.dispatchEvent(new Event("blur"));
-    document.dispatchEvent(new Event("visibilitychange"));
+      window.__setForegroundForTests({ visible: false, focused: false });
+      window.dispatchEvent(new Event("blur"));
+      document.dispatchEvent(new Event("visibilitychange"));
 
-    getUserMediaDeferred.resolve({
-      getTracks: () => [{ stop: stopTrack }],
-    });
-    await flushMicrotasks();
+      getUserMediaDeferred.resolve({
+        getTracks: () => [{ stop: stopTrack }],
+      });
+      await flushMicrotasks();
 
-    expect(engine.getUiSnapshot().isAudioRunning).toBe(false);
-    expect(stopTrack).toHaveBeenCalled();
-  } finally {
-    engine.destroy();
-    navigator.mediaDevices.getUserMedia = originalGetUserMedia;
-  }
+      expect(engine.getUiSnapshot().isAudioRunning).toBe(false);
+      expect(stopTrack).toHaveBeenCalled();
+    } finally {
+      engine.destroy();
+      navigator.mediaDevices.getUserMedia = originalGetUserMedia;
+    }
+  });
 });

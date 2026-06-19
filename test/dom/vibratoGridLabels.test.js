@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { drawSemitoneLabels } from "../../src/Recorder/Vibrato/vibratoTools.js";
 
 function createLabelContext() {
@@ -11,32 +11,34 @@ function createLabelContext() {
   };
 }
 
-test("Vibrato labels expand to +/-4 when range is 405 cents", () => {
-  const ctx = createLabelContext();
+describe("Vibrato", () => {
+  test("Grid labels expand to +/-4 when the range is 405 cents", () => {
+    const ctx = createLabelContext();
 
-  drawSemitoneLabels(ctx, 200, 120, 405, {
-    labelX: 8,
-    labelTop: 0,
-    labelBottom: 120,
+    drawSemitoneLabels(ctx, 200, 120, 405, {
+      labelX: 8,
+      labelTop: 0,
+      labelBottom: 120,
+    });
+
+    const labels = ctx.fillText.mock.calls.map(([label]) => label);
+    expect(labels).toContain("-4");
+    expect(labels).toContain("+4");
   });
 
-  const labels = ctx.fillText.mock.calls.map(([label]) => label);
-  expect(labels).toContain("-4");
-  expect(labels).toContain("+4");
-});
+  test("Grid labels stay at +/-3 when the range is 305 cents", () => {
+    const ctx = createLabelContext();
 
-test("Vibrato labels stay at +/-3 when range is 305 cents", () => {
-  const ctx = createLabelContext();
+    drawSemitoneLabels(ctx, 200, 120, 305, {
+      labelX: 8,
+      labelTop: 0,
+      labelBottom: 120,
+    });
 
-  drawSemitoneLabels(ctx, 200, 120, 305, {
-    labelX: 8,
-    labelTop: 0,
-    labelBottom: 120,
+    const labels = ctx.fillText.mock.calls.map(([label]) => label);
+    expect(labels).toContain("-3");
+    expect(labels).toContain("+3");
+    expect(labels).not.toContain("-4");
+    expect(labels).not.toContain("+4");
   });
-
-  const labels = ctx.fillText.mock.calls.map(([label]) => label);
-  expect(labels).toContain("-3");
-  expect(labels).toContain("+3");
-  expect(labels).not.toContain("-4");
-  expect(labels).not.toContain("+4");
 });

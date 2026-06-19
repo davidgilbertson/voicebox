@@ -1,16 +1,18 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import { mapWaveformIntensityToStrokeColor } from "../../src/Recorder/colorTools.js";
 
-test("Palette pitch-line colors have bottom and top intensity plateaus", () => {
-  const fallback = "rgb(96, 165, 250)";
+describe("Pitch line color", () => {
+  test("Palette colors have bottom and top intensity plateaus", () => {
+    const fallback = "rgb(96, 165, 250)";
 
-  expect(mapWaveformIntensityToStrokeColor(0, fallback, "cool")).toBe(
-    mapWaveformIntensityToStrokeColor(0.25, fallback, "cool"),
-  );
-  expect(mapWaveformIntensityToStrokeColor(0.5, fallback, "cool")).not.toBe(
-    mapWaveformIntensityToStrokeColor(0.25, fallback, "cool"),
-  );
-  expect(mapWaveformIntensityToStrokeColor(0.95, fallback, "cool")).toBe(
-    mapWaveformIntensityToStrokeColor(1, fallback, "cool"),
-  );
+    expect(mapWaveformIntensityToStrokeColor(0, fallback, "cool")).toBe(
+      mapWaveformIntensityToStrokeColor(0.25, fallback, "cool"),
+    );
+    expect(mapWaveformIntensityToStrokeColor(0.5, fallback, "cool")).not.toBe(
+      mapWaveformIntensityToStrokeColor(0.25, fallback, "cool"),
+    );
+    expect(mapWaveformIntensityToStrokeColor(0.95, fallback, "cool")).toBe(
+      mapWaveformIntensityToStrokeColor(1, fallback, "cool"),
+    );
+  });
 });

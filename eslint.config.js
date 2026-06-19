@@ -29,7 +29,7 @@ export default [
       ]
     : []),
   {
-    files: ["src/**/*.js", "src/**/*.jsx", "test/**/*.js", "test/**/*.jsx"],
+    files: ["src/**/*.js", "src/**/*.jsx", "test/**/*.js", "test/**/*.jsx", "scripts/**/*.js"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",

@@ -169,8 +169,7 @@ function processHopPitch({
   }
   const maxHeardVolume = volumeTracking.maxHeardVolume;
   const epsilon = 1e-4;
-  const usedMinVolume =
-    minVolumeThreshold + epsilon > maxHeardVolume ? 0 : minVolumeThreshold;
+  const usedMinVolume = minVolumeThreshold + epsilon > maxHeardVolume ? 0 : minVolumeThreshold;
   const volumeSpan = maxHeardVolume - usedMinVolume;
   const volumeStrength =
     volumeSpan > epsilon ? clamp((volume - usedMinVolume) / volumeSpan, 0, 1) : 1;

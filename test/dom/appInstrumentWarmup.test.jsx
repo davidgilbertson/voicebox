@@ -1,5 +1,5 @@
 import { render, waitFor } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { writeActiveView } from "../../src/AppShell/config.js";
 
 const { ensurePianoLoadedMock, ensureMetronomeTickLoadedMock } = vi.hoisted(() => ({
@@ -18,12 +18,14 @@ vi.mock("../../src/ScalesPage/piano.js", async (importOriginal) => {
 
 import { AppShell } from "../../src/AppShell.jsx";
 
-test("instrument warmup starts on app load even when opening on a non-scales page", async () => {
-  writeActiveView("pitch");
-  render(<AppShell />);
+describe("App shell", () => {
+  test("Instrument warmup starts on app load even when opening on a non-scales page", async () => {
+    writeActiveView("pitch");
+    render(<AppShell />);
 
-  await waitFor(() => {
-    expect(ensurePianoLoadedMock).toHaveBeenCalledTimes(1);
-    expect(ensureMetronomeTickLoadedMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(ensurePianoLoadedMock).toHaveBeenCalledTimes(1);
+      expect(ensureMetronomeTickLoadedMock).toHaveBeenCalledTimes(1);
+    });
   });
 });
