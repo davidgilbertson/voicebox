@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { BatteryUsageMonitor, createBatteryUsageMonitor } from "../../src/Recorder/batteryUsage.js";
 
-test("returns -- until at least one minute has elapsed", async () => {
+test("Returns -- until at least one minute has elapsed", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(1_000);
   const battery = { level: 0.8, charging: false };
@@ -15,7 +15,7 @@ test("returns -- until at least one minute has elapsed", async () => {
   expect(await monitor.readUsagePerMinute()).toBe("--");
 });
 
-test("computes %/min from app-open baseline to current charge", async () => {
+test("Computes %/min from app-open baseline to current charge", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(5_000);
   const battery = { level: 0.8, charging: false };
@@ -33,7 +33,7 @@ test("computes %/min from app-open baseline to current charge", async () => {
   expect(await monitor.readUsagePerMinute()).toBeCloseTo(2, 6);
 });
 
-test("returns null when charging or battery info is unavailable", async () => {
+test("Returns null when charging or battery info is unavailable", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(10_000);
   const battery = { level: 0.7, charging: false };
@@ -54,7 +54,7 @@ test("returns null when charging or battery info is unavailable", async () => {
   expect(await unavailableMonitor.readUsagePerMinute()).toBeNull();
 });
 
-test("polls on an interval and publishes updates to subscribers", async () => {
+test("Polls on an interval and publishes updates to subscribers", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(20_000);
   const battery = { level: 0.8, charging: false };

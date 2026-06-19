@@ -11,7 +11,7 @@ function createLabelContext() {
   };
 }
 
-test("vibrato labels expand to +/-4 when range is 405 cents", () => {
+test("Vibrato labels expand to +/-4 when range is 405 cents", () => {
   const ctx = createLabelContext();
 
   drawSemitoneLabels(ctx, 200, 120, 405, {
@@ -25,7 +25,7 @@ test("vibrato labels expand to +/-4 when range is 405 cents", () => {
   expect(labels).toContain("+4");
 });
 
-test("vibrato labels stay at +/-3 when range is 305 cents", () => {
+test("Vibrato labels stay at +/-3 when range is 305 cents", () => {
   const ctx = createLabelContext();
 
   drawSemitoneLabels(ctx, 200, 120, 305, {

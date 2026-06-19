@@ -53,15 +53,15 @@ function assertOutOfRangeReturnsNull(estimate) {
   assert.equal(rateHz, null);
 }
 
-test("default vibrato estimator detects a stable 6Hz signal", () => {
+test("Default vibrato estimator detects a stable 6Hz signal", () => {
   assertDetectsStable6Hz(estimateTimelineVibratoRate);
 });
 
-test("default vibrato estimator returns null when signal is out of range", () => {
+test("Default vibrato estimator returns null when signal is out of range", () => {
   assertOutOfRangeReturnsNull(estimateTimelineVibratoRate);
 });
 
-test("default vibrato estimator returns null for silent gaps", () => {
+test("Default vibrato estimator returns null for silent gaps", () => {
   const samplesPerSecond = 200;
   const series = [...new Array(700).fill(Number.NaN), ...new Array(300).fill(0)];
   const ring = createRingFromSeries(series);
@@ -72,7 +72,7 @@ test("default vibrato estimator returns null for silent gaps", () => {
   assert.equal(rateHz, null);
 });
 
-test("default vibrato estimator handles rounded plateaus", () => {
+test("Default vibrato estimator handles rounded plateaus", () => {
   const samplesPerSecond = 200;
   const seconds = 5;
   const total = samplesPerSecond * seconds;
@@ -93,7 +93,7 @@ test("default vibrato estimator handles rounded plateaus", () => {
   assert.ok(Math.abs(rateHz - 6) < 0.6);
 });
 
-test("default vibrato estimator handles turning-point at second-last sample", () => {
+test("Default vibrato estimator handles turning-point at second-last sample", () => {
   const series = [10, -14, -1, -14, 3, -16, -33, -18, -2, 18, 26, 22, 9, -5, 5, 0];
   const ring = createRingFromSeries(series);
   const rateHz = estimateTimelineVibratoRate({
@@ -105,7 +105,7 @@ test("default vibrato estimator handles turning-point at second-last sample", ()
   assert.ok(Math.abs(rateHz - 6.6667) < 0.01);
 });
 
-test("pitch-history center can use vibrato-only samples", () => {
+test("Pitch-history center can use vibrato-only samples", () => {
   const ring = createRingFromSeries([100, 100, 100, 300, 300, 300]);
   const detectionAlphas = Float32Array.from([0.25, 0.25, 0.25, 1, 1, 1]);
   const center = estimateTimelineCenterCents({

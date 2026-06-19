@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { DISABLE_FOCUS_CLASS, installFocusVisibilityPolicy } from "../../src/focusVisibility.js";
 
-test("focus rings stay disabled until tab is pressed", () => {
+test("Focus rings stay disabled until tab is pressed", () => {
   installFocusVisibilityPolicy();
 
   expect(document.documentElement).toHaveClass(DISABLE_FOCUS_CLASS);
@@ -25,7 +25,7 @@ test("focus rings stay disabled until tab is pressed", () => {
   expect(document.documentElement).not.toHaveClass(DISABLE_FOCUS_CLASS);
 });
 
-test("space also enables focus rings", () => {
+test("Space also enables focus rings", () => {
   installFocusVisibilityPolicy();
 
   document.dispatchEvent(

@@ -3,7 +3,7 @@ import { RecordingEngine } from "../../src/Recorder/RecordingEngine.js";
 import { appendRawAudioSamples } from "../../src/Recorder/rawAudio.js";
 import { createRecordingEngineConfig } from "../utils/engineConfig.js";
 
-test("shared wav filename uses the actual captured duration", async () => {
+test("Shared wav filename uses the actual captured duration", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-03-08T12:34:56"));
 
@@ -27,7 +27,7 @@ test("shared wav filename uses the actual captured duration", async () => {
   }
 });
 
-test("downloaded wav filename uses the same naming as share and reuses the picker id", async () => {
+test("Downloaded wav filename uses the same naming as share and reuses the picker id", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-03-08T12:34:56"));
 

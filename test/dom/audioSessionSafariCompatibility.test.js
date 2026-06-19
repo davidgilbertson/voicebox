@@ -4,7 +4,7 @@ import {
   destroyRecorderAudioSession,
 } from "../../src/Recorder/audioSession.js";
 
-test("recorder session starts when AudioWorkletNode rejects Safari-unfriendly options", async () => {
+test("Recorder session starts when AudioWorkletNode rejects Safari-unfriendly options", async () => {
   const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
   const originalAudioWorkletNode = window.AudioWorkletNode;
 

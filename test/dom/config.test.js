@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { readMinVolumeThreshold, writeMinVolumeThreshold } from "../../src/Recorder/config.js";
 
-test("min volume threshold persists as a positive number", () => {
+test("Min volume threshold persists as a positive number", () => {
   window.localStorage.removeItem("voicebox.minVolumeThreshold");
   expect(readMinVolumeThreshold()).toBe(2);
 

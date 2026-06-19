@@ -43,7 +43,7 @@ function roundSeries(series) {
   return series.map((value) => (Number.isFinite(value) ? Number(value.toFixed(3)) : value));
 }
 
-test("pitch history keeps SPS * seconds points and 60 points per 5Hz oscillation at 300 SPS", () => {
+test("Pitch history keeps SPS * seconds points and 60 points per 5Hz oscillation at 300 SPS", () => {
   const samplesPerSecond = 300;
   const seconds = 5;
   const state = createPitchProcessingState({
@@ -71,7 +71,7 @@ test("pitch history keeps SPS * seconds points and 60 points per 5Hz oscillation
   assert.ok(intensities.every((value) => value === 0.5));
 });
 
-test("columnRateHz defines pitch-history resolution when provided", () => {
+test("ColumnRateHz defines pitch-history resolution when provided", () => {
   const columnRateHz = 60;
   const seconds = 5;
   const state = createPitchProcessingState({
@@ -94,7 +94,7 @@ test("columnRateHz defines pitch-history resolution when provided", () => {
   assert.equal(state.diagnostics.totalTickCount, totalColumns);
 });
 
-test("silence auto-pause can be disabled so pitch history keeps advancing with NaN values", () => {
+test("Silence auto-pause can be disabled so pitch history keeps advancing with NaN values", () => {
   const samplesPerSecond = 100;
   const state = createPitchProcessingState({
     columnRateHz: samplesPerSecond,
@@ -118,7 +118,7 @@ test("silence auto-pause can be disabled so pitch history keeps advancing with N
   assert.ok(intensities.every(Number.isNaN));
 });
 
-test("silence auto-pause enabled stops pitch-history writes after threshold", () => {
+test("Silence auto-pause enabled stops pitch-history writes after threshold", () => {
   const samplesPerSecond = 100;
   const state = createPitchProcessingState({
     columnRateHz: samplesPerSecond,
@@ -139,7 +139,7 @@ test("silence auto-pause enabled stops pitch-history writes after threshold", ()
   assert.equal(state.silencePaused, true);
 });
 
-test("each write keeps intensity samples aligned with pitch samples", () => {
+test("Each write keeps intensity samples aligned with pitch samples", () => {
   const state = createPitchProcessingState({
     columnRateHz: 10,
     seconds: 1,
@@ -164,7 +164,7 @@ test("each write keeps intensity samples aligned with pitch samples", () => {
   );
 });
 
-test("each write initializes vibrato rate to NaN", () => {
+test("Each write initializes vibrato rate to NaN", () => {
   const state = createPitchProcessingState({
     columnRateHz: 10,
     seconds: 1,
@@ -184,7 +184,7 @@ test("each write initializes vibrato rate to NaN", () => {
   assert.ok(rates.every(Number.isNaN));
 });
 
-test("display smoothing finalizes index i-3 as new samples arrive", () => {
+test("Display smoothing finalizes index i-3 as new samples arrive", () => {
   const state = createState();
   const series = [0, 0, 0, 10, 0, 0, 0, 0];
   for (const cents of series) {
@@ -200,7 +200,7 @@ test("display smoothing finalizes index i-3 as new samples arrive", () => {
   assert.equal(Number(display[3].toFixed(2)), 3.8);
 });
 
-test("display smoothing can be disabled", () => {
+test("Display smoothing can be disabled", () => {
   const state = createState();
   const series = [0, 0, 0, 10, 0, 0, 0, 0];
   for (const cents of series) {
@@ -215,7 +215,7 @@ test("display smoothing can be disabled", () => {
   assert.equal(display[3], 10);
 });
 
-test("display smoothing keeps raw value when smoothing window has NaN", () => {
+test("Display smoothing keeps raw value when smoothing window has NaN", () => {
   const state = createState();
   const series = [0, 0, 0, 10, 0, Number.NaN, 0];
   for (const cents of series) {
@@ -230,7 +230,7 @@ test("display smoothing keeps raw value when smoothing window has NaN", () => {
   assert.equal(display[3], 10);
 });
 
-test("display smoothing recomputes values affected by cleaned octave errors", () => {
+test("Display smoothing recomputes values affected by cleaned octave errors", () => {
   const state = createState();
   writeSeries(state, [0, 0, 0, 0, 0, 1200, 1200, 1200, 1200, 1200, 0, 0, 0, 0]);
 
@@ -297,13 +297,13 @@ test("3 NaNs in last 7 are left as gaps", () => {
   ]);
 });
 
-test("end-pos 1 outlier is dropped when followed by NaN", () => {
+test("End-pos 1 outlier is dropped when followed by NaN", () => {
   const state = createState();
   writeSeries(state, [0, 0, 0, 0, 0, 1200, Number.NaN]);
   assert.deepEqual(roundSeries(orderedValues(state)), [0, 0, 0, 0, 0, Number.NaN, Number.NaN]);
 });
 
-test("end-pos 2 outliers are dropped when followed by NaN", () => {
+test("End-pos 2 outliers are dropped when followed by NaN", () => {
   const state = createState();
   writeSeries(state, [0, 0, 0, 0, 1200, 1200, Number.NaN]);
   assert.deepEqual(roundSeries(orderedValues(state)), [

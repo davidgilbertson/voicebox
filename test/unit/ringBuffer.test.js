@@ -6,7 +6,7 @@ function orderedValues(ring) {
   return Array.from(ring.values());
 }
 
-test("ring buffer keeps newest N values", () => {
+test("Ring buffer keeps newest N values", () => {
   const ring = new RingBuffer(3);
   ring.push(1);
   ring.push(2);
@@ -15,7 +15,7 @@ test("ring buffer keeps newest N values", () => {
   assert.deepEqual(orderedValues(ring), [2, 3, 4]);
 });
 
-test("ring resize preserves newest values", () => {
+test("Ring resize preserves newest values", () => {
   const ring = new RingBuffer(4);
   ring.push(10);
   ring.push(20);
