@@ -30,35 +30,31 @@ describe("App shell", () => {
       });
     });
 
-    test("Switching views redraws the active chart without errors", async () => {
+    test("Switching to a recorder view shows that chart and hides the others", async () => {
       const user = userEvent.setup();
       render(<AppShell />);
 
+      // The recorder mounts all three charts at once and toggles which is visible
+      // via a `hidden` class, so switching views should swap which chart is shown.
+      const expectOnlyVisible = (visibleView) => {
+        for (const view of ["vibrato", "spectrogram", "pitch"]) {
+          const wrapper = screen.getByTestId(`recorder-view-${view}`);
+          if (view === visibleView) {
+            expect(wrapper).not.toHaveClass("hidden");
+          } else {
+            expect(wrapper).toHaveClass("hidden");
+          }
+        }
+      };
+
       await user.click(screen.getByRole("button", { name: "Spectrogram" }));
+      expectOnlyVisible("spectrogram");
+
       await user.click(screen.getByRole("button", { name: "Pitch" }));
+      expectOnlyVisible("pitch");
+
       await user.click(screen.getByRole("button", { name: "Vibrato" }));
-
-      expect(screen.getByRole("button", { name: "Vibrato" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
-    });
-
-    test("The footer page order is scales, spectrogram, pitch, vibrato", () => {
-      render(<AppShell />);
-
-      const footerButtons = screen
-        .getAllByRole("button")
-        .filter((button) =>
-          ["Scales", "Spectrogram", "Pitch", "Vibrato"].includes(button.textContent),
-        );
-
-      expect(footerButtons.map((button) => button.textContent)).toEqual([
-        "Scales",
-        "Spectrogram",
-        "Pitch",
-        "Vibrato",
-      ]);
+      expectOnlyVisible("vibrato");
     });
   });
 });

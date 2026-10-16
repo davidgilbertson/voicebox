@@ -1,44 +1,34 @@
 import { describe, expect, test, vi } from "vitest";
 import { drawSemitoneLabels } from "../../src/Recorder/Vibrato/vibratoTools.js";
 
-function createLabelContext() {
-  return {
-    fillStyle: "",
-    font: "",
-    textAlign: "left",
-    textBaseline: "middle",
-    fillText: vi.fn(),
-  };
-}
-
 describe("Vibrato", () => {
-  test("Grid labels expand to +/-4 when the range is 405 cents", () => {
-    const ctx = createLabelContext();
+  test("Grid labels expand with the cents range", () => {
+    function labelsForRange(rangeCents) {
+      const ctx = {
+        fillStyle: "",
+        font: "",
+        textAlign: "left",
+        textBaseline: "middle",
+        fillText: vi.fn(),
+      };
+      drawSemitoneLabels(ctx, 200, 120, rangeCents, {
+        labelX: 8,
+        labelTop: 0,
+        labelBottom: 120,
+      });
+      return ctx.fillText.mock.calls.map(([label]) => label);
+    }
 
-    drawSemitoneLabels(ctx, 200, 120, 405, {
-      labelX: 8,
-      labelTop: 0,
-      labelBottom: 120,
-    });
+    // A 405-cent range reaches the +/-4 semitone labels.
+    const wideLabels = labelsForRange(405);
+    expect(wideLabels).toContain("-4");
+    expect(wideLabels).toContain("+4");
 
-    const labels = ctx.fillText.mock.calls.map(([label]) => label);
-    expect(labels).toContain("-4");
-    expect(labels).toContain("+4");
-  });
-
-  test("Grid labels stay at +/-3 when the range is 305 cents", () => {
-    const ctx = createLabelContext();
-
-    drawSemitoneLabels(ctx, 200, 120, 305, {
-      labelX: 8,
-      labelTop: 0,
-      labelBottom: 120,
-    });
-
-    const labels = ctx.fillText.mock.calls.map(([label]) => label);
-    expect(labels).toContain("-3");
-    expect(labels).toContain("+3");
-    expect(labels).not.toContain("-4");
-    expect(labels).not.toContain("+4");
+    // A narrower 305-cent range stops at +/-3.
+    const narrowLabels = labelsForRange(305);
+    expect(narrowLabels).toContain("-3");
+    expect(narrowLabels).toContain("+3");
+    expect(narrowLabels).not.toContain("-4");
+    expect(narrowLabels).not.toContain("+4");
   });
 });

@@ -32,8 +32,8 @@ To find the code that implements particular behavior, while using the fewest tok
 
 1. Search with one or more keywords in the behavior index: `rg -i 'keyword1|keyword2|etc' BEHAVIOR_INDEX.md`.
 2. DO NOT do a repo-wide search unless step 1 doesn't return a useful match.
-3. Each row is a test, in the form `[Describe] > [Describe] > [Test]`.
-4. If a test matches the behavior you're looking for, search for its exact text with `rg -A 20 'The test name' -g '!*.md'`. Note that for tests inside describe blocks, the test name is the part after the last `>`.
+3. Each row is a test, in the form `[Describe] > [Describe] > [Test]<TAB>path:line`. The `path:line` after the tab is the test's location.
+4. Open the matching `path:line`(s) to read the test body.
 5. Identify the core function from the test body and track down the implementation code from there.
 
 # Notes to self

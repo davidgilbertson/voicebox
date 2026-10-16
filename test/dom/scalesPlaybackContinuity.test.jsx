@@ -57,7 +57,7 @@ function renderScales(props) {
   );
 }
 
-describe("Scales", () => {
+describe("Scales page", () => {
   describe("Playback continuity", () => {
     test("Changing the BPM while playing applies on the next pulse", async () => {
       renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });

@@ -33,7 +33,7 @@ async function waitForReady() {
   expect(screen.getByRole("button", { name: "Play" })).toBeEnabled();
 }
 
-describe("Scales", () => {
+describe("Scales page", () => {
   test.each([
     { pattern: "Semitones", firstNotes: [48, 48, 49, 50, 51, 52] },
     { pattern: "Pentatonic", firstNotes: [48, 48, 50, 52, 55, 57] },

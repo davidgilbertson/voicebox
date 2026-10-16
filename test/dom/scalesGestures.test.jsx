@@ -76,7 +76,7 @@ function renderScales(props) {
   );
 }
 
-describe("Scales", () => {
+describe("Scales page", () => {
   describe("Gestures", () => {
     test("A right swipe shows right-direction gesture feedback", async () => {
       renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });

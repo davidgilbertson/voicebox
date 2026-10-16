@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { AppShell } from "../../src/AppShell.jsx";
 
-describe("Recorder", () => {
+describe("Recorder pages", () => {
   test("Manual start overlay is shown before the first microphone request when permission is only prompted", async () => {
     window.__setForegroundForTests({ visible: true, focused: true });
     const originalGetUserMedia = navigator.mediaDevices.getUserMedia;

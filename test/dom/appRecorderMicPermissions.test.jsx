@@ -2,8 +2,8 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { AppShell } from "../../src/AppShell.jsx";
 
-describe("Recorder", () => {
-  test("A blocked microphone shows recovery copy instead of the generic first-run button", async () => {
+describe("Recorder pages", () => {
+  test("A blocked microphone shows recovery instructions", async () => {
     window.__setForegroundForTests({ visible: true, focused: true });
     const originalGetUserMedia = navigator.mediaDevices.getUserMedia;
     const deniedError = Object.assign(new Error("Permission denied."), {

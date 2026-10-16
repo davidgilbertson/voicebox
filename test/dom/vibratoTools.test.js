@@ -53,67 +53,74 @@ function assertOutOfRangeReturnsNull(estimate) {
   assert.equal(rateHz, null);
 }
 
+// The on-screen vibrato display behavior lives in vibratoChartRateLabels and
+// vibratoGridLabels; the tests below are the lower-level signal math, grouped so
+// they read as their own section in the behavior index.
 describe("Vibrato", () => {
-  test("Rate estimation detects a stable 6Hz signal", () => {
-    assertDetectsStable6Hz(estimateTimelineVibratoRate);
-  });
-
-  test("Rate estimation returns null when the signal is out of range", () => {
-    assertOutOfRangeReturnsNull(estimateTimelineVibratoRate);
-  });
-
-  test("Rate estimation returns null for silent gaps", () => {
-    const samplesPerSecond = 200;
-    const series = [...new Array(700).fill(Number.NaN), ...new Array(300).fill(0)];
-    const ring = createRingFromSeries(series);
-    const rateHz = estimateTimelineVibratoRate({
-      ring,
-      samplesPerSecond,
-    });
-    assert.equal(rateHz, null);
-  });
-
-  test("Rate estimation handles rounded plateaus", () => {
-    const samplesPerSecond = 200;
-    const seconds = 5;
-    const total = samplesPerSecond * seconds;
-    const series = new Array(total);
-    for (let i = 0; i < total; i += 1) {
-      const t = i / samplesPerSecond;
-      const raw = Math.sin(2 * Math.PI * 6 * t) * 70;
-      series[i] = Math.round(raw / 10) * 10;
-    }
-
-    const ring = createRingFromSeries(series);
-    const rateHz = estimateTimelineVibratoRate({
-      ring,
-      samplesPerSecond,
+  describe("Rate estimation", () => {
+    test("Detects a stable 6Hz signal", () => {
+      assertDetectsStable6Hz(estimateTimelineVibratoRate);
     });
 
-    assert.ok(rateHz !== null);
-    assert.ok(Math.abs(rateHz - 6) < 0.6);
-  });
-
-  test("Rate estimation handles a turning point at the second-last sample", () => {
-    const series = [10, -14, -1, -14, 3, -16, -33, -18, -2, 18, 26, 22, 9, -5, 5, 0];
-    const ring = createRingFromSeries(series);
-    const rateHz = estimateTimelineVibratoRate({
-      ring,
-      samplesPerSecond: 40,
+    test("Returns null when the signal is out of range", () => {
+      assertOutOfRangeReturnsNull(estimateTimelineVibratoRate);
     });
 
-    assert.ok(rateHz !== null);
-    assert.ok(Math.abs(rateHz - 6.6667) < 0.01);
+    test("Returns null for silent gaps", () => {
+      const samplesPerSecond = 200;
+      const series = [...new Array(700).fill(Number.NaN), ...new Array(300).fill(0)];
+      const ring = createRingFromSeries(series);
+      const rateHz = estimateTimelineVibratoRate({
+        ring,
+        samplesPerSecond,
+      });
+      assert.equal(rateHz, null);
+    });
+
+    test("Handles rounded plateaus", () => {
+      const samplesPerSecond = 200;
+      const seconds = 5;
+      const total = samplesPerSecond * seconds;
+      const series = new Array(total);
+      for (let i = 0; i < total; i += 1) {
+        const t = i / samplesPerSecond;
+        const raw = Math.sin(2 * Math.PI * 6 * t) * 70;
+        series[i] = Math.round(raw / 10) * 10;
+      }
+
+      const ring = createRingFromSeries(series);
+      const rateHz = estimateTimelineVibratoRate({
+        ring,
+        samplesPerSecond,
+      });
+
+      assert.ok(rateHz !== null);
+      assert.ok(Math.abs(rateHz - 6) < 0.6);
+    });
+
+    test("Handles a turning point at the second-last sample", () => {
+      const series = [10, -14, -1, -14, 3, -16, -33, -18, -2, 18, 26, 22, 9, -5, 5, 0];
+      const ring = createRingFromSeries(series);
+      const rateHz = estimateTimelineVibratoRate({
+        ring,
+        samplesPerSecond: 40,
+      });
+
+      assert.ok(rateHz !== null);
+      assert.ok(Math.abs(rateHz - 6.6667) < 0.01);
+    });
   });
 
-  test("Pitch-history center can use vibrato-only samples", () => {
-    const ring = createRingFromSeries([100, 100, 100, 300, 300, 300]);
-    const detectionAlphas = Float32Array.from([0.25, 0.25, 0.25, 1, 1, 1]);
-    const center = estimateTimelineCenterCents({
-      ring,
-      detectionAlphas,
-      recentSampleCount: ring.sampleCount,
+  describe("Center estimation", () => {
+    test("Uses vibrato-only samples for the pitch-history center", () => {
+      const ring = createRingFromSeries([100, 100, 100, 300, 300, 300]);
+      const detectionAlphas = Float32Array.from([0.25, 0.25, 0.25, 1, 1, 1]);
+      const center = estimateTimelineCenterCents({
+        ring,
+        detectionAlphas,
+        recentSampleCount: ring.sampleCount,
+      });
+      assert.equal(center, 300);
     });
-    assert.equal(center, 300);
   });
 });

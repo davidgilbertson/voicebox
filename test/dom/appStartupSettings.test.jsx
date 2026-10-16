@@ -6,7 +6,7 @@ import { readConfig } from "../../src/config.js";
 import { createPlaybackEngineConfig, createRecordingEngineConfig } from "../utils/engineConfig.js";
 
 describe("App startup", () => {
-  test("Persisted values are grouped for initial app initialization", () => {
+  test("Saved settings are read into the initial app config", () => {
     localStorage.setItem("voicebox.activeView", "pitch");
     localStorage.setItem("voicebox.highResSpectrogram", "false");
     localStorage.setItem("voicebox.pitchMinNote", "D2");
@@ -63,7 +63,7 @@ describe("App startup", () => {
     }
   });
 
-  test("Engines can be constructed from boot settings before React effects run", () => {
+  test("The audio engines initialize from saved settings on startup", () => {
     const recorder = new RecordingEngine({
       ...createRecordingEngineConfig(),
       keepRunningInBackground: true,

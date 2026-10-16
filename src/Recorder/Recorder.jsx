@@ -53,6 +53,7 @@ export function Recorder({ activeView, settingsOpen, engine, developerMode }) {
         data-testid="recorder-chart-area"
       >
         <div
+          data-testid="recorder-view-vibrato"
           className={
             activeView === "vibrato"
               ? "flex min-h-0 flex-1 flex-col"
@@ -62,6 +63,7 @@ export function Recorder({ activeView, settingsOpen, engine, developerMode }) {
           <VibratoChart ref={vibratoChartRef} vibratoRate={engineUi.vibratoRate} />
         </div>
         <div
+          data-testid="recorder-view-spectrogram"
           className={
             activeView === "spectrogram"
               ? "flex min-h-0 flex-1 flex-col"
@@ -71,6 +73,7 @@ export function Recorder({ activeView, settingsOpen, engine, developerMode }) {
           <SpectrogramChart ref={spectrogramChartRef} className="h-full w-full" />
         </div>
         <div
+          data-testid="recorder-view-pitch"
           className={
             activeView === "pitch"
               ? "flex min-h-0 flex-1 flex-col"

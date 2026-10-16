@@ -3,8 +3,8 @@ import { describe, expect, test } from "vitest";
 import { StepperControl } from "../../src/components/StepperControl.jsx";
 
 describe("Stepper control", () => {
-  test("Defaults to the small size", () => {
-    render(
+  test("Renders at the small (default) and large sizes", () => {
+    const small = render(
       <StepperControl
         value="100"
         onDecrement={() => {}}
@@ -14,15 +14,14 @@ describe("Stepper control", () => {
       />,
     );
 
-    const decrementButton = screen.getByRole("button", { name: "Decrease" });
-    const incrementButton = screen.getByRole("button", { name: "Increase" });
+    let decrementButton = screen.getByRole("button", { name: "Decrease" });
+    let incrementButton = screen.getByRole("button", { name: "Increase" });
     expect(decrementButton.parentElement).toHaveClass("h-11");
     expect(decrementButton.parentElement).not.toHaveClass("h-16");
     expect(decrementButton.firstChild).toHaveClass("h-5", "w-5");
     expect(incrementButton.firstChild).toHaveClass("h-5", "w-5");
-  });
+    small.unmount();
 
-  test("Supports the large size", () => {
     render(
       <StepperControl
         size="large"
@@ -34,8 +33,8 @@ describe("Stepper control", () => {
       />,
     );
 
-    const decrementButton = screen.getByRole("button", { name: "Decrease" });
-    const incrementButton = screen.getByRole("button", { name: "Increase" });
+    decrementButton = screen.getByRole("button", { name: "Decrease" });
+    incrementButton = screen.getByRole("button", { name: "Increase" });
     expect(decrementButton.parentElement).toHaveClass("h-16");
     expect(decrementButton).toHaveClass("px-4");
     expect(incrementButton).toHaveClass("px-4");

@@ -23,7 +23,7 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 
-describe("Scales", () => {
+describe("Scales page", () => {
   test("Scales playback continues while viewing recorder pages", async () => {
     window.__setForegroundForTests({ visible: true, focused: true });
     writeActiveView("scales");

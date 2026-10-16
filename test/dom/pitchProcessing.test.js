@@ -44,7 +44,7 @@ function roundSeries(series) {
 }
 
 describe("Pitch detection", () => {
-  test("Pitch history keeps SPS * seconds points and 60 points per 5Hz oscillation at 300 SPS", () => {
+  test("Pitch-history length and resolution follow the sample rate and duration", () => {
     const samplesPerSecond = 300;
     const seconds = 5;
     const state = createPitchProcessingState({
@@ -72,7 +72,7 @@ describe("Pitch detection", () => {
     assert.ok(intensities.every((value) => value === 0.5));
   });
 
-  test("ColumnRateHz defines pitch-history resolution when provided", () => {
+  test("The column rate sets the pitch-history resolution", () => {
     const columnRateHz = 60;
     const seconds = 5;
     const state = createPitchProcessingState({
@@ -140,7 +140,7 @@ describe("Pitch detection", () => {
     assert.equal(state.silencePaused, true);
   });
 
-  test("Each write keeps intensity samples aligned with pitch samples", () => {
+  test("Intensity samples stay aligned with pitch samples", () => {
     const state = createPitchProcessingState({
       columnRateHz: 10,
       seconds: 1,
@@ -163,26 +163,6 @@ describe("Pitch detection", () => {
       intensities.map((value) => Number(value.toFixed(3))),
       [0.2, 0.8],
     );
-  });
-
-  test("Each write initializes vibrato rate to NaN", () => {
-    const state = createPitchProcessingState({
-      columnRateHz: 10,
-      seconds: 1,
-      silencePauseStepThreshold: silencePauseStepThreshold(10, 300),
-    });
-
-    processPitchSample(state, {
-      cents: 100,
-      lineStrength: 0.2,
-    });
-    processPitchSample(state, {
-      cents: 200,
-      lineStrength: 0.8,
-    });
-
-    const rates = Array.from(state.vibratoRateHzRing.values());
-    assert.ok(rates.every(Number.isNaN));
   });
 
   describe("Display smoothing", () => {

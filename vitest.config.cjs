@@ -15,6 +15,7 @@ module.exports = {
         },
         test: {
           name: "dom",
+          includeTaskLocation: true,
           environment: "happy-dom",
           setupFiles: ["test/dom/setup.dom.js"],
           include: ["test/dom/**/*.test.{js,jsx}"],
@@ -32,6 +33,7 @@ module.exports = {
         },
         test: {
           name: "unit",
+          includeTaskLocation: true,
           environment: "node",
           setupFiles: ["test/unit/setup.unit.js"],
           include: ["test/unit/**/*.test.{js,jsx}"],

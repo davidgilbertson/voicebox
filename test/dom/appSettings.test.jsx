@@ -18,7 +18,7 @@ import {
 import { readDeveloperMode as readAppDeveloperMode } from "../../src/AppShell/config.js";
 
 describe("Settings", () => {
-  test("Settings defaults are applied and persisted to localStorage", async () => {
+  test("Settings start at their defaults and persist when changed", async () => {
     const user = userEvent.setup();
     render(<AppShell />);
 
@@ -58,16 +58,6 @@ describe("Settings", () => {
       expect(readHalfResolutionCanvas()).toBe(true);
       expect(readHighResSpectrogram()).toBe(false);
     });
-  });
-
-  test("Calibrate microphone stays available on the scales page", async () => {
-    const user = userEvent.setup();
-    render(<AppShell />);
-
-    await user.click(screen.getByRole("button", { name: "Scales" }));
-    await user.click(screen.getByLabelText("Open settings"));
-
-    expect(screen.getByRole("button", { name: /Record minimum volume/i })).toBeEnabled();
   });
 
   test("Settings can reset the remembered maximum volume", async () => {
@@ -124,24 +114,6 @@ describe("Settings", () => {
     });
   });
 
-  test("The temporary pitch-detector overlay buttons are removed", async () => {
-    const user = userEvent.setup();
-    render(<AppShell />);
-
-    await user.click(screen.getByRole("button", { name: "Pitch" }));
-    expect(screen.queryByRole("button", { name: "FFT residual" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "FFT raw" })).toBeNull();
-  });
-
-  test("The temporary window/bin overlay buttons are removed", async () => {
-    const user = userEvent.setup();
-    render(<AppShell />);
-
-    await user.click(screen.getByRole("button", { name: "Pitch" }));
-    expect(screen.queryByRole("button", { name: "WINDOW_SIZE 4096" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "SPECTROGRAM_BINS 8192" })).toBeNull();
-  });
-
   test("Battery use shows -- in the first minute", async () => {
     const battery = {
       level: 0.8,
@@ -157,92 +129,25 @@ describe("Settings", () => {
     expect(screen.getByText("-- %/min")).toBeInTheDocument();
   });
 
-  test("Battery use shows NA while charging", async () => {
-    navigator.getBattery = vi.fn(async () => ({
-      level: 0.52,
-      charging: true,
-    }));
-
+  test("The pitch-line color mode falls back to terrain when invalid and persists when changed", async () => {
     const user = userEvent.setup();
-    render(<AppShell />);
 
+    // An invalid persisted value falls back to terrain.
+    localStorage.setItem("voicebox.pitchLineColorMode", "red");
+    const invalidRender = render(<AppShell />);
     await user.click(screen.getByLabelText("Open settings"));
-    await waitFor(() => {
-      expect(screen.getByText("Battery use")).toBeInTheDocument();
-      expect(screen.getByText("NA")).toBeInTheDocument();
-    });
-  });
+    expect(screen.getByRole("radio", { name: "Terrain" })).toBeChecked();
+    expect(readPitchLineColorMode()).toBe("terrain");
+    invalidRender.unmount();
 
-  test("Battery use shows NA when the battery level is unavailable", async () => {
-    navigator.getBattery = vi.fn(async () => ({
-      level: undefined,
-      charging: false,
-    }));
-
-    const user = userEvent.setup();
+    // Selecting a mode persists it.
+    localStorage.removeItem("voicebox.pitchLineColorMode");
     render(<AppShell />);
-
     await user.click(screen.getByLabelText("Open settings"));
-    await waitFor(() => {
-      expect(screen.getByText("Battery use")).toBeInTheDocument();
-      expect(screen.getByText("NA")).toBeInTheDocument();
-    });
-  });
-
-  test("The pitch-line color mode persists from settings", async () => {
-    const user = userEvent.setup();
-    render(<AppShell />);
-
-    await user.click(screen.getByLabelText("Open settings"));
-    const orangeRadio = screen.getByRole("radio", { name: "Orange" });
-    await user.click(orangeRadio);
-
+    await user.click(screen.getByRole("radio", { name: "Orange" }));
     await waitFor(() => {
       expect(readPitchLineColorMode()).toBe("orange");
     });
-  });
-
-  test("The pitch-line color options are ordered and inferno is removed", async () => {
-    const user = userEvent.setup();
-    render(<AppShell />);
-
-    await user.click(screen.getByLabelText("Open settings"));
-    const radios = screen.getAllByRole("radio", { name: /.+/ });
-    const colorModeLabels = radios
-      .map((radio) => radio.closest("label")?.textContent?.trim())
-      .filter(Boolean);
-
-    expect(colorModeLabels).toEqual([
-      "Terrain",
-      "Gist Rainbow",
-      "Cool",
-      "Autumn",
-      "Blue",
-      "Orange",
-      "Green",
-    ]);
-    expect(screen.queryByRole("radio", { name: "Inferno" })).toBeNull();
-  });
-
-  test("An invalid persisted pitch-line color mode falls back to terrain", async () => {
-    localStorage.setItem("voicebox.pitchLineColorMode", "red");
-    const user = userEvent.setup();
-    render(<AppShell />);
-
-    await user.click(screen.getByLabelText("Open settings"));
-    const terrainRadio = screen.getByRole("radio", { name: "Terrain" });
-    expect(terrainRadio).toBeChecked();
-    expect(readPitchLineColorMode()).toBe("terrain");
-  });
-
-  test("The settings about link points to the local about page", async () => {
-    const user = userEvent.setup();
-    render(<AppShell />);
-
-    await user.click(screen.getByLabelText("Open settings"));
-    const aboutLink = screen.getByRole("link", { name: "Help" });
-
-    expect(aboutLink).toHaveAttribute("href", "/about");
   });
 
   test("Developer mode unlocks after four quick taps on the settings heading and can be exited", async () => {

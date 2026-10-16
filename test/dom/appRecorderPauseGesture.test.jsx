@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { AppShell } from "../../src/AppShell.jsx";
 
-describe("Recorder", () => {
+describe("Recorder pages", () => {
   test("Tapping the chart pauses and resumes recording, and the paused pill shows a pause icon", async () => {
     const originalAudioWorkletNode = window.AudioWorkletNode;
     window.AudioWorkletNode = class AudioWorkletNodeWithPostMessage {

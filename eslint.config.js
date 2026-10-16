@@ -68,4 +68,24 @@ export default [
       ],
     },
   },
+  {
+    // Audio worklets run in a separate realm and are loaded via `addModule`. A top-level
+    // import can appear to work in dev (Vite resolves it) but breaks once the app is
+    // bundled for production, so the failure never shows up locally. Forbid imports here.
+    files: ["src/Recorder/worklets/**/*.js"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ExportDefaultDeclaration",
+          message: "Prefer named exports over default exports.",
+        },
+        {
+          selector: "ImportDeclaration, ImportExpression",
+          message:
+            "Audio worklets must not import anything: imports can work in dev but break when the app is bundled for production.",
+        },
+      ],
+    },
+  },
 ];

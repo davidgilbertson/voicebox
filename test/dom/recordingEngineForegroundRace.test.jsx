@@ -25,7 +25,7 @@ afterEach(() => {
   window.__setForegroundForTests({ visible: true, focused: true });
 });
 
-describe("Recorder", () => {
+describe("Recorder pages", () => {
   test("Pending audio start is cancelled if the app backgrounds before start completes", async () => {
     window.__setForegroundForTests({ visible: true, focused: true });
     const getUserMediaDeferred = deferred();

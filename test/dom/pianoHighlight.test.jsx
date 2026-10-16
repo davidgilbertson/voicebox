@@ -33,7 +33,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("Scales", () => {
+describe("Scales page", () => {
   describe("Piano", () => {
     test("Pressing a key highlights it while the note sounds", async () => {
       render(<Piano />);

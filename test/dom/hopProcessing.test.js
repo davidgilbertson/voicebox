@@ -32,7 +32,7 @@ function createTrackedAnalyserWithSpectrum(
   };
 }
 
-describe("Recorder", () => {
+describe("Recorder pages", () => {
   describe("Per-hop processing", () => {
     test("Silence gating skips writing pitch history when it pauses on the first hop", () => {
       const processingState = createPitchProcessingState({
@@ -105,43 +105,51 @@ describe("Recorder", () => {
       expect(processingState.rawPitchCentsRing.sampleCount).toBe(1);
     });
 
-    test("Pitch detection uses the configured pitch range even on the spectrogram view", () => {
-      const processingState = createPitchProcessingState({
-        columnRateHz: 80,
-        seconds: 2,
-        silencePauseStepThreshold: 4,
-      });
-      const spectrumDb = new Float32Array(512);
-      spectrumDb.fill(-100);
-      spectrumDb[8] = -80;
-      spectrumDb[9] = -20;
-      spectrumDb[10] = -80;
-      const spectrogramBuffers = createSpectrogramBuffers(spectrumDb.length);
-      const audioSessionState = {
-        analyser: createAnalyserWithSpectrum(spectrumDb),
-        sampleRate: 48000,
-        hzBuffer: new Float32Array(16),
-        hzIndex: 0,
-      };
+    test("Pitch detection respects the configured pitch range", () => {
+      // A single sharp spectral peak at bin 9. With a 512-bin spectrum at a 48kHz
+      // sample rate the bin width is 46.875 Hz, so the peak sits at ~421.9 Hz.
+      const peakBinHz = (48000 / 2 / 512) * 9;
+      const expectedCents = 1200 * Math.log2(peakBinHz);
 
-      processOneAudioHop({
-        engineState: {
-          pitchRange: { minHz: 380, maxHz: 500 },
-          volume: 4.5,
-          minVolumeThreshold: 2,
-          volumeTracking: { maxHeardVolume: 4 },
-          lineStrengthEma: 0,
-          autoPauseOnSilence: true,
-          skipNextSpectrumFrame: false,
-        },
-        hopState: {
-          processingState,
-          audioSessionState,
-          spectrogramBuffers,
-        },
-      });
+      function detectCentsForRange(pitchRange) {
+        const processingState = createPitchProcessingState({
+          columnRateHz: 80,
+          seconds: 2,
+          silencePauseStepThreshold: 4,
+        });
+        const spectrumDb = new Float32Array(512);
+        spectrumDb.fill(-100);
+        spectrumDb[8] = -80;
+        spectrumDb[9] = -20;
+        spectrumDb[10] = -80;
+        processOneAudioHop({
+          engineState: {
+            pitchRange,
+            volume: 4.5,
+            minVolumeThreshold: 2,
+            volumeTracking: { maxHeardVolume: 4 },
+            lineStrengthEma: 0,
+            autoPauseOnSilence: true,
+            skipNextSpectrumFrame: false,
+          },
+          hopState: {
+            processingState,
+            audioSessionState: {
+              analyser: createAnalyserWithSpectrum(spectrumDb),
+              sampleRate: 48000,
+              hzBuffer: new Float32Array(16),
+              hzIndex: 0,
+            },
+            spectrogramBuffers: createSpectrogramBuffers(spectrumDb.length),
+          },
+        });
+        return processingState.rawPitchCentsRing.newest();
+      }
 
-      expect(Number.isFinite(processingState.rawPitchCentsRing.newest())).toBe(true);
+      // The peak is detected at its true frequency when the range includes it.
+      expect(detectCentsForRange({ minHz: 380, maxHz: 500 })).toBeCloseTo(expectedCents, 0);
+      // The same peak is ignored (no pitch detected) when the range excludes it.
+      expect(detectCentsForRange({ minHz: 600, maxHz: 1200 })).toBeNaN();
     });
 
     test("Pitch and spectrogram paths can use separate analysers", () => {
