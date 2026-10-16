@@ -43,6 +43,7 @@ describe("Settings", () => {
     expect(halfResolutionCanvasCheckbox).not.toBeChecked();
     expect(halfResolutionSpectrogramCheckbox).not.toBeChecked();
     expect(screen.queryByRole("checkbox", { name: /Smoothing/i })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: /Use PICA/i })).toBeNull();
 
     await user.click(runAt30FpsCheckbox);
     expect(runAt30FpsCheckbox).toBeChecked();
@@ -113,6 +114,19 @@ describe("Settings", () => {
       expect(readSpectrogramMinHz()).toBe(65);
     });
   });
+
+  test.each([undefined, { level: 0.8, charging: true }])(
+    "Battery use is hidden when battery information is unavailable or charging (%j)",
+    async (battery) => {
+      navigator.getBattery = battery ? vi.fn(async () => battery) : undefined;
+      const user = userEvent.setup();
+      render(<AppShell />);
+
+      await user.click(screen.getByLabelText("Open settings"));
+      expect(screen.queryByText("Battery use")).toBeNull();
+      expect(screen.queryByText("NA")).toBeNull();
+    },
+  );
 
   test("Battery use shows -- in the first minute", async () => {
     const battery = {

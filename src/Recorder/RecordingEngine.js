@@ -1,5 +1,4 @@
 import {
-  CENTER_SECONDS,
   DISPLAY_PIXELS_PER_SECOND,
   FFT_SIZE,
   SILENCE_PAUSE_THRESHOLD_MS,
@@ -8,11 +7,7 @@ import {
   writeMaxVolume,
 } from "./config.js";
 import { createPitchProcessingState, resizePitchProcessingState } from "./pitchProcessing.js";
-import {
-  createHighResSpectrogramBuffers,
-  createSpectrogramBuffers,
-  processOneAudioHop,
-} from "./hopProcessing.js";
+import { createSpectrogramBuffers, processOneAudioHop } from "./hopProcessing.js";
 import { createRecorderAudioSession, destroyRecorderAudioSession } from "./audioSession.js";
 import { calibrateMinVolumeThreshold as runVolumeCalibration } from "./micCalibration.js";
 import { subscribeToForegroundChanges } from "../foreground.js";
@@ -119,7 +114,6 @@ export class RecordingEngine {
       autoPauseOnSilence: config.autoPauseOnSilence,
       runAt30Fps: config.runAt30Fps,
       highResSpectrogram: config.highResSpectrogram,
-      usePica: config.usePica,
       smoothing: config.smoothing,
       pitchRange: {
         minHz: noteNameToHz(config.pitchMinNote),
@@ -153,8 +147,6 @@ export class RecordingEngine {
       stream: null,
       captureNode: null,
       silentOutputGain: null,
-      hzBuffer: null,
-      hzIndex: 0,
       picaWindowSamples: createPicaWindowSamples(48_000, noteNameToHz(config.pitchMinNote)),
       sampleRate: 48000,
     };
@@ -204,7 +196,6 @@ export class RecordingEngine {
         autoPauseOnSilence: this.state.autoPauseOnSilence,
         smoothing: this.state.smoothing,
         skipNextSpectrumFrame: this.state.skipNextSpectrumFrame,
-        usePica: this.state.usePica,
       },
       hopState: {
         audioSessionState: this.audioSessionState,
@@ -263,12 +254,6 @@ export class RecordingEngine {
         return;
       }
 
-      const hzLength = Math.floor(CENTER_SECONDS * DISPLAY_PIXELS_PER_SECOND);
-      const hzBuffer =
-        this.audioSessionState.hzBuffer && this.audioSessionState.hzBuffer.length === hzLength
-          ? this.audioSessionState.hzBuffer
-          : new Float32Array(hzLength).fill(Number.NaN);
-
       this.state.hopSize = session.hopSize;
       this.audioSessionState.context = session.context;
       this.audioSessionState.source = session.source;
@@ -278,7 +263,6 @@ export class RecordingEngine {
       this.audioSessionState.highResAnalyser = session.highResAnalyser;
       this.audioSessionState.silentOutputGain = session.silentOutputGain;
       this.audioSessionState.sampleRate = session.sampleRate;
-      this.audioSessionState.hzBuffer = hzBuffer;
       this.audioSessionState.picaWindowSamples = createPicaWindowSamples(
         session.sampleRate,
         this.state.pitchRange.minHz,
@@ -291,7 +275,7 @@ export class RecordingEngine {
       setStreamListeningEnabled(session.stream, this.state.ui.isWantedRunning);
       this.spectrogramBuffers = createSpectrogramBuffers(session.analyser.frequencyBinCount);
       this.highResSpectrogramBuffers = session.highResAnalyser
-        ? createHighResSpectrogramBuffers(session.highResAnalyser.frequencyBinCount)
+        ? createSpectrogramBuffers(session.highResAnalyser.frequencyBinCount)
         : null;
       this.state.forceRedraw = true;
       this.setUi({
@@ -530,7 +514,6 @@ export class RecordingEngine {
     autoPauseOnSilence,
     runAt30Fps,
     highResSpectrogram,
-    usePica,
     smoothing,
     minVolumeThreshold,
     pitchMinNote,
@@ -548,9 +531,6 @@ export class RecordingEngine {
     }
     if (typeof runAt30Fps === "boolean") {
       this.state.runAt30Fps = runAt30Fps;
-    }
-    if (typeof usePica === "boolean") {
-      this.state.usePica = usePica;
     }
     if (typeof smoothing === "boolean") {
       this.state.smoothing = smoothing;

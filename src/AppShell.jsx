@@ -24,7 +24,6 @@ import {
   writeSmoothing,
   writeSpectrogramMaxHz,
   writeSpectrogramMinHz,
-  writeUsePica,
 } from "./Recorder/config.js";
 import { readConfig } from "./config.js";
 
@@ -71,7 +70,6 @@ export function AppShell({ downloadingUpdate = false }) {
   );
   const [spectrogramMinHz, setSpectrogramMinHz] = useState(() => config.recorder.spectrogramMinHz);
   const [spectrogramMaxHz, setSpectrogramMaxHz] = useState(() => config.recorder.spectrogramMaxHz);
-  const [usePica, setUsePica] = useState(() => config.recorder.usePica);
   const [smoothing, setSmoothing] = useState(() => config.recorder.smoothing);
   const [batteryUsagePerMinute, setBatteryUsagePerMinute] = useState(null);
   const onScalesPage = activeView === "scales";
@@ -155,10 +153,6 @@ export function AppShell({ downloadingUpdate = false }) {
   }, [spectrogramMaxHz, spectrogramMinHz]);
 
   useEffect(() => {
-    writeUsePica(usePica);
-  }, [usePica]);
-
-  useEffect(() => {
     writeSmoothing(smoothing);
   }, [smoothing]);
 
@@ -179,7 +173,6 @@ export function AppShell({ downloadingUpdate = false }) {
       halfResolutionCanvas,
       spectrogramMinHz,
       spectrogramMaxHz,
-      usePica,
       smoothing,
     });
   }, [
@@ -196,7 +189,6 @@ export function AppShell({ downloadingUpdate = false }) {
     smoothing,
     spectrogramMaxHz,
     spectrogramMinHz,
-    usePica,
   ]);
 
   useEffect(() => {
@@ -449,8 +441,6 @@ export function AppShell({ downloadingUpdate = false }) {
             spectrogramMaxHz={spectrogramMaxHz}
             onSpectrogramMinHzChange={onSpectrogramMinHzChange}
             onSpectrogramMaxHzChange={onSpectrogramMaxHzChange}
-            usePica={usePica}
-            onUsePicaChange={setUsePica}
             smoothing={smoothing}
             onSmoothingChange={setSmoothing}
             batteryUsagePerMinute={batteryUsagePerMinute}

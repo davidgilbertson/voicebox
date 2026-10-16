@@ -1,33 +1,58 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { createPitchProcessingState } from "../../src/Recorder/pitchProcessing.js";
-import {
-  createHighResSpectrogramBuffers,
-  createSpectrogramBuffers,
-  processOneAudioHop,
-} from "../../src/Recorder/hopProcessing.js";
+import { createSpectrogramBuffers, processOneAudioHop } from "../../src/Recorder/hopProcessing.js";
+import { getPicaWindowSampleCount } from "../../src/Recorder/picaPitch.js";
+import { appendRawAudioSamples, createRawAudioState } from "../../src/Recorder/rawAudio.js";
+import { hzToCents } from "../../src/pitchScale.js";
 
-function createAnalyserWithSpectrum(spectrumDb, { minDecibels = -100, maxDecibels = -20 } = {}) {
-  return {
-    frequencyBinCount: spectrumDb.length,
-    minDecibels,
-    maxDecibels,
-    getFloatFrequencyData(target) {
-      target.set(spectrumDb);
-    },
+function createHop({ volume = 4.5, minHz = 80, maxHz = 1200, sampleCount, highRes = false } = {}) {
+  const sampleRate = 48_000;
+  const windowLength = getPicaWindowSampleCount(sampleRate, minHz);
+  const rawAudioState = createRawAudioState({ sampleRate, seconds: 2 });
+  const samples = new Float32Array(sampleCount ?? windowLength);
+  for (let i = 0; i < samples.length; i += 1) {
+    samples[i] = 0.5 * Math.sin((2 * Math.PI * 220 * i) / sampleRate);
+  }
+  appendRawAudioSamples(rawAudioState, samples);
+  const analyser = {
+    frequencyBinCount: 512,
+    minDecibels: -100,
+    getFloatFrequencyData: vi.fn((target) => target.fill(-60)),
   };
-}
-
-function createTrackedAnalyserWithSpectrum(
-  spectrumDb,
-  { minDecibels = -100, maxDecibels = -20 } = {},
-) {
-  const analyser = createAnalyserWithSpectrum(spectrumDb, { minDecibels, maxDecibels });
+  const highResAnalyser = highRes
+    ? {
+        ...analyser,
+        frequencyBinCount: 1024,
+        getFloatFrequencyData: vi.fn((target) => target.fill(-40)),
+      }
+    : null;
   return {
-    analyser,
-    stats: { callCount: 0 },
-    getFloatFrequencyData(target) {
-      analyser.getFloatFrequencyData(target);
-      this.stats.callCount += 1;
+    engineState: {
+      pitchRange: { minHz, maxHz },
+      volume,
+      minVolumeThreshold: 2,
+      volumeTracking: { maxHeardVolume: 4 },
+      lineStrengthEma: 0,
+      autoPauseOnSilence: true,
+      skipNextSpectrumFrame: false,
+    },
+    hopState: {
+      processingState: createPitchProcessingState({
+        columnRateHz: 80,
+        seconds: 2,
+        silencePauseStepThreshold: 1,
+      }),
+      audioSessionState: {
+        analyser,
+        highResAnalyser,
+        sampleRate,
+        picaWindowSamples: new Float32Array(windowLength),
+      },
+      rawAudioState,
+      spectrogramBuffers: createSpectrogramBuffers(analyser.frequencyBinCount),
+      highResSpectrogramBuffers: highRes
+        ? createSpectrogramBuffers(highResAnalyser.frequencyBinCount)
+        : null,
     },
   };
 }
@@ -35,223 +60,84 @@ function createTrackedAnalyserWithSpectrum(
 describe("Recorder pages", () => {
   describe("Per-hop processing", () => {
     test("Silence gating skips writing pitch history when it pauses on the first hop", () => {
-      const processingState = createPitchProcessingState({
-        columnRateHz: 80,
-        seconds: 2,
-        silencePauseStepThreshold: 1,
-      });
-      const spectrogramBuffers = createSpectrogramBuffers(4);
-      const audioSessionState = {
-        analyser: createAnalyserWithSpectrum(new Float32Array([-40, -45, -50, -55])),
-        sampleRate: 48000,
-        hzBuffer: new Float32Array(16),
-        hzIndex: 0,
-      };
-      const result = processOneAudioHop({
-        engineState: {
-          pitchRange: { minHz: 80, maxHz: 1200 },
-          volume: 1,
-          minVolumeThreshold: 2,
-          volumeTracking: { maxHeardVolume: 6 },
-          lineStrengthEma: 0,
-          autoPauseOnSilence: true,
-          skipNextSpectrumFrame: false,
-        },
-        hopState: {
-          processingState,
-          audioSessionState,
-          spectrogramBuffers,
-        },
-      });
-
+      const hop = createHop({ volume: 1 });
+      const result = processOneAudioHop(hop);
       expect(result.didFrameDataChange).toBe(false);
       expect(result.spectrumDb).toBeNull();
-      expect(processingState.rawPitchCentsRing.sampleCount).toBe(0);
+      expect(hop.hopState.processingState.rawPitchCentsRing.sampleCount).toBe(0);
     });
 
-    test("A valid signal writes one pitch-history step and returns a spectrogram column", () => {
-      const processingState = createPitchProcessingState({
-        columnRateHz: 80,
-        seconds: 2,
-        silencePauseStepThreshold: 4,
-      });
-      const spectrogramBuffers = createSpectrogramBuffers(4);
-      const audioSessionState = {
-        analyser: createAnalyserWithSpectrum(new Float32Array([-40, -45, -50, -55])),
-        sampleRate: 48000,
-        hzBuffer: new Float32Array(16),
-        hzIndex: 0,
-      };
-      const result = processOneAudioHop({
-        engineState: {
-          pitchRange: { minHz: 80, maxHz: 1200 },
-          volume: 4.5,
-          minVolumeThreshold: 2,
-          volumeTracking: { maxHeardVolume: 4 },
-          lineStrengthEma: 0,
-          autoPauseOnSilence: true,
-          skipNextSpectrumFrame: false,
-        },
-        hopState: {
-          processingState,
-          audioSessionState,
-          spectrogramBuffers,
-        },
-      });
-
+    test("Raw audio determines pitch even when the spectrum has no peak", () => {
+      const hop = createHop();
+      const result = processOneAudioHop(hop);
       expect(result.didFrameDataChange).toBe(true);
       expect(result.spectrumDb).toBeInstanceOf(Float32Array);
       expect(result.shouldPersistMaxVolume).toBe(true);
-      expect(processingState.rawPitchCentsRing.sampleCount).toBe(1);
+      expect(hop.hopState.processingState.rawPitchCentsRing.sampleCount).toBe(1);
+      expect(hop.hopState.processingState.rawPitchCentsRing.newest()).toBeCloseTo(
+        hzToCents(220),
+        0,
+      );
     });
 
     test("Pitch detection respects the configured pitch range", () => {
-      // A single sharp spectral peak at bin 9. With a 512-bin spectrum at a 48kHz
-      // sample rate the bin width is 46.875 Hz, so the peak sits at ~421.9 Hz.
-      const peakBinHz = (48000 / 2 / 512) * 9;
-      const expectedCents = 1200 * Math.log2(peakBinHz);
-
-      function detectCentsForRange(pitchRange) {
-        const processingState = createPitchProcessingState({
-          columnRateHz: 80,
-          seconds: 2,
-          silencePauseStepThreshold: 4,
-        });
-        const spectrumDb = new Float32Array(512);
-        spectrumDb.fill(-100);
-        spectrumDb[8] = -80;
-        spectrumDb[9] = -20;
-        spectrumDb[10] = -80;
-        processOneAudioHop({
-          engineState: {
-            pitchRange,
-            volume: 4.5,
-            minVolumeThreshold: 2,
-            volumeTracking: { maxHeardVolume: 4 },
-            lineStrengthEma: 0,
-            autoPauseOnSilence: true,
-            skipNextSpectrumFrame: false,
-          },
-          hopState: {
-            processingState,
-            audioSessionState: {
-              analyser: createAnalyserWithSpectrum(spectrumDb),
-              sampleRate: 48000,
-              hzBuffer: new Float32Array(16),
-              hzIndex: 0,
-            },
-            spectrogramBuffers: createSpectrogramBuffers(spectrumDb.length),
-          },
-        });
-        return processingState.rawPitchCentsRing.newest();
-      }
-
-      // The peak is detected at its true frequency when the range includes it.
-      expect(detectCentsForRange({ minHz: 380, maxHz: 500 })).toBeCloseTo(expectedCents, 0);
-      // The same peak is ignored (no pitch detected) when the range excludes it.
-      expect(detectCentsForRange({ minHz: 600, maxHz: 1200 })).toBeNaN();
+      const inRange = createHop({ minHz: 80, maxHz: 500 });
+      processOneAudioHop(inRange);
+      expect(inRange.hopState.processingState.rawPitchCentsRing.newest()).toBeCloseTo(
+        hzToCents(220),
+        0,
+      );
+      const outOfRange = createHop({ minHz: 300, maxHz: 1200 });
+      processOneAudioHop(outOfRange);
+      expect(outOfRange.hopState.processingState.rawPitchCentsRing.newest()).toBeNaN();
     });
 
-    test("Pitch and spectrogram paths can use separate analysers", () => {
-      const processingState = createPitchProcessingState({
-        columnRateHz: 80,
-        seconds: 2,
-        silencePauseStepThreshold: 4,
-      });
-      const pitchSpectrumDb = new Float32Array(512);
-      pitchSpectrumDb.fill(-100);
-      pitchSpectrumDb[8] = -80;
-      pitchSpectrumDb[9] = -20;
-      pitchSpectrumDb[10] = -80;
-      const spectrogramSpectrumDb = new Float32Array([-40, -45, -50, -55]);
-      const audioSessionState = {
-        analyser: createAnalyserWithSpectrum(pitchSpectrumDb),
-        highResAnalyser: createAnalyserWithSpectrum(spectrogramSpectrumDb),
-        sampleRate: 48000,
-        hzBuffer: new Float32Array(16),
-        hzIndex: 0,
-      };
-
-      const result = processOneAudioHop({
-        engineState: {
-          pitchRange: { minHz: 380, maxHz: 500 },
-          volume: 4.5,
-          minVolumeThreshold: 2,
-          volumeTracking: { maxHeardVolume: 4 },
-          lineStrengthEma: 0,
-          autoPauseOnSilence: true,
-          skipNextSpectrumFrame: false,
-        },
-        hopState: {
-          processingState,
-          audioSessionState,
-          spectrogramBuffers: createSpectrogramBuffers(pitchSpectrumDb.length),
-          highResSpectrogramBuffers: createHighResSpectrogramBuffers(spectrogramSpectrumDb.length),
-        },
-      });
-
-      expect(audioSessionState.hzIndex).toBe(1);
-      expect(result.spectrogramBuffers.spectrumDb.length).toBe(pitchSpectrumDb.length);
-      expect(result.highResSpectrogramBuffers.spectrumDb.length).toBe(spectrogramSpectrumDb.length);
-      expect(result.spectrumDb.length).toBe(spectrogramSpectrumDb.length);
+    test("Pitch stays unavailable until enough raw samples have arrived", () => {
+      const hop = createHop({ sampleCount: 100 });
+      processOneAudioHop(hop);
+      expect(hop.hopState.processingState.rawPitchCentsRing.newest()).toBeNaN();
     });
+
+    test("Below-threshold audio produces no pitch when auto-pause is disabled", () => {
+      const hop = createHop({ volume: 1 });
+      hop.engineState.autoPauseOnSilence = false;
+      const result = processOneAudioHop(hop);
+      expect(result.spectrumDb).toBeInstanceOf(Float32Array);
+      expect(hop.hopState.processingState.rawPitchCentsRing.sampleCount).toBe(1);
+      expect(hop.hopState.processingState.rawPitchCentsRing.newest()).toBeNaN();
+    });
+
+    test.each([false, true])(
+      "Spectrogram startup skips uninitialized frames at high resolution %s",
+      (highRes) => {
+        const hop = createHop({ highRes });
+        const analyser = highRes
+          ? hop.hopState.audioSessionState.highResAnalyser
+          : hop.hopState.audioSessionState.analyser;
+        analyser.getFloatFrequencyData.mockImplementationOnce((target) => target.fill(-Infinity));
+        const uninitialized = processOneAudioHop(hop);
+        expect(uninitialized.spectrumDb).toBeNull();
+        hop.engineState.skipNextSpectrumFrame = uninitialized.nextSkipNextSpectrumFrame;
+        const settling = processOneAudioHop(hop);
+        expect(settling.spectrumDb).toBeNull();
+        hop.engineState.skipNextSpectrumFrame = settling.nextSkipNextSpectrumFrame;
+        expect(processOneAudioHop(hop).spectrumDb).toBeInstanceOf(Float32Array);
+      },
+    );
 
     test("The base analyser is skipped when PICA reads from the high-res spectrogram", () => {
-      const processingState = createPitchProcessingState({
-        columnRateHz: 80,
-        seconds: 2,
-        silencePauseStepThreshold: 4,
-      });
-      const baseSpectrumDb = new Float32Array(512);
-      const highResSpectrumDb = new Float32Array(1024);
-      highResSpectrumDb.fill(-60);
-      const baseAnalyser = createTrackedAnalyserWithSpectrum(baseSpectrumDb);
-      const highResAnalyser = createTrackedAnalyserWithSpectrum(highResSpectrumDb);
-      const audioSessionState = {
-        analyser: {
-          frequencyBinCount: baseAnalyser.analyser.frequencyBinCount,
-          minDecibels: baseAnalyser.analyser.minDecibels,
-          maxDecibels: baseAnalyser.analyser.maxDecibels,
-          getFloatFrequencyData: baseAnalyser.getFloatFrequencyData.bind(baseAnalyser),
-        },
-        highResAnalyser: {
-          frequencyBinCount: highResAnalyser.analyser.frequencyBinCount,
-          minDecibels: highResAnalyser.analyser.minDecibels,
-          maxDecibels: highResAnalyser.analyser.maxDecibels,
-          getFloatFrequencyData: highResAnalyser.getFloatFrequencyData.bind(highResAnalyser),
-        },
-        picaWindowSamples: new Float32Array(4),
-        sampleRate: 48000,
-        hzBuffer: new Float32Array(16),
-        hzIndex: 0,
-      };
-
-      const result = processOneAudioHop({
-        engineState: {
-          pitchRange: { minHz: 380, maxHz: 500 },
-          volume: 1,
-          minVolumeThreshold: 2,
-          volumeTracking: { maxHeardVolume: 4 },
-          lineStrengthEma: 0,
-          autoPauseOnSilence: false,
-          skipNextSpectrumFrame: false,
-          usePica: true,
-        },
-        hopState: {
-          processingState,
-          audioSessionState,
-          rawAudioState: {
-            ring: { sampleCount: 0 },
-            sampleRate: 48000,
-          },
-          spectrogramBuffers: createSpectrogramBuffers(baseSpectrumDb.length),
-          highResSpectrogramBuffers: createHighResSpectrogramBuffers(highResSpectrumDb.length),
-        },
-      });
-
-      expect(baseAnalyser.stats.callCount).toBe(0);
-      expect(highResAnalyser.stats.callCount).toBe(1);
-      expect(result.spectrumDb.length).toBe(highResSpectrumDb.length);
+      const hop = createHop({ highRes: true });
+      const result = processOneAudioHop(hop);
+      expect(hop.hopState.audioSessionState.analyser.getFloatFrequencyData).not.toHaveBeenCalled();
+      expect(
+        hop.hopState.audioSessionState.highResAnalyser.getFloatFrequencyData,
+      ).toHaveBeenCalledTimes(1);
+      expect(result.spectrumDb.length).toBe(1024);
+      expect(result.spectrumDb[0]).toBe(-40);
+      expect(hop.hopState.processingState.rawPitchCentsRing.newest()).toBeCloseTo(
+        hzToCents(220),
+        0,
+      );
     });
   });
 });

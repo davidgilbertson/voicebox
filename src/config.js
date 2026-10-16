@@ -19,7 +19,6 @@ import {
   readSmoothing,
   readSpectrogramMaxHz,
   readSpectrogramMinHz,
-  readUsePica,
 } from "./Recorder/config.js";
 
 export function readConfig() {
@@ -42,7 +41,6 @@ export function readConfig() {
       pitchLineColorMode: readPitchLineColorMode(),
       spectrogramMinHz: readSpectrogramMinHz(),
       spectrogramMaxHz: readSpectrogramMaxHz(),
-      usePica: readUsePica(),
       smoothing: readSmoothing(),
     },
     scales: {

@@ -52,9 +52,12 @@
   - [Pending audio start is cancelled if the app backgrounds before start completes](test/dom/recordingEngineForegroundRace.test.jsx)
   - Per-hop processing
     - [Silence gating skips writing pitch history when it pauses on the first hop](test/dom/hopProcessing.test.js)
-    - [A valid signal writes one pitch-history step and returns a spectrogram column](test/dom/hopProcessing.test.js)
+    - [Raw audio determines pitch even when the spectrum has no peak](test/dom/hopProcessing.test.js)
     - [Pitch detection respects the configured pitch range](test/dom/hopProcessing.test.js)
-    - [Pitch and spectrogram paths can use separate analysers](test/dom/hopProcessing.test.js)
+    - [Pitch stays unavailable until enough raw samples have arrived](test/dom/hopProcessing.test.js)
+    - [Below-threshold audio produces no pitch when auto-pause is disabled](test/dom/hopProcessing.test.js)
+    - [Spectrogram startup skips uninitialized frames at high resolution false](test/dom/hopProcessing.test.js)
+    - [Spectrogram startup skips uninitialized frames at high resolution true](test/dom/hopProcessing.test.js)
     - [The base analyser is skipped when PICA reads from the high-res spectrogram](test/dom/hopProcessing.test.js)
   - Sharing captured audio
     - [The shared wav filename uses the actual captured duration](test/dom/recordingEngineRawAudioShare.test.js)
@@ -64,6 +67,8 @@
   - [Settings can reset the remembered maximum volume](test/dom/appSettings.test.jsx)
   - [Spectrogram frequency settings are editable and persisted](test/dom/appSettings.test.jsx)
   - [Spectrogram frequency inputs can be cleared while editing and commit on blur](test/dom/appSettings.test.jsx)
+  - [Battery use is hidden when battery information is unavailable or charging (undefined)](test/dom/appSettings.test.jsx)
+  - [Battery use is hidden when battery information is unavailable or charging ({"level":0.8,"charging":true})](test/dom/appSettings.test.jsx)
   - [Battery use shows -- in the first minute](test/dom/appSettings.test.jsx)
   - [The pitch-line color mode falls back to terrain when invalid and persists when changed](test/dom/appSettings.test.jsx)
   - [Developer mode unlocks after four quick taps on the settings heading and can be exited](test/dom/appSettings.test.jsx)
@@ -133,10 +138,6 @@
   - [Detects a higher sine wave at its true pitch](test/unit/picaPitch.test.js)
   - [Returns NaN for a silent window](test/unit/picaPitch.test.js)
   - [Returns NaN when the pitch is outside the configured range](test/unit/picaPitch.test.js)
-- FFT pitch detection
-  - [Detects the fundamental frequency of a single spectral peak](test/unit/pitchDetection.test.js)
-  - [Returns NaN for a flat, noise-like spectrum](test/unit/pitchDetection.test.js)
-  - [Returns NaN when the peak is outside the configured range](test/unit/pitchDetection.test.js)
 - Pitch scale
   - [Note options span A0..C8](test/unit/pitchScale.test.js)
   - [Note name conversion returns expected Hz bounds](test/unit/pitchScale.test.js)

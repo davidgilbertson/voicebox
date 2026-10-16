@@ -94,7 +94,7 @@ Where it is used:
 
 PICA stands for `Pitch Inference by Candidate Analysis`.
 
-It is the alternate pitch detector used when the recorder is configured to use PICA instead of the older FFT-bin picker.
+PICA is the recorder's pitch detector and works directly on raw audio samples. FFT analysis is used separately to draw the spectrogram.
 
 High-level flow:
 

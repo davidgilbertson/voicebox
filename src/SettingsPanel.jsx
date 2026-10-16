@@ -51,8 +51,6 @@ export function SettingsPanel({
   spectrogramMaxHz,
   onSpectrogramMinHzChange,
   onSpectrogramMaxHzChange,
-  usePica,
-  onUsePicaChange,
   smoothing,
   onSmoothingChange,
   batteryUsagePerMinute,
@@ -77,7 +75,7 @@ export function SettingsPanel({
   const canShareRawAudio = showRecorderShare && recorderEngine.canShareRawAudio();
   const batteryUsageDisplay =
     batteryUsagePerMinute === null
-      ? "NA"
+      ? null
       : batteryUsagePerMinute === "--"
         ? "-- %/min"
         : `${batteryUsagePerMinute.toFixed(3)} %/min`;
@@ -423,20 +421,6 @@ export function SettingsPanel({
           <div className={settingsSectionHeadingClass}>Performance</div>
           <label className="flex items-start justify-between gap-4 text-sm">
             <div className="flex flex-col gap-1">
-              <span>Use PICA</span>
-              <span className="text-xs text-slate-400">
-                Use raw-sample PICA instead of FFT. Faster, but experimental.
-              </span>
-            </div>
-            <input
-              type="checkbox"
-              checked={usePica}
-              onChange={(event) => onUsePicaChange(event.target.checked)}
-              className={settingsCheckboxClass}
-            />
-          </label>
-          <label className="flex items-start justify-between gap-4 text-sm">
-            <div className="flex flex-col gap-1">
               <span>Run at 30 FPS</span>
               <span className="text-xs text-slate-400">
                 Limit rendering to 30 FPS to reduce battery use.
@@ -480,10 +464,12 @@ export function SettingsPanel({
             />
           </label>
 
-          <div className="flex items-center justify-between gap-4 text-sm">
-            <span>Battery use</span>
-            <span>{batteryUsageDisplay}</span>
-          </div>
+          {batteryUsagePerMinute !== null && (
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <span>Battery use</span>
+              <span>{batteryUsageDisplay}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-3 pt-3">
             <div className="flex items-center gap-4">
               <a

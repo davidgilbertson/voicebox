@@ -15,7 +15,6 @@ const MAX_VOLUME_STORAGE_KEY = "voicebox.maxVolume";
 const MIN_VOLUME_THRESHOLD_STORAGE_KEY = "voicebox.minVolumeThreshold";
 const SPECTROGRAM_MIN_HZ_STORAGE_KEY = "voicebox.spectrogramMinHz";
 const SPECTROGRAM_MAX_HZ_STORAGE_KEY = "voicebox.spectrogramMaxHz";
-const USE_PICA_STORAGE_KEY = "voicebox.usePica";
 const SMOOTHING_STORAGE_KEY = "voicebox.smoothing";
 
 // Developer-changeable tuning and defaults.
@@ -27,7 +26,6 @@ export const FFT_SIZE = 4096; // AnalyserNode uses this as the input window samp
 export const SPECTROGRAM_BIN_COUNT = FFT_SIZE / 2; // output bin count is always FFT_SIZE / 2
 export const DISPLAY_PIXELS_PER_SECOND = 75; // E.g. @ 400px wide, the chart would show 5 seconds of audio
 export const SILENCE_PAUSE_THRESHOLD_MS = 300;
-export const CENTER_SECONDS = 1; // Window to use for vertical centering
 export const VIBRATO_RATE_MIN_HZ = 3;
 export const VIBRATO_SWEET_MIN_HZ = 4;
 export const VIBRATO_SWEET_MAX_HZ = 8;
@@ -44,7 +42,6 @@ const AUTO_PAUSE_ON_SILENCE_DEFAULT = true;
 const RUN_AT_30_FPS_DEFAULT = false;
 const HALF_RESOLUTION_CANVAS_DEFAULT = false;
 const HIGH_RES_SPECTROGRAM_DEFAULT = true;
-const USE_PICA_DEFAULT = false;
 const SMOOTHING_DEFAULT = true;
 const MAX_VOLUME_DEFAULT = 6;
 export const MIN_VOLUME_THRESHOLD_DEFAULT = 2;
@@ -100,14 +97,6 @@ export function readHighResSpectrogram() {
 
 export function writeHighResSpectrogram(value) {
   ls.set(HIGH_RES_SPECTROGRAM_STORAGE_KEY, value);
-}
-
-export function readUsePica() {
-  return ls.get(USE_PICA_STORAGE_KEY, USE_PICA_DEFAULT) === true;
-}
-
-export function writeUsePica(value) {
-  ls.set(USE_PICA_STORAGE_KEY, value);
 }
 
 export function readSmoothing() {

@@ -9,6 +9,7 @@ describe("App startup", () => {
   test("Saved settings are read into the initial app config", () => {
     localStorage.setItem("voicebox.activeView", "pitch");
     localStorage.setItem("voicebox.highResSpectrogram", "false");
+    localStorage.setItem("voicebox.usePica", "false");
     localStorage.setItem("voicebox.pitchMinNote", "D2");
     localStorage.setItem("voicebox.pitchMaxNote", "A5");
     localStorage.setItem("voicebox.minVolumeThreshold", "3.5");
@@ -38,7 +39,6 @@ describe("App startup", () => {
         pitchLineColorMode: "terrain",
         spectrogramMinHz: 30,
         spectrogramMaxHz: 11_000,
-        usePica: false,
         smoothing: true,
       },
       scales: {

@@ -13,14 +13,16 @@ Scales page > The scales minimum note can be changed from settings	test/dom/appS
 Scales page > Settings opens directly from the scales page	test/dom/appScales.test.jsx:50
 Scales page > The gesture help panel can be dismissed and stays dismissed	test/dom/appScales.test.jsx:62
 Settings > Settings start at their defaults and persist when changed	test/dom/appSettings.test.jsx:21
-Settings > Settings can reset the remembered maximum volume	test/dom/appSettings.test.jsx:63
-Settings > Spectrogram frequency settings are editable and persisted	test/dom/appSettings.test.jsx:75
-Settings > Spectrogram frequency inputs can be cleared while editing and commit on blur	test/dom/appSettings.test.jsx:99
-Settings > Battery use shows -- in the first minute	test/dom/appSettings.test.jsx:117
-Settings > The pitch-line color mode falls back to terrain when invalid and persists when changed	test/dom/appSettings.test.jsx:132
-Settings > Developer mode unlocks after four quick taps on the settings heading and can be exited	test/dom/appSettings.test.jsx:153
-Settings > The share button only appears for paused recorder views with captured audio	test/dom/appSettings.test.jsx:186
-Settings > Developer mode shows a paused download button in recorder views	test/dom/appSettings.test.jsx:211
+Settings > Settings can reset the remembered maximum volume	test/dom/appSettings.test.jsx:64
+Settings > Spectrogram frequency settings are editable and persisted	test/dom/appSettings.test.jsx:76
+Settings > Spectrogram frequency inputs can be cleared while editing and commit on blur	test/dom/appSettings.test.jsx:100
+Settings > Battery use is hidden when battery information is unavailable or charging (undefined)	test/dom/appSettings.test.jsx:118
+Settings > Battery use is hidden when battery information is unavailable or charging ({"level":0.8,"charging":true})	test/dom/appSettings.test.jsx:118
+Settings > Battery use shows -- in the first minute	test/dom/appSettings.test.jsx:131
+Settings > The pitch-line color mode falls back to terrain when invalid and persists when changed	test/dom/appSettings.test.jsx:146
+Settings > Developer mode unlocks after four quick taps on the settings heading and can be exited	test/dom/appSettings.test.jsx:167
+Settings > The share button only appears for paused recorder views with captured audio	test/dom/appSettings.test.jsx:200
+Settings > Developer mode shows a paused download button in recorder views	test/dom/appSettings.test.jsx:225
 App startup > Saved settings are read into the initial app config	test/dom/appStartupSettings.test.jsx:9
 App startup > The remembered max volume is stable across engine construction	test/dom/appStartupSettings.test.jsx:54
 App startup > The audio engines initialize from saved settings on startup	test/dom/appStartupSettings.test.jsx:66
@@ -34,11 +36,14 @@ Charts > The pitch renderer fades the latest unstable tail samples	test/dom/char
 Pitch line color > Palette colors have bottom and top intensity plateaus	test/dom/colorTools.test.js:5
 Settings > The minimum volume threshold persists and rejects non-positive values	test/dom/config.test.js:5
 Focus visibility > Focus rings stay hidden until Tab or Space is pressed	test/dom/focusVisibility.test.js:5
-Recorder pages > Per-hop processing > Silence gating skips writing pitch history when it pauses on the first hop	test/dom/hopProcessing.test.js:37
-Recorder pages > Per-hop processing > A valid signal writes one pitch-history step and returns a spectrogram column	test/dom/hopProcessing.test.js:72
-Recorder pages > Per-hop processing > Pitch detection respects the configured pitch range	test/dom/hopProcessing.test.js:108
-Recorder pages > Per-hop processing > Pitch and spectrogram paths can use separate analysers	test/dom/hopProcessing.test.js:155
-Recorder pages > Per-hop processing > The base analyser is skipped when PICA reads from the high-res spectrogram	test/dom/hopProcessing.test.js:199
+Recorder pages > Per-hop processing > Silence gating skips writing pitch history when it pauses on the first hop	test/dom/hopProcessing.test.js:62
+Recorder pages > Per-hop processing > Raw audio determines pitch even when the spectrum has no peak	test/dom/hopProcessing.test.js:70
+Recorder pages > Per-hop processing > Pitch detection respects the configured pitch range	test/dom/hopProcessing.test.js:83
+Recorder pages > Per-hop processing > Pitch stays unavailable until enough raw samples have arrived	test/dom/hopProcessing.test.js:95
+Recorder pages > Per-hop processing > Below-threshold audio produces no pitch when auto-pause is disabled	test/dom/hopProcessing.test.js:101
+Recorder pages > Per-hop processing > Spectrogram startup skips uninitialized frames at high resolution false	test/dom/hopProcessing.test.js:110
+Recorder pages > Per-hop processing > Spectrogram startup skips uninitialized frames at high resolution true	test/dom/hopProcessing.test.js:110
+Recorder pages > Per-hop processing > The base analyser is skipped when PICA reads from the high-res spectrogram	test/dom/hopProcessing.test.js:128
 Settings > Calibrating the mic on the scales page measures without starting the recorder	test/dom/micCalibration.test.jsx:21
 Scales page > Piano > Pressing a key highlights it while the note sounds	test/dom/pianoHighlight.test.jsx:38
 Scales page > Piano > Programmatically played MIDI notes highlight the matching piano keys	test/dom/pianoHighlight.test.jsx:66
@@ -110,9 +115,6 @@ PICA pitch detection > Detects the pitch of a steady sine wave	test/unit/picaPit
 PICA pitch detection > Detects a higher sine wave at its true pitch	test/unit/picaPitch.test.js:26
 PICA pitch detection > Returns NaN for a silent window	test/unit/picaPitch.test.js:33
 PICA pitch detection > Returns NaN when the pitch is outside the configured range	test/unit/picaPitch.test.js:40
-FFT pitch detection > Detects the fundamental frequency of a single spectral peak	test/unit/pitchDetection.test.js:25
-FFT pitch detection > Returns NaN for a flat, noise-like spectrum	test/unit/pitchDetection.test.js:32
-FFT pitch detection > Returns NaN when the peak is outside the configured range	test/unit/pitchDetection.test.js:39
 Pitch scale > Note options span A0..C8	test/unit/pitchScale.test.js:11
 Pitch scale > Note name conversion returns expected Hz bounds	test/unit/pitchScale.test.js:16
 Pitch scale > Grid line tiers and labels are generated by note class	test/unit/pitchScale.test.js:23
