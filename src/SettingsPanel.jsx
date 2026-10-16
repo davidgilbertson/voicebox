@@ -5,8 +5,8 @@ import { PITCH_LINE_COLOR_MODES } from "./Recorder/colorTools.js";
 import { isAppleTouchDevice } from "./platform.js";
 
 const settingsCheckboxClass = "settings-checkbox h-5 w-5 shrink-0";
-const settingsDividerClass = "border-t border-slate-700/80";
 const settingsSectionHeadingClass = "font-semibold uppercase tracking-[0.18em] text-blue-400";
+const settingsRangeClass = "grid grid-cols-[8rem_2rem_8rem] items-center justify-center gap-2";
 const PITCH_LINE_MODE_PREVIEW_CLASS_BY_MODE = {
   blue: "pitch-line-mode-preview pitch-line-mode-blue",
   orange: "pitch-line-mode-preview pitch-line-mode-orange",
@@ -153,9 +153,9 @@ export function SettingsPanel({
           onClose();
         }
       }}
-      className="fixed inset-0 m-0 hidden h-[var(--app-height)] max-h-none w-screen max-w-none border-0 bg-transparent p-2 backdrop:bg-slate-950/60 backdrop:backdrop-blur-sm open:grid open:place-items-center sm:p-5"
+      className="fixed inset-0 m-0 hidden h-[var(--app-height)] max-h-none w-screen max-w-none border-0 bg-transparent p-0 backdrop:bg-slate-950/60 backdrop:backdrop-blur-sm open:grid open:place-items-center min-[600px]:p-5"
     >
-      <section className="relative flex h-full max-h-none w-full max-w-[600px] flex-col overflow-hidden rounded-lg border border-slate-400/70 bg-slate-900/90 text-slate-100 shadow-2xl">
+      <section className="relative flex h-full max-h-none w-full max-w-[600px] flex-col overflow-hidden bg-slate-900 text-slate-100 min-[600px]:rounded-lg min-[600px]:border min-[600px]:border-slate-400/70 min-[600px]:bg-slate-900/90 min-[600px]:shadow-2xl">
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <button
             type="button"
@@ -173,7 +173,7 @@ export function SettingsPanel({
             &times;
           </button>
         </div>
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 pt-2 pb-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-3 pt-2 pb-4 min-[600px]:px-4">
           {developerMode ? (
             <>
               <button
@@ -236,7 +236,6 @@ export function SettingsPanel({
               />
             </label>
           ) : null}
-          <div className={settingsDividerClass} />
           <div className="flex items-start justify-between gap-4 text-sm">
             <div className="flex flex-col gap-1">
               <span>Record minimum volume</span>
@@ -284,11 +283,12 @@ export function SettingsPanel({
               <RotateCcw aria-hidden="true" className="h-5 w-5" strokeWidth={2.2} />
             </button>
           </div>
-          <div className={settingsDividerClass} />
-          <div className={settingsSectionHeadingClass}>Scales Page</div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-2">
-              <div className="text-xs tracking-wide text-slate-400 uppercase">Min</div>
+          <section className="space-y-4" aria-labelledby="settings-pitch-ranges">
+            <h2 id="settings-pitch-ranges" className={settingsSectionHeadingClass}>
+              Pitch ranges
+            </h2>
+            <h3 className="text-sm font-medium text-white">Scales page (piano)</h3>
+            <div className={settingsRangeClass}>
               <StepperControl
                 value={scaleMinNote}
                 onDecrement={() => onScaleMinNoteChange(scaleNoteOptions[scaleMinIndex - 1])}
@@ -299,9 +299,7 @@ export function SettingsPanel({
                 incrementAriaLabel="Increase scales minimum"
                 contentWidth="4ch"
               />
-            </div>
-            <div className="space-y-2">
-              <div className="text-xs tracking-wide text-slate-400 uppercase">Max</div>
+              <span className="text-center text-sm text-slate-400">to</span>
               <StepperControl
                 value={scaleMaxNote}
                 onDecrement={() => onScaleMaxNoteChange(scaleNoteOptions[scaleMaxIndex - 1])}
@@ -313,55 +311,32 @@ export function SettingsPanel({
                 contentWidth="4ch"
               />
             </div>
-          </div>
-          <div className={settingsSectionHeadingClass}>Spectrogram Page</div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-2">
-              <label
-                htmlFor="spectrogram-min-hz"
-                className="block text-xs tracking-wide text-slate-400 uppercase"
-              >
-                Min
-              </label>
-              <div className="rounded-md bg-slate-800/80 p-2">
-                <input
-                  id="spectrogram-min-hz"
-                  type="number"
-                  inputMode="decimal"
-                  value={spectrogramMinHzDraft}
-                  onChange={(event) => setSpectrogramMinHzDraft(event.target.value)}
-                  onBlur={onSpectrogramMinHzBlur}
-                  className="settings-number-input h-10 w-full rounded-md border border-slate-600 bg-slate-900 px-3 text-sm text-slate-100"
-                  aria-label="Spectrogram minimum frequency (Hz)"
-                />
-              </div>
+            <h3 className="text-sm font-medium text-white">Spectrogram page</h3>
+            <div className={settingsRangeClass}>
+              <input
+                id="spectrogram-min-hz"
+                type="number"
+                inputMode="decimal"
+                value={spectrogramMinHzDraft}
+                onChange={(event) => setSpectrogramMinHzDraft(event.target.value)}
+                onBlur={onSpectrogramMinHzBlur}
+                className="settings-number-input h-11 w-full rounded-md border border-slate-600 bg-slate-800/80 px-2 text-center text-base text-slate-100"
+                aria-label="Spectrogram minimum frequency (Hz)"
+              />
+              <span className="text-center text-sm text-slate-400">to</span>
+              <input
+                id="spectrogram-max-hz"
+                type="number"
+                inputMode="decimal"
+                value={spectrogramMaxHzDraft}
+                onChange={(event) => setSpectrogramMaxHzDraft(event.target.value)}
+                onBlur={onSpectrogramMaxHzBlur}
+                className="settings-number-input h-11 w-full rounded-md border border-slate-600 bg-slate-800/80 px-2 text-center text-base text-slate-100"
+                aria-label="Spectrogram maximum frequency (Hz)"
+              />
             </div>
-            <div className="space-y-2">
-              <label
-                htmlFor="spectrogram-max-hz"
-                className="block text-xs tracking-wide text-slate-400 uppercase"
-              >
-                Max
-              </label>
-              <div className="rounded-md bg-slate-800/80 p-2">
-                <input
-                  id="spectrogram-max-hz"
-                  type="number"
-                  inputMode="decimal"
-                  value={spectrogramMaxHzDraft}
-                  onChange={(event) => setSpectrogramMaxHzDraft(event.target.value)}
-                  onBlur={onSpectrogramMaxHzBlur}
-                  className="settings-number-input h-10 w-full rounded-md border border-slate-600 bg-slate-900 px-3 text-sm text-slate-100"
-                  aria-label="Spectrogram maximum frequency (Hz)"
-                />
-              </div>
-            </div>
-          </div>
-          <div className={settingsDividerClass} />
-          <div className={settingsSectionHeadingClass}>Pitch Page</div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-2">
-              <div className="text-xs tracking-wide text-slate-400 uppercase">Min</div>
+            <h3 className="text-sm font-medium text-white">Pitch page</h3>
+            <div className={settingsRangeClass}>
               <StepperControl
                 value={pitchMinNote}
                 onDecrement={() => onPitchMinNoteChange(pitchNoteOptions[pitchMinIndex - 1])}
@@ -372,9 +347,7 @@ export function SettingsPanel({
                 incrementAriaLabel="Increase pitch minimum"
                 contentWidth="4ch"
               />
-            </div>
-            <div className="space-y-2">
-              <div className="text-xs tracking-wide text-slate-400 uppercase">Max</div>
+              <span className="text-center text-sm text-slate-400">to</span>
               <StepperControl
                 value={pitchMaxNote}
                 onDecrement={() => onPitchMaxNoteChange(pitchNoteOptions[pitchMaxIndex - 1])}
@@ -386,8 +359,7 @@ export function SettingsPanel({
                 contentWidth="4ch"
               />
             </div>
-          </div>
-          <div className={settingsDividerClass} />
+          </section>
           <div className={settingsSectionHeadingClass}>Pitch &amp; Vibrato Pages</div>
           <fieldset className="space-y-2">
             <legend className="block text-xs tracking-wide text-slate-400 uppercase">
@@ -417,7 +389,6 @@ export function SettingsPanel({
               The gradient options respond to volume in real time.
             </div>
           </fieldset>
-          <div className={settingsDividerClass} />
           <div className={settingsSectionHeadingClass}>Performance</div>
           <label className="flex items-start justify-between gap-4 text-sm">
             <div className="flex flex-col gap-1">

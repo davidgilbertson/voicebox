@@ -27,7 +27,7 @@ export function StepperControl({
 
   return (
     <div
-      className={`inline-flex items-stretch rounded-md bg-slate-800/80 ${isLarge ? "h-16" : "h-11"}`}
+      className={`inline-flex items-stretch justify-between rounded-md bg-slate-800/80 ${isLarge ? "h-16" : "h-11"}`}
     >
       <button
         type="button"
