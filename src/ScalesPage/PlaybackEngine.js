@@ -428,6 +428,13 @@ export class PlaybackEngine {
     this.setIsMetronomeEnabled(!this.state.ui.isMetronomeEnabled);
   };
 
+  onGestureTap = () => {
+    if (this.state.ui.isPlaying) {
+      this.setIsMetronomeEnabled(false);
+    }
+    this.togglePlaying();
+  };
+
   onGestureSwipe = (direction) => {
     if (direction === "right") {
       this.state.rapidVerticalSwipe.direction = null;

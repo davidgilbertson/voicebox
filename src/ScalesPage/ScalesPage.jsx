@@ -105,7 +105,7 @@ export function ScalesPage({
         <GestureArea
           testId="scales-gesture-area"
           className="relative flex min-h-0 flex-1 touch-none items-center justify-center rounded-md"
-          onTap={engine.togglePlaying}
+          onTap={engine.onGestureTap}
           onSwipe={engine.onGestureSwipe}
           externalFlashSignal={engineUi.gestureFlashSignal}
           showHelp={showGestureHelp}

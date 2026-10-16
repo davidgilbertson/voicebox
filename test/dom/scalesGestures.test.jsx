@@ -5,13 +5,14 @@ import { PlaybackEngine } from "../../src/ScalesPage/PlaybackEngine.js";
 import { createPlaybackEngineConfig } from "../utils/engineConfig.js";
 
 const playNoteMock = vi.fn(async () => ({ stop: vi.fn() }));
+const playMetronomeTickMock = vi.fn(async () => {});
 
 vi.mock("../../src/ScalesPage/piano.js", () => ({
   ensurePianoLoaded: vi.fn(async () => ({})),
   ensureMetronomeTickLoaded: vi.fn(async () => null),
   ensurePianoReadyForPlayback: vi.fn(async () => true),
   playNote: (...args) => playNoteMock(...args),
-  playMetronomeTick: vi.fn(async () => {}),
+  playMetronomeTick: (...args) => playMetronomeTickMock(...args),
   subscribeToPlayedNotes: () => () => {},
 }));
 
@@ -39,6 +40,7 @@ beforeEach(() => {
     dispatchEvent: () => false,
   }));
   playNoteMock.mockClear();
+  playMetronomeTickMock.mockClear();
   vi.useFakeTimers();
 });
 
@@ -154,6 +156,39 @@ describe("Scales page", () => {
         await vi.advanceTimersByTimeAsync(1500);
       });
       expect(playNoteMock.mock.calls.length).toBe(pausedCalls);
+    });
+
+    test("Tapping to pause scales also stops the metronome and leaves it off when scales resume", async () => {
+      renderScales({ scaleMinNote: "C3", scaleMaxNote: "E4" });
+      await waitForReady();
+      const area = screen.getByTestId("scales-gesture-area");
+      fireEvent.click(screen.getByRole("button", { name: "Enable metronome" }));
+      fireEvent.click(screen.getByRole("button", { name: "Play" }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+      expect(playNoteMock.mock.calls.length).toBeGreaterThan(0);
+      expect(playMetronomeTickMock.mock.calls.length).toBeGreaterThan(0);
+
+      tap(area);
+      expect(screen.getByRole("button", { name: "Enable metronome" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+      const pausedNotes = playNoteMock.mock.calls.length;
+      const pausedTicks = playMetronomeTickMock.mock.calls.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+      expect(playNoteMock).toHaveBeenCalledTimes(pausedNotes);
+      expect(playMetronomeTickMock).toHaveBeenCalledTimes(pausedTicks);
+
+      tap(area);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1500);
+      });
+      expect(playNoteMock.mock.calls.length).toBeGreaterThan(pausedNotes);
+      expect(playMetronomeTickMock).toHaveBeenCalledTimes(pausedTicks);
     });
 
     test("Swiping the same vertical direction twice mid-set starts a new set immediately", async () => {

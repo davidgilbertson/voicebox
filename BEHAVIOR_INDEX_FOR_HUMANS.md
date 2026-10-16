@@ -29,6 +29,7 @@
     - [A down swipe shows down-direction gesture feedback](test/dom/scalesGestures.test.jsx)
     - [Auto-reversal at the top of the range shows down-direction gesture feedback](test/dom/scalesGestures.test.jsx)
     - [A left swipe does nothing while a tap on an empty area toggles play/pause](test/dom/scalesGestures.test.jsx)
+    - [Tapping to pause scales also stops the metronome and leaves it off when scales resume](test/dom/scalesGestures.test.jsx)
     - [Swiping the same vertical direction twice mid-set starts a new set immediately](test/dom/scalesGestures.test.jsx)
     - [A fast pointer swipe with no move event does not toggle play](test/dom/scalesGestures.test.jsx)
     - [Tapping the help button does not toggle play](test/dom/scalesGestures.test.jsx)

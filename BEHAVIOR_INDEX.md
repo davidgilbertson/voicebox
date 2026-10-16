@@ -73,16 +73,17 @@ Pitch detection > Outlier and gap cleaning > M shape disappears after successive
 Recorder pages > Pending audio start is cancelled if the app backgrounds before start completes	test/dom/recordingEngineForegroundRace.test.jsx:29
 Recorder pages > Sharing captured audio > The shared wav filename uses the actual captured duration	test/dom/recordingEngineRawAudioShare.test.js:8
 Recorder pages > Sharing captured audio > The downloaded wav filename matches the shared name and reuses the picker id	test/dom/recordingEngineRawAudioShare.test.js:32
-Scales page > Gestures > A right swipe shows right-direction gesture feedback	test/dom/scalesGestures.test.jsx:81
-Scales page > Gestures > An up swipe shows up-direction gesture feedback	test/dom/scalesGestures.test.jsx:91
-Scales page > Gestures > A down swipe shows down-direction gesture feedback	test/dom/scalesGestures.test.jsx:101
-Scales page > Gestures > Auto-reversal at the top of the range shows down-direction gesture feedback	test/dom/scalesGestures.test.jsx:111
-Scales page > Gestures > A left swipe does nothing while a tap on an empty area toggles play/pause	test/dom/scalesGestures.test.jsx:127
-Scales page > Gestures > Swiping the same vertical direction twice mid-set starts a new set immediately	test/dom/scalesGestures.test.jsx:159
-Scales page > Gestures > A fast pointer swipe with no move event does not toggle play	test/dom/scalesGestures.test.jsx:184
-Scales page > Gestures > Tapping the help button does not toggle play	test/dom/scalesGestures.test.jsx:204
-Scales page > Gestures > The mouse back button does not toggle play from the gesture area	test/dom/scalesGestures.test.jsx:228
-Scales page > Gestures > Gesture help is hidden on fine-pointer devices	test/dom/scalesGestures.test.jsx:241
+Scales page > Gestures > A right swipe shows right-direction gesture feedback	test/dom/scalesGestures.test.jsx:83
+Scales page > Gestures > An up swipe shows up-direction gesture feedback	test/dom/scalesGestures.test.jsx:93
+Scales page > Gestures > A down swipe shows down-direction gesture feedback	test/dom/scalesGestures.test.jsx:103
+Scales page > Gestures > Auto-reversal at the top of the range shows down-direction gesture feedback	test/dom/scalesGestures.test.jsx:113
+Scales page > Gestures > A left swipe does nothing while a tap on an empty area toggles play/pause	test/dom/scalesGestures.test.jsx:129
+Scales page > Gestures > Tapping to pause scales also stops the metronome and leaves it off when scales resume	test/dom/scalesGestures.test.jsx:161
+Scales page > Gestures > Swiping the same vertical direction twice mid-set starts a new set immediately	test/dom/scalesGestures.test.jsx:194
+Scales page > Gestures > A fast pointer swipe with no move event does not toggle play	test/dom/scalesGestures.test.jsx:219
+Scales page > Gestures > Tapping the help button does not toggle play	test/dom/scalesGestures.test.jsx:239
+Scales page > Gestures > The mouse back button does not toggle play from the gesture area	test/dom/scalesGestures.test.jsx:263
+Scales page > Gestures > Gesture help is hidden on fine-pointer devices	test/dom/scalesGestures.test.jsx:276
 Scales page > The 'Semitones' pattern plays its expected opening notes	test/dom/scalesPatterns.test.jsx:42
 Scales page > The 'Pentatonic' pattern plays its expected opening notes	test/dom/scalesPatterns.test.jsx:42
 Scales page > The 'Major' pattern plays its expected opening notes	test/dom/scalesPatterns.test.jsx:42
