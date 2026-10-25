@@ -45,6 +45,17 @@ Recorder pages > Per-hop processing > Spectrogram startup skips uninitialized fr
 Recorder pages > Per-hop processing > Spectrogram startup skips uninitialized frames at high resolution true	test/dom/hopProcessing.test.js:110
 Recorder pages > Per-hop processing > The base analyser is skipped when PICA reads from the high-res spectrogram	test/dom/hopProcessing.test.js:128
 Settings > Calibrating the mic on the scales page measures without starting the recorder	test/dom/micCalibration.test.jsx:21
+Microphone selection > A saved headset microphone overrides automatic selection when capture starts	test/dom/microphoneSelection.test.jsx:25
+Microphone selection > An unavailable saved microphone falls back to automatic without forgetting the choice (OverconstrainedError)	test/dom/microphoneSelection.test.jsx:34
+Microphone selection > An unavailable saved microphone falls back to automatic without forgetting the choice (NotFoundError)	test/dom/microphoneSelection.test.jsx:34
+Microphone selection > An unavailable saved microphone falls back to automatic without forgetting the choice (NotReadableError)	test/dom/microphoneSelection.test.jsx:34
+Microphone selection > Permission denial is reported without retrying another microphone	test/dom/microphoneSelection.test.jsx:50
+Microphone selection > Settings remember a microphone choice and restart active capture with it	test/dom/microphoneSelection.test.jsx:62
+Microphone selection > Settings hide the selector with only one microphone regardless of the saved choice ()	test/dom/microphoneSelection.test.jsx:93
+Microphone selection > Settings hide the selector with only one microphone regardless of the saved choice (ipad)	test/dom/microphoneSelection.test.jsx:93
+Microphone selection > Settings hide the selector with only one microphone regardless of the saved choice (external)	test/dom/microphoneSelection.test.jsx:93
+Microphone selection > An unavailable saved choice displays Automatic and can be replaced	test/dom/microphoneSelection.test.jsx:107
+Microphone selection > Settings hide the microphone selector until device names become available	test/dom/microphoneSelection.test.jsx:121
 Scales page > Piano > Pressing a key highlights it while the note sounds	test/dom/pianoHighlight.test.jsx:38
 Scales page > Piano > Programmatically played MIDI notes highlight the matching piano keys	test/dom/pianoHighlight.test.jsx:66
 Pitch detection > Pitch-history length and resolution follow the sample rate and duration	test/dom/pitchProcessing.test.js:47

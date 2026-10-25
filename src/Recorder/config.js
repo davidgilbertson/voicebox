@@ -4,6 +4,7 @@ import { PITCH_LINE_COLOR_MODES } from "./colorTools.js";
 
 // User-changeable preferences persisted in localStorage.
 const KEEP_RUNNING_IN_BACKGROUND_STORAGE_KEY = "voicebox.keepRunningInBackground";
+const MICROPHONE_DEVICE_ID_STORAGE_KEY = "voicebox.microphoneDeviceId";
 const AUTO_PAUSE_ON_SILENCE_STORAGE_KEY = "voicebox.autoPauseOnSilence";
 const RUN_AT_30_FPS_STORAGE_KEY = "voicebox.runAt30Fps";
 const HALF_RESOLUTION_CANVAS_STORAGE_KEY = "voicebox.halfResolutionCanvas";
@@ -61,6 +62,14 @@ function safeReadPositiveNumber(storageKey, fallback) {
 
 export function readKeepRunningInBackground() {
   return ls.get(KEEP_RUNNING_IN_BACKGROUND_STORAGE_KEY, false) === true;
+}
+
+export function readMicrophoneDeviceId() {
+  return ls.get(MICROPHONE_DEVICE_ID_STORAGE_KEY, "");
+}
+
+export function writeMicrophoneDeviceId(value) {
+  ls.set(MICROPHONE_DEVICE_ID_STORAGE_KEY, value);
 }
 
 export function writeKeepRunningInBackground(value) {

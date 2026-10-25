@@ -348,6 +348,16 @@ export class RecordingEngine {
     this.setUi({ isAudioRunning: false });
   };
 
+  restartAudio = () => {
+    if (this.state.isStarting) {
+      this.pendingAudioRestart = true;
+    }
+    if (this.state.ui.isAudioRunning) {
+      this.stopAudio();
+    }
+    this.syncAudioState();
+  };
+
   syncAudioState = () => {
     if (this.state.ui.isResolvingInitialMicPermission) return;
 

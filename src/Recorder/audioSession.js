@@ -1,4 +1,8 @@
+import { readMicrophoneDeviceId } from "./config.js";
+
 function pickPreferredAudioInputDeviceId(devices) {
+  // Avoid activating Bluetooth headset microphones so headphone playback keeps its
+  // high-quality profile. An explicit microphone choice bypasses this heuristic.
   const preferredInput = devices
     .filter((device) => device.kind === "audioinput")
     .find((device) => {
@@ -27,15 +31,34 @@ export async function createBaseMicrophoneSession({ fftSize }) {
   let source = null;
   let analyser = null;
   try {
-    const preferredDeviceId = await getPreferredAudioInputDeviceId();
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        autoGainControl: false,
-        noiseSuppression: false,
-        echoCancellation: false,
-        ...(preferredDeviceId ? { deviceId: preferredDeviceId } : {}),
-      },
-    });
+    const audioConstraints = {
+      autoGainControl: false,
+      noiseSuppression: false,
+      echoCancellation: false,
+    };
+    const savedDeviceId = readMicrophoneDeviceId();
+    if (savedDeviceId) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { ...audioConstraints, deviceId: { exact: savedDeviceId } },
+        });
+      } catch (error) {
+        // A disconnected, busy, or forgotten device should not prevent capture.
+        // Keep the saved choice so reconnecting it works on the next start.
+        if (!["OverconstrainedError", "NotFoundError", "NotReadableError"].includes(error.name)) {
+          throw error;
+        }
+      }
+    }
+    if (!stream) {
+      const preferredDeviceId = await getPreferredAudioInputDeviceId();
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          ...audioConstraints,
+          ...(preferredDeviceId ? { deviceId: preferredDeviceId } : {}),
+        },
+      });
+    }
     context = new AudioContext();
     await context.resume();
 

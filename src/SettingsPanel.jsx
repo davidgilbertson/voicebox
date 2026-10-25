@@ -1,6 +1,7 @@
 import { Circle, RotateCcw, Share, Share2, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { StepperControl } from "./components/StepperControl.jsx";
+import { MicrophoneSelect } from "./components/MicrophoneSelect.jsx";
 import { PITCH_LINE_COLOR_MODES } from "./Recorder/colorTools.js";
 import { isAppleTouchDevice } from "./platform.js";
 
@@ -283,6 +284,11 @@ export function SettingsPanel({
               <RotateCcw aria-hidden="true" className="h-5 w-5" strokeWidth={2.2} />
             </button>
           </div>
+          <MicrophoneSelect
+            open={open}
+            isAudioRunning={recorderUi.isAudioRunning}
+            recorderEngine={recorderEngine}
+          />
           <section className="space-y-4" aria-labelledby="settings-pitch-ranges">
             <h2 id="settings-pitch-ranges" className={settingsSectionHeadingClass}>
               Pitch ranges

@@ -89,6 +89,18 @@
   - [Palette colors have bottom and top intensity plateaus](test/dom/colorTools.test.js)
 - Focus visibility
   - [Focus rings stay hidden until Tab or Space is pressed](test/dom/focusVisibility.test.js)
+- Microphone selection
+  - [A saved headset microphone overrides automatic selection when capture starts](test/dom/microphoneSelection.test.jsx)
+  - [An unavailable saved microphone falls back to automatic without forgetting the choice (OverconstrainedError)](test/dom/microphoneSelection.test.jsx)
+  - [An unavailable saved microphone falls back to automatic without forgetting the choice (NotFoundError)](test/dom/microphoneSelection.test.jsx)
+  - [An unavailable saved microphone falls back to automatic without forgetting the choice (NotReadableError)](test/dom/microphoneSelection.test.jsx)
+  - [Permission denial is reported without retrying another microphone](test/dom/microphoneSelection.test.jsx)
+  - [Settings remember a microphone choice and restart active capture with it](test/dom/microphoneSelection.test.jsx)
+  - [Settings hide the selector with only one microphone regardless of the saved choice ()](test/dom/microphoneSelection.test.jsx)
+  - [Settings hide the selector with only one microphone regardless of the saved choice (ipad)](test/dom/microphoneSelection.test.jsx)
+  - [Settings hide the selector with only one microphone regardless of the saved choice (external)](test/dom/microphoneSelection.test.jsx)
+  - [An unavailable saved choice displays Automatic and can be replaced](test/dom/microphoneSelection.test.jsx)
+  - [Settings hide the microphone selector until device names become available](test/dom/microphoneSelection.test.jsx)
 - Pitch detection
   - [Pitch-history length and resolution follow the sample rate and duration](test/dom/pitchProcessing.test.js)
   - [The column rate sets the pitch-history resolution](test/dom/pitchProcessing.test.js)
