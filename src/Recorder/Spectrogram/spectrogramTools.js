@@ -119,7 +119,7 @@ export class SpectrogramChartRenderer {
     return tailColumns;
   }
 
-  appendColumn(spectrumDb, maxHeardVolume) {
+  appendColumn(spectrumDb) {
     if (!spectrumDb?.length) return;
     // If the user changes the resolution of the spectrogram,
     //  buffer sizes will change, so we drop any old ones.
@@ -134,12 +134,11 @@ export class SpectrogramChartRenderer {
     const copy = new Float32Array(spectrumDb.length);
     const dbRange = SPECTROGRAM_DISPLAY_MAX_DB - SPECTROGRAM_DISPLAY_MIN_DB;
     const invDbRange = dbRange > 0 ? 1 / dbRange : 0;
-    const gain = maxHeardVolume > 0 ? 10 / maxHeardVolume : 1;
     for (let i = 0; i < spectrumDb.length; i += 1) {
       const normalized =
         (Math.max(spectrumDb[i], SPECTROGRAM_DISPLAY_MIN_DB) - SPECTROGRAM_DISPLAY_MIN_DB) *
         invDbRange;
-      const value = clamp(normalized * gain, 0, 1);
+      const value = clamp(normalized, 0, 1);
       copy[i] = value;
     }
     this.pendingColumns.push(copy);

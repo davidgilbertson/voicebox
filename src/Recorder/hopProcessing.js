@@ -2,6 +2,10 @@ import { clamp } from "../tools.js";
 import { fillPicaWindowSamples, getPicaPitchResult } from "./picaPitch.js";
 import { processPitchSample } from "./pitchProcessing.js";
 
+// Bring each device's remembered loudest RMS to a common spectrogram level.
+// Pitch detection, raw capture and minimum-volume calibration stay raw.
+const NORMALIZED_MAX_RMS = 0.25;
+
 export function createSpectrogramBuffers(binCount) {
   return {
     spectrumDb: new Float32Array(binCount),
@@ -72,11 +76,6 @@ function processHopPitch({
   const minHz = pitchRange.minHz;
   const maxHz = pitchRange.maxHz;
 
-  let shouldPersistMaxVolume = false;
-  if (volume > volumeTracking.maxHeardVolume + 0.1) {
-    volumeTracking.maxHeardVolume = volume;
-    shouldPersistMaxVolume = true;
-  }
   const maxHeardVolume = volumeTracking.maxHeardVolume;
   const epsilon = 1e-4;
   const usedMinVolume = minVolumeThreshold + epsilon > maxHeardVolume ? 0 : minVolumeThreshold;
@@ -116,7 +115,6 @@ function processHopPitch({
 
   return {
     didFrameDataChange,
-    shouldPersistMaxVolume,
     nextLineStrengthEma,
     isSilencePaused: pitchWriteResult?.paused ?? processingState.silencePaused,
   };
@@ -137,7 +135,6 @@ export function processOneAudioHop({ engineState, hopState }) {
     smoothing,
     skipNextSpectrumFrame,
   } = engineState;
-  const activeVolumeTracking = volumeTracking;
   const {
     audioSessionState,
     rawAudioState,
@@ -173,11 +170,19 @@ export function processOneAudioHop({ engineState, hopState }) {
     };
   }
 
+  const shouldPersistMaxVolume = volume > volumeTracking.maxHeardVolume + 0.1;
+  if (shouldPersistMaxVolume) volumeTracking.maxHeardVolume = volume;
+  const inputGain = NORMALIZED_MAX_RMS / 10 ** (volumeTracking.maxHeardVolume / 2.6 - 4);
+  // Adding dB before the display floor is equivalent to multiplying the input
+  // samples before the FFT, without modifying the raw recording buffer.
+  const inputGainDb = 20 * Math.log10(inputGain);
+  for (let i = 0; i < spectrumDb.length; i += 1) spectrumDb[i] += inputGainDb;
+
   const pitchResult = processHopPitch({
     pitchRange,
     volume,
     minVolumeThreshold,
-    volumeTracking: activeVolumeTracking,
+    volumeTracking,
     lineStrengthEma,
     autoPauseOnSilence,
     smoothing,
@@ -191,7 +196,7 @@ export function processOneAudioHop({ engineState, hopState }) {
     didFrameDataChange,
     nextSkipNextSpectrumFrame,
     nextLineStrengthEma: pitchResult.nextLineStrengthEma,
-    shouldPersistMaxVolume: pitchResult.shouldPersistMaxVolume,
+    shouldPersistMaxVolume,
     spectrumDb: nextSpectrumDb,
     spectrogramBuffers: nextSpectrogramBuffers,
     highResSpectrogramBuffers: nextHighResSpectrogramBuffers,

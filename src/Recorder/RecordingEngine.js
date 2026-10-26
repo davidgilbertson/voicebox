@@ -25,6 +25,7 @@ import {
   resetRawAudioState,
 } from "./rawAudio.js";
 import { getPicaWindowSampleCount } from "./picaPitch.js";
+import { RingBuffer } from "./ringBuffer.js";
 
 const VIBRATO_RATE_SMOOTHING_TIME_MS = 630;
 const RAW_AUDIO_SAVE_PICKER_ID = "voicebox-raw-audio";
@@ -166,6 +167,12 @@ export class RecordingEngine {
       sampleRate: this.audioSessionState.sampleRate,
       seconds: getChartSeconds(this.state.chartWidthPx),
     });
+    // Analysis must keep receiving fresh samples during silence auto-pause, while
+    // the exported recording must stop advancing along with the visible chart.
+    this.pitchAudioState = {
+      sampleRate: this.audioSessionState.sampleRate,
+      ring: new RingBuffer(this.audioSessionState.picaWindowSamples.length),
+    };
     this.pendingAudioRestart = false;
     this.unsubscribeForeground = subscribeToForegroundChanges(this.onForegroundChange);
 
@@ -184,7 +191,7 @@ export class RecordingEngine {
     }
   };
 
-  processCurrentAudioHop = () => {
+  processCurrentAudioHop = (samples) => {
     if (!this.state.ui.isWantedRunning) return;
     const result = processOneAudioHop({
       engineState: {
@@ -199,7 +206,7 @@ export class RecordingEngine {
       },
       hopState: {
         audioSessionState: this.audioSessionState,
-        rawAudioState: this.rawAudioState,
+        rawAudioState: this.pitchAudioState,
         processingState: this.pitchProcessingState,
         spectrogramBuffers: this.spectrogramBuffers,
         highResSpectrogramBuffers: this.highResSpectrogramBuffers,
@@ -213,12 +220,10 @@ export class RecordingEngine {
       writeMaxVolume(this.state.volume);
     }
     if (result.spectrumDb) {
-      this.chartRenderers.spectrogram.appendColumn(
-        result.spectrumDb,
-        this.volumeTracking.maxHeardVolume,
-      );
+      this.chartRenderers.spectrogram.appendColumn(result.spectrumDb);
     }
     if (result.didFrameDataChange) {
+      appendRawAudioSamples(this.rawAudioState, samples);
       this.state.frameDirty = true;
     }
   };
@@ -237,16 +242,17 @@ export class RecordingEngine {
         displayPixelsPerSecond: DISPLAY_PIXELS_PER_SECOND,
         workletModuleUrl: new URL("./worklets/audioWorklet.js", import.meta.url),
         onWorkletMessage: (event) => {
+          if (!this.state.ui.isWantedRunning) return;
           const sampleCount = Number(event.data.sampleCount);
           this.state.volume = Number(event.data.volume) || 0;
-          appendRawAudioSamples(this.rawAudioState, event.data.samples);
+          appendRawAudioSamples(this.pitchAudioState, event.data.samples);
           if (!Number.isFinite(sampleCount) || sampleCount !== this.state.hopSize) {
             console.error("something has gone very wrong this should not be possible", {
               sampleCount,
               expectedHopSize: this.state.hopSize,
             });
           }
-          this.processCurrentAudioHop();
+          this.processCurrentAudioHop(event.data.samples);
         },
       });
       if (startAttempt !== this.state.startAttempt || this.pendingAudioRestart) {
@@ -267,6 +273,10 @@ export class RecordingEngine {
         session.sampleRate,
         this.state.pitchRange.minHz,
       );
+      this.pitchAudioState = {
+        sampleRate: session.sampleRate,
+        ring: new RingBuffer(this.audioSessionState.picaWindowSamples.length),
+      };
       resetRawAudioState(this.rawAudioState, {
         sampleRate: session.sampleRate,
         seconds: getChartSeconds(this.state.chartWidthPx),
@@ -569,6 +579,7 @@ export class RecordingEngine {
         this.audioSessionState.sampleRate,
         this.state.pitchRange.minHz,
       );
+      this.pitchAudioState.ring.resize(this.audioSessionState.picaWindowSamples.length);
     }
     this.chartRenderers.pitch.updateOptions({
       minCents: this.state.pitchRange.minCents,

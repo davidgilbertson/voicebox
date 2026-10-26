@@ -57,7 +57,7 @@ Why it exists:
 
 1. The same singing volume can produce very different levels on different microphones.
 2. Voicebox needs a device-specific sense of what "loud" looks like.
-3. That lets the visuals adapt without requiring manual setup on every device.
+3. That lets visuals adapt without requiring manual setup on every device.
 
 How it adapts:
 
@@ -68,7 +68,7 @@ How it adapts:
 Where it is used:
 
 1. Pitch-line color normalization uses it as the ceiling.
-2. Spectrogram brightness uses it to scale quiet-device input up into a more useful part of the color range.
+2. The spectrogram uses input normalization derived from it. Pitch detection is independent of this maximum; calibration, silence gating, and WAV exports retain the original input levels.
 
 ## Recorder Flow
 
@@ -78,28 +78,30 @@ Where it is used:
    2. `volume`
 3. On each hop, `RecordingEngine`:
    1. Captures analyser spectrum in dB.
-   2. Uses the current volume threshold to decide whether to run pitch detection.
-   3. Updates the running maximum volume when a new louder input is heard.
-   4. Updates pitch history and line color strength.
+   2. Updates the running maximum volume when a new louder input is heard.
+   3. Derives spectrogram gain from the remembered maximum and applies it to the spectrum.
+   4. Uses the raw volume threshold to decide whether to run pitch detection, then updates pitch history and line color strength.
    5. Appends a spectrogram column unless silence auto-pause is active.
 4. Rendering happens separately on `requestAnimationFrame`.
+
+Exported WAV audio follows the chart timeline, including silence auto-pause: sounds still visible on the chart remain in the export while the chart is stopped. A separate short input buffer keeps pitch analysis current so new sound can resume the chart.
 
 ## Spectrogram Notes
 
 1. The spectrogram keeps analyser output in dB until render time.
-2. The renderer maps dB values into display brightness.
-3. It then applies device/session gain based on the current remembered maximum volume.
+2. Analysis gain is added in decibels before the renderer applies its display floor. This is equivalent to scaling samples before the FFT.
+3. The renderer maps the normalized dB values into display brightness, without another device-specific brightness multiplier.
 
 ## PICA Pitch Detection
 
 PICA stands for `Pitch Inference by Candidate Analysis`.
 
-PICA is the recorder's pitch detector and works directly on raw audio samples. FFT analysis is used separately to draw the spectrogram.
+PICA is the recorder's pitch detector and works on the raw captured audio window. Its correlation scores are independent of input level; the calibrated minimum volume is the only loudness gate. FFT analysis is used separately to draw the spectrogram, with gain correction based on the remembered maximum.
 
 High-level flow:
 
 1. Take a short trailing waveform window sized to a couple of cycles of the lowest supported pitch.
-2. Bail out early if the window is too quiet or has no zero crossings.
+2. Bail out early if the window has no zero crossings (including silence).
 3. Split the recent waveform into folds between zero crossings and keep the strongest local extrema from those folds.
 4. Turn spacing between pairs of extrema into candidate periods.
 5. For each candidate period, score waveform similarity by comparing several period-sized patches of recent audio.

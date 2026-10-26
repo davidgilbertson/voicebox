@@ -52,6 +52,12 @@
   - [Tapping the chart pauses and resumes recording, and the paused pill shows a pause icon](test/dom/appRecorderPauseGesture.test.jsx)
   - [Pending audio start is cancelled if the app backgrounds before start completes](test/dom/recordingEngineForegroundRace.test.jsx)
   - Per-hop processing
+    - [Calibrated quiet and loud inputs produce the same pitch, spectrum and pitch colour](test/dom/hopProcessing.test.js)
+    - [Resetting the remembered maximum immediately changes spectrogram normalization](test/dom/hopProcessing.test.js)
+    - [Moderate notes keep their pitch after a loud note raises the remembered maximum](test/dom/hopProcessing.test.js)
+    - [Repeated hops preserve raw pitch samples and do not accumulate spectrogram gain](test/dom/hopProcessing.test.js)
+    - [A silent waveform produces no pitch even when the volume gate is open](test/dom/hopProcessing.test.js)
+    - [The spectrogram maps normalized decibels without another volume gain](test/dom/hopProcessing.test.js)
     - [Silence gating skips writing pitch history when it pauses on the first hop](test/dom/hopProcessing.test.js)
     - [Raw audio determines pitch even when the spectrum has no peak](test/dom/hopProcessing.test.js)
     - [Pitch detection respects the configured pitch range](test/dom/hopProcessing.test.js)
@@ -61,6 +67,7 @@
     - [Spectrogram startup skips uninitialized frames at high resolution true](test/dom/hopProcessing.test.js)
     - [The base analyser is skipped when PICA reads from the high-res spectrogram](test/dom/hopProcessing.test.js)
   - Sharing captured audio
+    - [Silence auto-pause preserves the audio shown on the chart for export](test/dom/recordingEngineRawAudioShare.test.js)
     - [The shared wav filename uses the actual captured duration](test/dom/recordingEngineRawAudioShare.test.js)
     - [The downloaded wav filename matches the shared name and reuses the picker id](test/dom/recordingEngineRawAudioShare.test.js)
 - Settings
@@ -149,6 +156,10 @@
 - PICA pitch detection
   - [Detects the pitch of a steady sine wave](test/unit/picaPitch.test.js)
   - [Detects a higher sine wave at its true pitch](test/unit/picaPitch.test.js)
+  - [Pitch is independent of waveform amplitude (0.5)](test/unit/picaPitch.test.js)
+  - [Pitch is independent of waveform amplitude (0.005)](test/unit/picaPitch.test.js)
+  - [Pitch is independent of waveform amplitude (0.000005)](test/unit/picaPitch.test.js)
+  - [Returns NaN for uncorrelated noise](test/unit/picaPitch.test.js)
   - [Returns NaN for a silent window](test/unit/picaPitch.test.js)
   - [Returns NaN when the pitch is outside the configured range](test/unit/picaPitch.test.js)
 - Pitch scale

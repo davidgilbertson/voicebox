@@ -30,6 +30,28 @@ describe("PICA pitch detection", () => {
     expect(Math.abs(cents - hzToCents(hz))).toBeLessThan(15);
   });
 
+  test.each([0.5, 0.005, 0.000005])(
+    "Pitch is independent of waveform amplitude (%s)",
+    (amplitude) => {
+      const samples = makeSineWindow(220, { amplitude });
+      for (let i = 0; i < samples.length; i += 1) {
+        samples[i] += amplitude * 0.4 * Math.sin((2 * Math.PI * 440 * i) / sampleRate);
+      }
+      const { cents } = getPicaPitchResult(samples, sampleRate, 80, 1000);
+      expect(Math.abs(cents - hzToCents(220))).toBeLessThan(15);
+    },
+  );
+
+  test("Returns NaN for uncorrelated noise", () => {
+    const samples = new Float32Array(getPicaWindowSampleCount(sampleRate, 80));
+    let seed = 12345;
+    for (let i = 0; i < samples.length; i += 1) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      samples[i] = seed / 2 ** 32 - 0.5;
+    }
+    expect(getPicaPitchResult(samples, sampleRate, 80, 1000).cents).toBeNaN();
+  });
+
   test("Returns NaN for a silent window", () => {
     const samples = new Float32Array(getPicaWindowSampleCount(sampleRate, 80));
     const { cents } = getPicaPitchResult(samples, sampleRate, 80, 1000);

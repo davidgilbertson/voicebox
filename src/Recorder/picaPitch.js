@@ -1,7 +1,5 @@
 import { hzToCents } from "../pitchScale.js";
 
-// Smallest peak level that counts as worth analyzing.
-const PICA_MIN_AMP = 0.02;
 // Number of lowest-note periods to keep in each analysis window.
 const PICA_WINDOW_PERIODS = 2;
 // Maximum recent zero-crossing folds to inspect for candidates.
@@ -27,54 +25,18 @@ export function fillPicaWindowSamples(ring, samples) {
   }
 }
 
-function getWindowStats(samples) {
-  let zeroCrossingCount = 0;
+function hasZeroCrossing(samples) {
   let lastSample = samples[0];
-  let maxAmplitude = Math.abs(lastSample);
 
   for (let sampleIndex = 1; sampleIndex < samples.length; sampleIndex += 1) {
     const sample = samples[sampleIndex];
-    const absolute = Math.abs(sample);
-    if (absolute > maxAmplitude) {
-      maxAmplitude = absolute;
-    }
     if (lastSample < 0 !== sample < 0) {
-      zeroCrossingCount += 1;
+      return true;
     }
     lastSample = sample;
   }
 
-  return {
-    zeroCrossingCount,
-    maxAmplitude,
-  };
-}
-
-function getMaxAmplitudeFromRight(samples, cache) {
-  if (cache.maxAmplitudeFromRight) {
-    return cache.maxAmplitudeFromRight;
-  }
-
-  const maxAmplitudeFromRight = new Float32Array(samples.length);
-  let maxAmplitude = 0;
-  for (let sampleIndex = samples.length - 1; sampleIndex >= 0; sampleIndex -= 1) {
-    const amplitude = Math.abs(samples[sampleIndex]);
-    if (amplitude > maxAmplitude) {
-      maxAmplitude = amplitude;
-    }
-    maxAmplitudeFromRight[sampleIndex] = maxAmplitude;
-  }
-
-  cache.maxAmplitudeFromRight = maxAmplitudeFromRight;
-  return maxAmplitudeFromRight;
-}
-
-function getComparedRegionMaxAmplitude(samples, periodSize, cache) {
-  if (periodSize < 1) return 0;
-  const patchCount = Math.min(PICA_MAX_COMPARISON_PATCHES, Math.floor(samples.length / periodSize));
-  if (patchCount < 2) return 0;
-  const startSample = Math.max(0, samples.length - patchCount * periodSize);
-  return getMaxAmplitudeFromRight(samples, cache)[startSample];
+  return false;
 }
 
 function getCorrelation(samples, periodSize, cache) {
@@ -267,7 +229,6 @@ function getWalkedPeriod(samples, seedPeriodSize, sampleRate, minHz, maxHz, cach
           periodSize: bestPeriodSize,
           hz: refinedHz,
           correlation: bestCorrelation,
-          comparedRegionMaxAmplitude: getComparedRegionMaxAmplitude(samples, bestPeriodSize, cache),
         };
 
   cache.walkedPeriodByPeriodSize.set(seedPeriodSize, walkedPeriod);
@@ -381,11 +342,7 @@ function getCandidatesFromExtrema(samples, sampleRate, minHz, maxHz, foldExtrema
         maxHz,
         cache,
       );
-      if (
-        !walkedPeriod ||
-        walkedPeriod.correlation < PICA_MIN_CORR ||
-        walkedPeriod.comparedRegionMaxAmplitude < PICA_MIN_AMP
-      ) {
+      if (!walkedPeriod || walkedPeriod.correlation < PICA_MIN_CORR) {
         continue;
       }
 
@@ -406,8 +363,9 @@ function getCandidatesFromExtrema(samples, sampleRate, minHz, maxHz, foldExtrema
 }
 
 function getPicaPitchResultFromSamples(samples, sampleRate, minHz, maxHz) {
-  const { zeroCrossingCount, maxAmplitude } = getWindowStats(samples);
-  if (maxAmplitude < PICA_MIN_AMP || zeroCrossingCount === 0) {
+  // The caller gates on calibrated raw volume. Correlation is scale-invariant;
+  // an absolute amplitude floor here would reject valid quiet-device input.
+  if (!hasZeroCrossing(samples)) {
     return {
       cents: Number.NaN,
     };
@@ -415,7 +373,6 @@ function getPicaPitchResultFromSamples(samples, sampleRate, minHz, maxHz) {
 
   const cache = {
     correlationByPeriodSize: new Map(),
-    maxAmplitudeFromRight: null,
     walkedPeriodByPeriodSize: new Map(),
   };
   const winningCandidate = getCandidatesFromExtrema(

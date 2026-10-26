@@ -36,14 +36,20 @@ Charts > The pitch renderer fades the latest unstable tail samples	test/dom/char
 Pitch line color > Palette colors have bottom and top intensity plateaus	test/dom/colorTools.test.js:5
 Settings > The minimum volume threshold persists and rejects non-positive values	test/dom/config.test.js:5
 Focus visibility > Focus rings stay hidden until Tab or Space is pressed	test/dom/focusVisibility.test.js:5
-Recorder pages > Per-hop processing > Silence gating skips writing pitch history when it pauses on the first hop	test/dom/hopProcessing.test.js:62
-Recorder pages > Per-hop processing > Raw audio determines pitch even when the spectrum has no peak	test/dom/hopProcessing.test.js:70
-Recorder pages > Per-hop processing > Pitch detection respects the configured pitch range	test/dom/hopProcessing.test.js:83
-Recorder pages > Per-hop processing > Pitch stays unavailable until enough raw samples have arrived	test/dom/hopProcessing.test.js:95
-Recorder pages > Per-hop processing > Below-threshold audio produces no pitch when auto-pause is disabled	test/dom/hopProcessing.test.js:101
-Recorder pages > Per-hop processing > Spectrogram startup skips uninitialized frames at high resolution false	test/dom/hopProcessing.test.js:110
-Recorder pages > Per-hop processing > Spectrogram startup skips uninitialized frames at high resolution true	test/dom/hopProcessing.test.js:110
-Recorder pages > Per-hop processing > The base analyser is skipped when PICA reads from the high-res spectrogram	test/dom/hopProcessing.test.js:128
+Recorder pages > Per-hop processing > Calibrated quiet and loud inputs produce the same pitch, spectrum and pitch colour	test/dom/hopProcessing.test.js:70
+Recorder pages > Per-hop processing > Resetting the remembered maximum immediately changes spectrogram normalization	test/dom/hopProcessing.test.js:94
+Recorder pages > Per-hop processing > Moderate notes keep their pitch after a loud note raises the remembered maximum	test/dom/hopProcessing.test.js:107
+Recorder pages > Per-hop processing > Repeated hops preserve raw pitch samples and do not accumulate spectrogram gain	test/dom/hopProcessing.test.js:128
+Recorder pages > Per-hop processing > A silent waveform produces no pitch even when the volume gate is open	test/dom/hopProcessing.test.js:138
+Recorder pages > Per-hop processing > The spectrogram maps normalized decibels without another volume gain	test/dom/hopProcessing.test.js:144
+Recorder pages > Per-hop processing > Silence gating skips writing pitch history when it pauses on the first hop	test/dom/hopProcessing.test.js:149
+Recorder pages > Per-hop processing > Raw audio determines pitch even when the spectrum has no peak	test/dom/hopProcessing.test.js:157
+Recorder pages > Per-hop processing > Pitch detection respects the configured pitch range	test/dom/hopProcessing.test.js:170
+Recorder pages > Per-hop processing > Pitch stays unavailable until enough raw samples have arrived	test/dom/hopProcessing.test.js:182
+Recorder pages > Per-hop processing > Below-threshold audio produces no pitch when auto-pause is disabled	test/dom/hopProcessing.test.js:188
+Recorder pages > Per-hop processing > Spectrogram startup skips uninitialized frames at high resolution false	test/dom/hopProcessing.test.js:197
+Recorder pages > Per-hop processing > Spectrogram startup skips uninitialized frames at high resolution true	test/dom/hopProcessing.test.js:197
+Recorder pages > Per-hop processing > The base analyser is skipped when PICA reads from the high-res spectrogram	test/dom/hopProcessing.test.js:215
 Settings > Calibrating the mic on the scales page measures without starting the recorder	test/dom/micCalibration.test.jsx:21
 Microphone selection > A saved headset microphone overrides automatic selection when capture starts	test/dom/microphoneSelection.test.jsx:25
 Microphone selection > An unavailable saved microphone falls back to automatic without forgetting the choice (OverconstrainedError)	test/dom/microphoneSelection.test.jsx:34
@@ -82,8 +88,9 @@ Pitch detection > Outlier and gap cleaning > 2-value island surrounded by NaNs i
 Pitch detection > Outlier and gap cleaning > 3-value island surrounded by NaNs is dropped	test/dom/pitchProcessing.test.js:342
 Pitch detection > Outlier and gap cleaning > M shape disappears after successive 1-outlier passes	test/dom/pitchProcessing.test.js:356
 Recorder pages > Pending audio start is cancelled if the app backgrounds before start completes	test/dom/recordingEngineForegroundRace.test.jsx:29
-Recorder pages > Sharing captured audio > The shared wav filename uses the actual captured duration	test/dom/recordingEngineRawAudioShare.test.js:8
-Recorder pages > Sharing captured audio > The downloaded wav filename matches the shared name and reuses the picker id	test/dom/recordingEngineRawAudioShare.test.js:32
+Recorder pages > Sharing captured audio > Silence auto-pause preserves the audio shown on the chart for export	test/dom/recordingEngineRawAudioShare.test.js:8
+Recorder pages > Sharing captured audio > The shared wav filename uses the actual captured duration	test/dom/recordingEngineRawAudioShare.test.js:62
+Recorder pages > Sharing captured audio > The downloaded wav filename matches the shared name and reuses the picker id	test/dom/recordingEngineRawAudioShare.test.js:86
 Scales page > Gestures > A right swipe shows right-direction gesture feedback	test/dom/scalesGestures.test.jsx:83
 Scales page > Gestures > An up swipe shows up-direction gesture feedback	test/dom/scalesGestures.test.jsx:93
 Scales page > Gestures > A down swipe shows down-direction gesture feedback	test/dom/scalesGestures.test.jsx:103
@@ -125,8 +132,12 @@ Battery usage > Returns null when charging or battery info is unavailable	test/u
 Battery usage > Polls on an interval and publishes updates to subscribers	test/unit/batteryUsage.test.js:58
 PICA pitch detection > Detects the pitch of a steady sine wave	test/unit/picaPitch.test.js:17
 PICA pitch detection > Detects a higher sine wave at its true pitch	test/unit/picaPitch.test.js:26
-PICA pitch detection > Returns NaN for a silent window	test/unit/picaPitch.test.js:33
-PICA pitch detection > Returns NaN when the pitch is outside the configured range	test/unit/picaPitch.test.js:40
+PICA pitch detection > Pitch is independent of waveform amplitude (0.5)	test/unit/picaPitch.test.js:33
+PICA pitch detection > Pitch is independent of waveform amplitude (0.005)	test/unit/picaPitch.test.js:33
+PICA pitch detection > Pitch is independent of waveform amplitude (0.000005)	test/unit/picaPitch.test.js:33
+PICA pitch detection > Returns NaN for uncorrelated noise	test/unit/picaPitch.test.js:45
+PICA pitch detection > Returns NaN for a silent window	test/unit/picaPitch.test.js:55
+PICA pitch detection > Returns NaN when the pitch is outside the configured range	test/unit/picaPitch.test.js:62
 Pitch scale > Note options span A0..C8	test/unit/pitchScale.test.js:11
 Pitch scale > Note name conversion returns expected Hz bounds	test/unit/pitchScale.test.js:16
 Pitch scale > Grid line tiers and labels are generated by note class	test/unit/pitchScale.test.js:23
